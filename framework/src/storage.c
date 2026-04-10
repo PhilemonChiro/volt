@@ -57,7 +57,7 @@ static void shutdown_flush_handler(void)
 // Write coalescing: dirty values are buffered in RAM and flushed
 // to flash every FLUSH_INTERVAL_MS or on explicit storage_flush().
 #define FLUSH_INTERVAL_MS 30000
-#define MAX_DIRTY_ENTRIES 16
+#define MAX_DIRTY_ENTRIES 32
 
 // Boot loop detection: if the device boots more than MAX_BOOT_CRASHES
 // times without staying alive for MIN_STABLE_MS, trigger factory reset.
@@ -80,7 +80,7 @@ typedef struct {
     union {
         int    i;
         float  f;
-        char   s[64];
+        char   s[256];
     } value;
     bool active;            // slot in use
 } dirty_entry_t;
@@ -338,6 +338,11 @@ volt_error_t storage_save_str(const char *key, const char *value)
     strncpy(slot->key, key, 15);
     slot->key[15] = '\0';
     slot->type = DIRTY_STR;
+    size_t val_len = strlen(value);
+    if (val_len >= sizeof(slot->value.s)) {
+        log_warn("storage", "value for '%s' truncated (%zu → %zu bytes)",
+                 key, val_len, sizeof(slot->value.s) - 1);
+    }
     strncpy(slot->value.s, value, sizeof(slot->value.s) - 1);
     slot->value.s[sizeof(slot->value.s) - 1] = '\0';
     slot->active = true;
@@ -543,7 +548,7 @@ storage_health_t storage_get_health(void)
 // This means pushes are free (no flash wear), and data survives
 // reboots because the flush timer writes to NVS every 30 seconds.
 
-#define MAX_LISTS 4
+#define MAX_LISTS 8
 #define LIST_NVS_PREFIX "_l_"  // NVS key: "_l_readings" etc.
 
 typedef struct {

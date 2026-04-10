@@ -10,8 +10,8 @@
 static esp_mqtt_client_handle_t s_client = NULL;
 static volatile bool s_connected = false;
 
-// Subscription table — up to 8 topic/handler pairs
-#define MAX_SUBSCRIPTIONS 8
+// Subscription table — up to 16 topic/handler pairs
+#define MAX_SUBSCRIPTIONS 16
 
 typedef struct {
     char topic[64];

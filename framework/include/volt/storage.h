@@ -6,6 +6,15 @@
 #include <stdbool.h>
 #include "volt/error.h"
 
+// ============================================================
+// Limits (static allocation — no heap fragmentation on 24/7 devices)
+//
+//   Keys:     up to 32 dirty entries buffered before flush
+//   Strings:  up to 255 bytes per value (warns on truncation)
+//   Lists:    up to 8 named lists, 64 entries each
+//   Flush:    every 30 seconds or on explicit storage_flush()
+// ============================================================
+
 // Save an integer. Buffered in RAM — written to flash on flush or timer.
 volt_error_t storage_save_int(const char *key, int value);
 
