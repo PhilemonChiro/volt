@@ -8,7 +8,7 @@ problems in one run.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from ast_nodes import Region
+from .ast_nodes import Region
 
 
 @dataclass

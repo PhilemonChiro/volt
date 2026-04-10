@@ -4,7 +4,7 @@ import sys
 import os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from volt.compiler.parser import parse
-from ast_nodes import *
+from volt.compiler.ast_nodes import *
 
 passed = 0
 failed = 0

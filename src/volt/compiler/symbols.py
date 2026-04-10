@@ -7,7 +7,7 @@ and where it was declared. Supports nested scopes (global → function → block
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from ast_nodes import Region
+from .ast_nodes import Region
 
 
 @dataclass

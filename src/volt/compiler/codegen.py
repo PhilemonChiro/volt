@@ -286,7 +286,7 @@ class CCodeGen:
             vol = "volatile " if var.name in volatile_vars else ""
             init = ""
             if var.value is not None:
-                init = f" = {self._expr(var.value)}"
+                init = f" = {self._emit_expr_str(var.value)}"
             self._out(f"static {vol}{c_type} {_c_name(var.name)}{init};")
         self._out("")
 

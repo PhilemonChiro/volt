@@ -3,7 +3,7 @@
 from pathlib import Path
 from lark import Lark, exceptions
 
-grammar_path = Path(__file__).parent / "grammar.lark"
+grammar_path = Path(__file__).parent.parent / "src" / "volt" / "compiler" / "grammar.lark"
 grammar = grammar_path.read_text()
 parser = Lark(grammar, parser='lalr', propagate_positions=True)
 
