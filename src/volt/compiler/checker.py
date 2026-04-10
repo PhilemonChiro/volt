@@ -121,9 +121,10 @@ METHOD_TYPES = {
         "list_clear": (VOID, [("list_name", STRING)]),
     },
     "System": {
-        "restart": (VOID, []),
-        "id":      (INT, []),
-        "uptime":  (INT, []),
+        "restart":   (VOID, []),
+        "id":        (INT, []),
+        "uptime":    (INT, []),
+        "free_heap": (INT, []),
     },
     "OTA": {
         "enable": (VOID, []),
@@ -133,7 +134,7 @@ METHOD_TYPES = {
 
 # Built-in function signatures: name → (return_type, [(param_name, param_type)])
 BUILTIN_FUNCS = {
-    "log":         (VOID, [("message", STRING)]),  # accepts any due to interpolation
+    "log":         (VOID, [("tag", STRING), ("message", STRING)]),
     "run":         (VOID, []),  # variable args (task names)
     "sleep":       (VOID, [("duration", DURATION)]),
     "deep_sleep":  (VOID, [("duration", DURATION)]),
@@ -160,6 +161,12 @@ BINARY_OP_TYPES = {
     (FLOAT, "*", FLOAT): FLOAT,
     (FLOAT, "/", FLOAT): FLOAT,
     (STRING, "+", STRING): STRING,  # concatenation
+    (STRING, "+", INT): STRING,    # string interpolation: "count=" + 42 → "count=42"
+    (STRING, "+", FLOAT): STRING,
+    (STRING, "+", BOOL): STRING,
+    (INT, "+", STRING): STRING,
+    (FLOAT, "+", STRING): STRING,
+    (BOOL, "+", STRING): STRING,
 
     # Comparison → bool
     (INT, "==", INT): BOOL,
