@@ -123,16 +123,17 @@ def preflight_check(command: str):
             install_sdk(framework_dir)
             console.print(f"[green]✓[/green] SDK installed\n")
 
-    # Commands that need ESP-IDF
+    # Commands that need a toolchain
     if command in ("build", "flash", "run", "watch"):
         if not is_idf_installed():
-            console.print(f"\n[yellow]ESP-IDF not found.[/yellow]")
-            console.print(f"Volt needs ESP-IDF to compile firmware.\n")
-            console.print(f"Options:")
-            console.print(f"  1. Run [cyan]volt setup --install-idf[/cyan] to download automatically")
-            console.print(f"  2. Set [cyan]IDF_PATH[/cyan] environment variable to your ESP-IDF location")
-            console.print(f"  3. Install manually: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/\n")
-            raise SystemExit(1)
+            # Check if ESP8266 SDK is available instead
+            from volt.paths import volt_toolchains
+            esp8266_sdk = volt_toolchains() / "esp8266-rtos-sdk"
+            if not (esp8266_sdk / "export.sh").exists():
+                console.print(f"\n[yellow]No toolchain found.[/yellow]")
+                console.print(f"Volt needs a toolchain to compile firmware.\n")
+                console.print(f"Run [cyan]volt setup[/cyan] with a device plugged in to auto-install.\n")
+                raise SystemExit(1)
 
 
 @click.group()
@@ -146,44 +147,170 @@ def cli(ctx):
 
 
 @cli.command()
-@click.option("--install-idf", is_flag=True, help="Also download and install ESP-IDF")
-def setup(install_idf):
-    """Initialize Volt platform (~/.volt/) and install SDK."""
+@click.option("--chip", default=None, help="Chip to set up (auto-detected if not specified)")
+def setup(chip):
+    """Initialize Volt platform and install toolchains for connected devices."""
     from volt.paths import (ensure_volt_home, install_sdk, volt_home, volt_sdk,
-                             print_paths, is_idf_installed, install_idf as do_install_idf)
+                             find_serial_ports, volt_toolchains,
+                             is_idf_installed, install_idf as do_install_idf)
 
-    console.print(f"\n[bold cyan]→[/bold cyan] Setting up Volt platform\n")
+    console.print(f"\n[bold cyan]Volt Setup[/bold cyan]\n")
 
-    # Create directory structure
+    # Step 1: Create ~/.volt/
     ensure_volt_home()
-    console.print(f"  [green]✓[/green] Created {volt_home()}")
+    console.print(f"  [green]✓[/green] Platform directory: {volt_home()}")
 
-    # Install SDK from package
+    # Step 2: Install SDK framework
     framework_dir = VOLT_ROOT / "framework"
     if framework_dir.exists():
         install_sdk(framework_dir)
-        console.print(f"  [green]✓[/green] SDK installed to {volt_sdk()}")
+        console.print(f"  [green]✓[/green] SDK installed")
     else:
         console.print(f"  [yellow]![/yellow] Framework not found at {framework_dir}")
 
-    # Check ESP-IDF
-    if is_idf_installed():
-        console.print(f"  [green]✓[/green] ESP-IDF found")
-    elif install_idf:
-        console.print(f"  [cyan]→[/cyan] Installing ESP-IDF (this takes several minutes)...")
-        try:
-            do_install_idf(on_progress=lambda msg: console.print(f"    {msg}"))
-            console.print(f"  [green]✓[/green] ESP-IDF installed")
-        except Exception as e:
-            console.print(f"  [red]✗[/red] ESP-IDF install failed: {e}")
-    else:
-        console.print(f"  [yellow]![/yellow] ESP-IDF not found")
-        console.print(f"    Run [cyan]volt setup --install-idf[/cyan] to download it")
-        console.print(f"    Or set IDF_PATH environment variable")
+    # Step 3: Detect connected devices
+    console.print(f"\n  [cyan]Scanning for devices...[/cyan]")
+    devices = find_serial_ports()
 
-    console.print()
-    print_paths()
-    console.print(f"\n[bold green]✓[/bold green] Volt platform ready\n")
+    if not devices and not chip:
+        console.print(f"  [yellow]![/yellow] No devices detected.")
+        console.print(f"    Plug in a board and run [cyan]volt setup[/cyan] again.")
+        console.print(f"    Or specify manually: [cyan]volt setup --chip esp32[/cyan]\n")
+        return
+
+    # Build list of chips to set up
+    chips_to_setup = set()
+    if chip:
+        chips_to_setup.add(chip.lower())
+    else:
+        for d in devices:
+            if d.get("chip"):
+                chips_to_setup.add(d["chip"])
+                console.print(f"  [green]✓[/green] Found [bold]{d['chip'].upper()}[/bold] on {d['port']}")
+
+    if not chips_to_setup:
+        console.print(f"  [yellow]![/yellow] Could not identify chip type.")
+        console.print(f"    Specify manually: [cyan]volt setup --chip esp32[/cyan]\n")
+        return
+
+    # Step 4: Install toolchains for each detected chip
+    for chip_name in sorted(chips_to_setup):
+        console.print(f"\n  [cyan]Setting up {chip_name.upper()} toolchain...[/cyan]")
+
+        if chip_name in ("esp32", "esp32s2", "esp32s3", "esp32c3", "esp32c6", "esp32h2"):
+            # ESP32 family — uses ESP-IDF
+            if is_idf_installed():
+                console.print(f"  [green]✓[/green] ESP-IDF already installed")
+            else:
+                console.print(f"  [cyan]→[/cyan] Downloading ESP-IDF (this takes several minutes)...")
+                try:
+                    do_install_idf(on_progress=lambda msg: console.print(f"    {msg}"))
+                    console.print(f"  [green]✓[/green] ESP-IDF installed")
+                except Exception as e:
+                    console.print(f"  [red]✗[/red] ESP-IDF install failed: {e}")
+
+        elif chip_name == "esp8266":
+            # ESP8266 — uses ESP8266 RTOS SDK
+            sdk_path = volt_toolchains() / "esp8266-rtos-sdk"
+            if (sdk_path / "export.sh").exists():
+                console.print(f"  [green]✓[/green] ESP8266 SDK already installed")
+            else:
+                console.print(f"  [cyan]→[/cyan] Downloading ESP8266 SDK...")
+                try:
+                    import subprocess as sp
+                    sp.run(["git", "clone", "--depth", "1",
+                            "https://github.com/espressif/ESP8266_RTOS_SDK.git",
+                            str(sdk_path)], check=True,
+                           capture_output=True)
+                    console.print(f"  [green]✓[/green] SDK cloned")
+
+                    console.print(f"  [cyan]→[/cyan] Installing toolchain (this takes a few minutes)...")
+                    sp.run([sys.executable, str(sdk_path / "tools" / "idf_tools.py"), "install"],
+                           check=True, capture_output=True)
+                    console.print(f"  [green]✓[/green] Toolchain installed")
+
+                    # Install Python requirements
+                    sp.run([sys.executable, "-m", "pip", "install", "--break-system-packages",
+                            "-r", str(sdk_path / "requirements.txt")],
+                           capture_output=True)
+                    console.print(f"  [green]✓[/green] Python dependencies installed")
+                except Exception as e:
+                    console.print(f"  [red]✗[/red] ESP8266 setup failed: {e}")
+
+        else:
+            console.print(f"  [yellow]![/yellow] Toolchain for {chip_name} not yet available")
+            console.print(f"    Supported: esp32, esp8266")
+
+    # Step 5: Pre-build SDK cache (so first `volt build` is fast)
+    console.print(f"\n  [cyan]Pre-building SDK cache (so first build is fast)...[/cyan]")
+    console.print(f"  [dim]This takes 3-5 minutes but only happens once per chip.[/dim]")
+    for chip_name in sorted(chips_to_setup):
+        if chip_name in ("esp32", "esp8266"):
+            _prebuild_sdk_cache(chip_name)
+
+    console.print(f"\n[bold green]✓[/bold green] Volt setup complete!\n")
+    console.print(f"  Create a project:  [cyan]volt new my-project[/cyan]")
+    console.print(f"  Build:             [cyan]volt build[/cyan]")
+    console.print(f"  Flash:             [cyan]volt flash[/cyan]")
+    console.print(f"  Monitor:           [cyan]volt monitor[/cyan]\n")
+
+
+def _prebuild_sdk_cache(chip_name: str):
+    """Build a minimal dummy project to cache SDK compilation."""
+    import tempfile, subprocess as sp, shutil
+
+    tmp = Path(tempfile.mkdtemp(prefix=f"volt-prebuild-{chip_name}-"))
+    try:
+        (tmp / "main").mkdir()
+
+        # Minimal main.c
+        (tmp / "main" / "main.c").write_text(
+            '#include <stdio.h>\nvoid app_main(void) { printf("ok\\n"); }\n'
+        )
+
+        if chip_name == "esp32":
+            from volt.paths import idf_path
+            idf = idf_path()
+            (tmp / "CMakeLists.txt").write_text(
+                f'cmake_minimum_required(VERSION 3.16)\n'
+                f'include({idf}/tools/cmake/project.cmake)\n'
+                f'project(volt_prebuild)\n'
+            )
+            (tmp / "main" / "CMakeLists.txt").write_text(
+                'idf_component_register(SRCS "main.c" INCLUDE_DIRS ".")\n'
+            )
+            env = os.environ.copy()
+            env["IDF_PATH"] = str(idf)
+            result = sp.run(
+                ["bash", "-c", f"source {idf}/export.sh 2>/dev/null && idf.py build"],
+                cwd=str(tmp), capture_output=True, text=True, env=env, timeout=600
+            )
+
+        elif chip_name == "esp8266":
+            from volt.paths import volt_toolchains
+            sdk = volt_toolchains() / "esp8266-rtos-sdk"
+            (tmp / "CMakeLists.txt").write_text(
+                f'cmake_minimum_required(VERSION 3.16)\n'
+                f'include($ENV{{IDF_PATH}}/tools/cmake/project.cmake)\n'
+                f'project(volt_prebuild)\n'
+            )
+            (tmp / "main" / "CMakeLists.txt").write_text(
+                'idf_component_register(SRCS "main.c" INCLUDE_DIRS ".")\n'
+            )
+            result = sp.run(
+                ["bash", "-c",
+                 f"export IDF_PATH={sdk} && source $IDF_PATH/export.sh 2>/dev/null && idf.py build"],
+                cwd=str(tmp), capture_output=True, text=True, timeout=600
+            )
+
+        if result.returncode == 0:
+            console.print(f"  [green]✓[/green] {chip_name.upper()} SDK cache built")
+        else:
+            console.print(f"  [yellow]![/yellow] {chip_name.upper()} pre-build had issues (builds may be slower)")
+    except Exception as e:
+        console.print(f"  [yellow]![/yellow] Pre-build skipped: {e}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 @cli.command()
@@ -197,7 +324,7 @@ def paths():
 
 @cli.command()
 @click.argument("name")
-@click.option("--chip", default="esp32", help="Target chip")
+@click.option("--chip", default=None, help="Target chip (auto-detected if not specified)")
 def new(name, chip):
     """Create a new Volt project."""
     project_dir = Path(name)
@@ -205,14 +332,41 @@ def new(name, chip):
         console.print(f"[red]Directory '{name}' already exists.[/red]")
         raise SystemExit(1)
 
+    # Auto-detect chip if not specified
+    if not chip:
+        from volt.paths import find_serial_ports
+        devices = find_serial_ports()
+        if devices and devices[0].get("chip"):
+            chip = devices[0]["chip"]
+            console.print(f"  [dim]Detected {chip.upper()} on {devices[0]['port']}[/dim]")
+        else:
+            chip = "esp32"  # default fallback
+            console.print(f"  [dim]No device detected, defaulting to esp32[/dim]")
+
+    # Chip-specific defaults
+    chip_defaults = {
+        "esp32":   {"led_pin": "2",  "has_wifi": True},
+        "esp8266": {"led_pin": "2",  "has_wifi": True},
+        "stm32f103": {"led_pin": "PC13", "has_wifi": False},
+        "rp2040":  {"led_pin": "GP25", "has_wifi": False},
+    }
+    defaults = chip_defaults.get(chip, {"led_pin": "2", "has_wifi": True})
+
     project_dir.mkdir(parents=True)
     (project_dir / "build").mkdir()
     (project_dir / ".volt").mkdir()
 
+    # Generate starter code based on chip
+    wifi_block = ""
+    if defaults["has_wifi"]:
+        wifi_block = """
+    // wifi.connect("MyNetwork", "MyPassword")
+    // mqtt.connect("mqtt://broker.local")"""
+
     (project_dir / "main.volt").write_text(f"""chip {chip}
 
 hardware {{
-    pin led: Output = 2
+    pin led: Output = {defaults['led_pin']}
 }}
 
 task blink() {{
@@ -221,7 +375,7 @@ task blink() {{
     }}
 }}
 
-main {{
+main {{{wifi_block}
     run(blink)
 }}
 """)
@@ -234,24 +388,15 @@ chip = "{chip}"
 [build]
 # flash_size = "4MB"
 # cpu_freq = 240
-
-[wifi]
-# ssid = "MyNetwork"
-# password = "MyPassword"
-
-[mqtt]
-# broker = "mqtt://broker.local"
-# username = ""
-# password = ""
 """)
 
     (project_dir / ".gitignore").write_text("""build/
 .volt/
 """)
 
-    console.print(f"\n[bold green]✓[/bold green] Created project [bold]{name}[/bold]\n")
+    console.print(f"\n[bold green]✓[/bold green] Created project [bold]{name}[/bold] for [bold]{chip.upper()}[/bold]\n")
     console.print(f"  {project_dir}/")
-    console.print(f"  ├── main.volt      [dim]← your code[/dim]")
+    console.print(f"  ├── main.volt      [dim]← your code (pin {defaults['led_pin']} = onboard LED)[/dim]")
     console.print(f"  ├── volt.toml      [dim]← project config[/dim]")
     console.print(f"  ├── build/         [dim]← generated files[/dim]")
     console.print(f"  └── .gitignore")

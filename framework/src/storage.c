@@ -19,38 +19,6 @@ static SemaphoreHandle_t s_mutex = NULL;
 #define STORAGE_LOCK()   do { if (s_mutex) xSemaphoreTakeRecursive(s_mutex, portMAX_DELAY); } while(0)
 #define STORAGE_UNLOCK() do { if (s_mutex) xSemaphoreGiveRecursive(s_mutex); } while(0)
 
-// Shutdown handler: flush dirty storage before reboot/brownout.
-// Uses a bounded timeout — if another task holds the lock during
-// a crash/brownout, we can't wait forever (system will force reboot).
-static void shutdown_flush_handler(void)
-{
-    if (s_mutex && xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-        // We got the lock — flush inline (don't call storage_flush which re-locks)
-        nvs_handle_t handle;
-        if (nvs_open(VOLT_NVS_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
-            for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
-                if (!s_dirty[i].active) continue;
-                switch (s_dirty[i].type) {
-                    case DIRTY_INT:
-                        nvs_set_i32(handle, s_dirty[i].key, s_dirty[i].value.i);
-                        break;
-                    case DIRTY_FLOAT:
-                        nvs_set_blob(handle, s_dirty[i].key, &s_dirty[i].value.f, sizeof(float));
-                        break;
-                    case DIRTY_STR:
-                        nvs_set_str(handle, s_dirty[i].key, s_dirty[i].value.s);
-                        break;
-                }
-                s_dirty[i].active = false;
-            }
-            nvs_commit(handle);
-            nvs_close(handle);
-        }
-        xSemaphoreGiveRecursive(s_mutex);
-    }
-    // If we can't get the lock in 500ms, we accept data loss — better than hanging
-}
-
 // All Volt storage goes into one NVS namespace
 #define VOLT_NVS_NAMESPACE "volt"
 
@@ -88,6 +56,59 @@ typedef struct {
 static dirty_entry_t s_dirty[MAX_DIRTY_ENTRIES];
 static bool s_initialized = false;
 static esp_timer_handle_t s_flush_timer = NULL;
+
+// ============================================================
+// Store-and-forward list types (needed before storage_flush)
+// ============================================================
+
+#define MAX_LISTS 8
+#define LIST_NVS_PREFIX "_l_"
+#define STORAGE_LIST_MAX 64
+
+typedef struct {
+    char name[12];
+    int32_t ring[STORAGE_LIST_MAX];
+    int head;
+    int count;
+    bool active;
+} storage_list_t;
+
+static storage_list_t s_lists[MAX_LISTS];
+
+// Forward declarations
+static void list_flush(storage_list_t *list);
+static int list_load_nvs(const char *name, int32_t *buf, int buf_size);
+
+// ============================================================
+// Shutdown handler
+// ============================================================
+
+static void shutdown_flush_handler(void)
+{
+    if (s_mutex && xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+        nvs_handle_t handle;
+        if (nvs_open(VOLT_NVS_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
+            for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
+                if (!s_dirty[i].active) continue;
+                switch (s_dirty[i].type) {
+                    case DIRTY_INT:
+                        nvs_set_i32(handle, s_dirty[i].key, s_dirty[i].value.i);
+                        break;
+                    case DIRTY_FLOAT:
+                        nvs_set_blob(handle, s_dirty[i].key, &s_dirty[i].value.f, sizeof(float));
+                        break;
+                    case DIRTY_STR:
+                        nvs_set_str(handle, s_dirty[i].key, s_dirty[i].value.s);
+                        break;
+                }
+                s_dirty[i].active = false;
+            }
+            nvs_commit(handle);
+            nvs_close(handle);
+        }
+        xSemaphoreGiveRecursive(s_mutex);
+    }
+}
 
 // ============================================================
 // Internal helpers
@@ -548,18 +569,8 @@ storage_health_t storage_get_health(void)
 // This means pushes are free (no flash wear), and data survives
 // reboots because the flush timer writes to NVS every 30 seconds.
 
-#define MAX_LISTS 8
-#define LIST_NVS_PREFIX "_l_"  // NVS key: "_l_readings" etc.
-
-typedef struct {
-    char name[12];                      // list name
-    int32_t ring[STORAGE_LIST_MAX];     // RAM ring buffer
-    int head;                           // next write position
-    int count;                          // entries in RAM
-    bool active;
-} storage_list_t;
-
-static storage_list_t s_lists[MAX_LISTS];
+// MAX_LISTS, LIST_NVS_PREFIX, storage_list_t, s_lists
+// defined at the top of the file (needed by storage_flush)
 
 // Find or create a list slot
 static storage_list_t *find_list(const char *name, bool create)
