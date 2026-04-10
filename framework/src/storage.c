@@ -19,10 +19,36 @@ static SemaphoreHandle_t s_mutex = NULL;
 #define STORAGE_LOCK()   do { if (s_mutex) xSemaphoreTakeRecursive(s_mutex, portMAX_DELAY); } while(0)
 #define STORAGE_UNLOCK() do { if (s_mutex) xSemaphoreGiveRecursive(s_mutex); } while(0)
 
-// Shutdown handler: flush dirty storage before reboot/brownout
+// Shutdown handler: flush dirty storage before reboot/brownout.
+// Uses a bounded timeout — if another task holds the lock during
+// a crash/brownout, we can't wait forever (system will force reboot).
 static void shutdown_flush_handler(void)
 {
-    storage_flush();
+    if (s_mutex && xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+        // We got the lock — flush inline (don't call storage_flush which re-locks)
+        nvs_handle_t handle;
+        if (nvs_open(VOLT_NVS_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
+            for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
+                if (!s_dirty[i].active) continue;
+                switch (s_dirty[i].type) {
+                    case DIRTY_INT:
+                        nvs_set_i32(handle, s_dirty[i].key, s_dirty[i].value.i);
+                        break;
+                    case DIRTY_FLOAT:
+                        nvs_set_blob(handle, s_dirty[i].key, &s_dirty[i].value.f, sizeof(float));
+                        break;
+                    case DIRTY_STR:
+                        nvs_set_str(handle, s_dirty[i].key, s_dirty[i].value.s);
+                        break;
+                }
+                s_dirty[i].active = false;
+            }
+            nvs_commit(handle);
+            nvs_close(handle);
+        }
+        xSemaphoreGiveRecursive(s_mutex);
+    }
+    // If we can't get the lock in 500ms, we accept data loss — better than hanging
 }
 
 // All Volt storage goes into one NVS namespace
@@ -435,6 +461,7 @@ volt_error_t storage_flush(void)
     esp_err_t err = nvs_open_handle(&handle, NVS_READWRITE);
     if (err != ESP_OK) {
         log_error("storage", "flush failed — can't open NVS");
+        STORAGE_UNLOCK();
         return VOLT_ERR_STORAGE_WRITE_FAILED;
     }
 
@@ -737,6 +764,14 @@ volt_error_t storage_list_clear(const char *list_name)
 volt_error_t storage_factory_reset(void)
 {
     log_warn("storage", "FACTORY RESET — erasing all data");
+
+    // Drain any active NVS operations before erasing the partition.
+    // Bounded timeout — if another task is mid-flush, wait up to 1 second.
+    if (s_mutex) {
+        xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(1000));
+        // Don't release — we're about to erase and reboot
+    }
+
     nvs_flash_erase();
     log_warn("storage", "rebooting...");
     esp_restart();
