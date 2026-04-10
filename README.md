@@ -356,7 +356,15 @@ Works on Linux, macOS, and Windows.
 | Task scheduling | Manual | Manual | Manual | Cooperative | **Automatic** |
 | ISR safety | None | None | None | N/A | **Compile-time** |
 | State machines | None | None | None | None | **Language feature** |
-| Memory per task | 1KB+ | 4KB+ | 1KB+ | 4KB+ | **Compiler picks the cheapest option** |
+| Memory per task | 1KB+ | 4KB+ | 1KB+ | 4KB+ | **Automatic — see below** |
+
+#### Volt task memory
+
+| Task type | When the compiler picks it | Memory |
+|-----------|---------------------------|--------|
+| Background | No blocking calls | 12 bytes |
+| Priority | Uses WiFi, MQTT, HTTP | 4KB |
+| Critical | Marked `strict` (real-time) | Hardware timer |
 | Performance | Native | Native | Native | 10-100x slower | **Native** |
 
 ## License
