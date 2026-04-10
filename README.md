@@ -173,27 +173,46 @@ Try doing that with a `switch` statement and a `state` variable.
 chip esp32
 
 hardware {
-    pin motor_a: PWM = 4
-    pin motor_b: PWM = 5
-    pin encoder: Input = 34
+    pin motor: PWM = 4
+    pin encoder: Analog = 34
     pin temp_sensor: Analog = 36
     pin fault_led: Output = 2
 }
 
+let setpoint: int = 1000
+let integral: int = 0
+let last_error: int = 0
+
+let kp: int = 10
+let ki: int = 2
+let kd: int = 5
+
 task pid_loop() {
     every 1ms strict {
-        let speed = encoder.read()
-        motor_a.set_pwm(speed)
+        let actual = encoder.read()
+        let error = setpoint - actual
+        integral = integral + error
+        let derivative = error - last_error
+        let output = kp * error + ki * integral + kd * derivative
+        last_error = error
+
+        if output > 255 {
+            output = 255
+        }
+        if output < 0 {
+            output = 0
+        }
+        motor.set_pwm(output)
     }
 }
 
-task thermal_monitor() {
+task thermal_protect() {
     every 500ms {
         let temp = temp_sensor.read()
         if temp > 800 {
             fault_led.on()
-            motor_a.set_pwm(0)
-            motor_b.set_pwm(0)
+            motor.set_pwm(0)
+            setpoint = 0
         }
     }
 }
@@ -202,6 +221,7 @@ task report() {
     every 10seconds {
         mqtt.send_int("motor/speed", encoder.read())
         mqtt.send_int("motor/temp", temp_sensor.read())
+        mqtt.send_int("motor/setpoint", setpoint)
     }
 }
 
