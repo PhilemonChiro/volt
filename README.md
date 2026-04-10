@@ -1,38 +1,94 @@
-# Volt — A Typed, Hardware-Aware Language for Embedded Systems
+<p align="center">
+  <img src="assets/logo.png" alt="Volt" width="120">
+</p>
 
-> **Write firmware in 15 lines. The compiler catches hardware bugs before you flash.**
+<h1 align="center">Volt</h1>
 
-Volt is a typed language that transpiles to C for embedded microcontrollers. It auto-classifies your tasks into three tiers (background/priority/critical), validates your pin assignments at compile time, catches type errors, and generates clean C with zero overhead. ESP32 is the first supported target, with more chips planned.
+<p align="center">
+  <strong>A typed, hardware-aware language for embedded systems.</strong><br>
+  Write firmware in 15 lines. The compiler catches hardware bugs before you flash.
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> · 
+  <a href="#examples">Examples</a> · 
+  <a href="#what-the-compiler-catches">Error Detection</a> · 
+  <a href="#architecture">Architecture</a> · 
+  <a href="docs/architecture/06-volt-language-design.md">Language Spec</a>
+</p>
 
 ---
 
-## Why Volt?
+## What is Volt?
 
-| | Arduino | ESP-IDF | Zephyr | ESPHome | **Volt** |
-|--|---------|---------|--------|---------|----------|
-| Language | C++ | C | C | YAML | **Volt (typed DSL)** |
-| Type safety | Partial | Minimal | Minimal | None | **Full (hardware-aware)** |
-| Pin conflict detection | No | No | No | Partial | **Compile-time** |
-| ADC2/WiFi warning | No | Runtime | No | No | **Compile-time** |
-| Task auto-classification | No | No | No | No | **Automatic** |
-| ISR safety checking | No | No | No | No | **Compile-time** |
-| State machines | No | No | No | No | **Language feature** |
-| Performance | Native | Native | Native | Native | **Native (compiles to C)** |
+Volt is a typed language that transpiles to C for embedded microcontrollers. You write clean, high-level code — the compiler handles the rest:
+
+- **Three-tier task scheduling** — one `task` keyword, auto-classified into background (protothreads, 12 bytes), priority (FreeRTOS, 4KB), or critical (hardware timer ISR)
+- **Compile-time hardware validation** — pin conflicts, flash pins, input-only pins, ADC2/WiFi interference, ISR safety
+- **First-class state machines** — `machine` / `state` with verified transitions, reachability analysis, and dead state detection
+- **Bidirectional type checking** — full type inference with hardware-aware types
+- **Zero overhead** — compiles to clean C, runs at native speed
+
+ESP32 is the first supported target, with more chips planned.
 
 ## Quick Start
 
 ```bash
 # Install
-pip install lark
+pip install volt-lang
 
-# Compile a Volt program to C
-python compiler/voltc.py examples/01-blink/main.volt
+# Create a project
+volt new my-sensor
+cd my-sensor
 
-# Build and flash (with ESP-IDF installed)
-cd framework && idf.py build && idf.py flash
+# Check for errors
+volt check
+
+# Build and flash (requires ESP-IDF)
+volt build
+volt flash
+volt monitor
 ```
 
-## What Volt Looks Like
+## Examples
+
+### Blink three LEDs at different rates
+
+```volt
+chip esp32
+
+hardware {
+    pin green: Output = 23
+    pin red: Output = 22
+    pin yellow: Output = 21
+}
+
+task blink_red() {
+    every 100ms {
+        red.toggle()
+    }
+}
+
+task blink_green() {
+    every 400ms {
+        green.toggle()
+    }
+}
+
+task blink_yellow() {
+    every 600ms {
+        yellow.toggle()
+    }
+}
+
+main {
+    run(blink_red, blink_green, blink_yellow)
+}
+```
+
+All three tasks run concurrently as **background protothreads** — 12 bytes each, cooperative multitasking, no RTOS overhead.
+
+### IoT sensor with three task tiers
 
 ```volt
 chip esp32
@@ -62,109 +118,171 @@ task telemetry() {
 }
 
 main {
-    wifi.connect("MyNet", "MyPass")
+    wifi.connect("MyNetwork", "MyPassword")
     mqtt.connect("mqtt://broker.local")
     run(blink, motor_pid, telemetry)
 }
 ```
 
-The compiler auto-classifies:
-- `blink` → **Background** (protothread, 12 bytes, cooperative)
-- `motor_pid` → **Critical** (hardware timer ISR, `IRAM_ATTR`, cannot be delayed)
-- `telemetry` → **Priority** (FreeRTOS task, 4KB stack, uses MQTT)
+The compiler auto-classifies from **one keyword** — `task`:
 
-All from **one keyword: `task`**. No manual scheduling configuration.
+| Task | Tier | Why | Cost |
+|------|------|-----|------|
+| `blink` | Background | No blocking calls | 12 bytes (protothread) |
+| `motor_pid` | Critical | `strict` keyword — hardware timer ISR, `IRAM_ATTR` | Timer peripheral |
+| `telemetry` | Priority | Uses `mqtt.*` (blocking API) | 4KB stack (FreeRTOS) |
+
+### State machine — blink with states
+
+```volt
+chip esp32
+
+hardware {
+    pin led: Output = 2
+}
+
+machine Blinker {
+    initial state off {
+        enter {
+            led.off()
+        }
+        after 500ms -> on
+    }
+    state on {
+        enter {
+            led.on()
+        }
+        after 500ms -> off
+    }
+}
+```
+
+The compiler verifies: all states are reachable, no dead states, no non-deterministic transitions, all transition targets exist.
 
 ## What the Compiler Catches
 
 ```volt
 pin motor: Output = 6        // ERROR: GPIO 6 is connected to SPI flash
 pin sensor: Analog = 21      // ERROR: GPIO 21 has no ADC channel
-pin led: Output = 34         // ERROR: GPIO 34 is input-only
+pin led: Output = 34         // ERROR: GPIO 34-39 are input-only
 pin a: Output = 2
-pin b: Output = 2            // ERROR: GPIO 2 already used by pin 'a'
+pin b: Output = 2            // ERROR: GPIO 2 already used by 'a'
+
 let x: int = "hello"         // ERROR: expected int, got string
-led.read()                   // ERROR: Output pins have no method 'read'
-// In critical task:
+led.read()                   // ERROR: Output pin has no method 'read'
+
+// Inside a critical (ISR) task:
 log("tick")                  // ERROR: log() not safe in ISR context
+wifi.connect("a", "b")       // ERROR: wifi not safe in ISR context
 ```
 
-With source context, color, and "did you mean?" suggestions.
+Errors include source context, color highlighting, and "did you mean?" suggestions — inspired by Elm and Rust.
 
-## Project Status
+## VS Code Extension
 
-**Phase 1-3 complete:**
-- C framework running on ESP32 DevKit V1 (WiFi, MQTT, GPIO, storage, three-tier scheduler)
-- Volt transpiler: 7-pass pipeline, 441 tests, all passing
-- End-to-end: `.volt` → C code → ESP32 binary
+Full development environment with:
 
-**Next:** Phase 4-7 (advanced language features, VS Code extension, drivers, public launch)
+- **Syntax highlighting** — 15+ semantic token categories
+- **LSP** — autocomplete (dot-triggered methods, pin modes, durations), hover (pin info with ASCII pin map), real-time diagnostics
+- **Sidebar panel** — build & flash buttons, serial monitor, device management, file browser
+- **Format on save**
 
 ## Architecture
 
 ```
-Developer writes .volt files
-        ↓
-Volt Transpiler (Python, 7 passes, ~2,600 LOC)
-  Pass 1: Parse (Lark LALR grammar → AST)
-  Pass 2: Resolve (name resolution, forward references)
-  Pass 3: Check (bidirectional type checking)
-  Pass 4: Validate (hardware: pins, ADC2/WiFi, ISR safety)
-  Pass 5: Analyze (task classification, yield analysis, shared state)
-  Pass 6: Transform (variable lifting, function inlining, desugar)
-  Pass 7: Generate (C code with counter-based yield labels)
-        ↓
-Volt C Framework (8 modules on ESP-IDF)
-  pin.h    — GPIO with validation
-  task.h   — Three-tier scheduler (protothread + FreeRTOS + hardware timer)
-  wifi.h   — WiFi with auto-reconnect + stats
-  mqtt.h   — MQTT pub/sub
-  http.h   — HTTP GET/POST
-  storage.h — NVS with write coalescing + boot loop detection
-  log.h    — Colored timestamped logging
-  error.h  — Error codes
-        ↓
-ESP-IDF v5.4.1 → ESP32 DevKit V1 (WROOM-32)
+.volt source files
+       │
+       ▼
+Volt Compiler (7-pass pipeline)
+  ┌─ Parse ─────── Lark LALR(1) grammar → AST
+  ├─ Resolve ───── Name resolution, forward refs, "did you mean?"
+  ├─ Check ─────── Bidirectional type checking, ErrorType poison
+  ├─ Validate ──── Hardware: pins, ADC2/WiFi, ISR safety, flash pins
+  ├─ Analyze ───── Task classification, yield analysis, shared state
+  ├─ Transform ─── Variable lifting, function inlining, desugaring
+  └─ Generate ──── Clean C with counter-based yield labels
+       │
+       ▼
+Volt C Framework (8 modules)
+  pin · task · wifi · mqtt · http · storage · log · error
+       │
+       ▼
+ESP-IDF v5.4.1 → Target MCU
 ```
 
-## Test Suite
+### Compiler passes
+
+| Pass | Purpose | Key innovation |
+|------|---------|---------------|
+| Parse | Source → AST | Duration literals (`500ms`), state machine syntax |
+| Resolve | Name binding | Two-pass for forward references, Levenshtein suggestions |
+| Check | Type safety | Bidirectional inference, ErrorType poison prevents cascading |
+| Validate | Hardware rules | Full ESP32 pin database — flash pins, strapping, ADC2/WiFi |
+| Analyze | Task classification | Auto-detects blocking calls, `strict`, yield points |
+| Transform | IR lowering | Auto-lifts variables across yields to context structs |
+| Generate | AST → C | Three-tier code patterns, counter-based protothread labels |
+
+### C Framework
+
+| Module | Features |
+|--------|----------|
+| `pin` | GPIO with output state tracking, ISR handlers, pullup/pulldown |
+| `task` | Three-tier scheduler: protothreads + FreeRTOS + hardware timers |
+| `wifi` | Auto-reconnect with non-blocking timer, connection stats |
+| `mqtt` | Pub/sub with auth, input validation, subscription table |
+| `http` | GET/POST with TLS (certificate bundle) |
+| `storage` | NVS with write coalescing, boot loop detection, factory reset |
+| `log` | Colored timestamped output with module tags |
+| `error` | 26 specific error codes across all modules |
+
+## Project Structure
 
 ```
-Grammar:      115 tests  (syntax parsing, edge cases, invalid input)
-Parser:        88 tests  (AST construction from parse tree)
-Resolver:      30 tests  (name resolution, scoping, suggestions)
-Checker:       41 tests  (type checking, operator validation, poison types)
-Hardware:      35 tests  (pin conflicts, ADC2/WiFi, strapping, JTAG, ISR)
-Analyzer:      18 tests  (task classification, yield analysis, ISR safety)
-End-to-End:   114 tests  (full pipeline: .volt → C code verification)
-─────────────────────────
-Total:        441 tests  — all passing
+volt/
+├── src/volt/               Compiler (Python)
+│   ├── compiler/           7-pass transpiler pipeline
+│   ├── cli/                CLI tool (click-based)
+│   └── paths.py            Cross-platform path resolution
+├── framework/              C runtime (ESP-IDF components)
+│   ├── include/volt/       Public headers
+│   └── src/                Implementation
+├── volt-vscode/            VS Code extension
+│   ├── extension.js        Sidebar, commands, device polling
+│   ├── server/             LSP server (pygls)
+│   └── syntaxes/           TextMate grammar
+├── tests/                  Compiler test suite (500+ tests)
+├── examples/               6 example programs
+└── docs/                   Architecture documentation
 ```
 
-## Documentation
+## Platform Layout
 
-### Research (why this project exists)
-- [Landscape Analysis](docs/research/01-landscape-analysis.md) — Every major embedded platform mapped
-- [Hardware Landscape](docs/research/02-hardware-landscape.md) — MCU specs, pricing, power
-- [Academic Research](docs/research/03-academic-research.md) — Papers on async embedded, WASM, TinyML
-- [Commercial Landscape](docs/research/04-commercial-landscape.md) — Exits, pricing, business models
-- [Gaps & Opportunities](docs/research/05-gaps-and-opportunities.md) — What nobody has built
-- [GitHub Repos Catalog](docs/research/06-github-repos-catalog.md) — 100+ projects analyzed
+Volt installs to `~/.volt/` (like Cargo, Bun, Deno):
 
-### Architecture (how it's built)
-- [Framework Design](docs/architecture/01-framework-design.md) — Module architecture, comparison table
-- [Async Runtime](docs/architecture/02-async-runtime-deep-dive.md) — Advanced protothreads, three tiers
-- [Chip Target Strategy](docs/architecture/03-chip-target-strategy.md) — ESP32 WROOM-32 first
-- [ESP32 Technical Reference](docs/architecture/04-esp32-technical-reference.md) — Memory map, boot, registers, pins
-- [Firmware Patterns](docs/architecture/05-firmware-patterns.md) — Coroutines, memory pools, HAL design
-- [Volt Language Design](docs/architecture/06-volt-language-design.md) — Type system, syntax, state machines
-- [Code Examples](docs/architecture/07-code-examples.md) — Three examples (beginner → advanced)
-- [Transpiler Architecture](docs/architecture/08-transpiler-architecture.md) — 7-pass pipeline, AST, testing
+```
+~/.volt/
+├── bin/            CLI binary
+├── sdk/            Framework headers + sources
+├── toolchains/     ESP-IDF and cross-compilers
+├── cache/          Build cache, downloads
+└── config.toml     Global configuration
+```
 
-### Project
-- [Roadmap](ROADMAP.md) — 7-phase build plan with timeline
-- [Conventions](CONVENTIONS.md) — Naming rules, code style, collaboration workflow
-- [Launch Strategy](docs/community/01-launch-strategy.md) — Community growth plan
+Works on Linux, macOS, and Windows.
+
+## Comparison
+
+| | Arduino | ESP-IDF | Zephyr | MicroPython | **Volt** |
+|--|---------|---------|--------|-------------|----------|
+| Language | C++ | C | C | Python | **Typed DSL** |
+| Type safety | Partial | Minimal | Minimal | Runtime | **Compile-time** |
+| Pin validation | None | None | None | None | **Compile-time** |
+| ADC2/WiFi check | None | Runtime crash | None | Runtime crash | **Compile-time** |
+| Task scheduling | Manual | Manual | Manual | Cooperative | **Automatic** |
+| ISR safety | None | None | None | N/A | **Compile-time** |
+| State machines | None | None | None | None | **Language feature** |
+| Memory per task | 1KB+ | 4KB+ | 1KB+ | 4KB+ | **12 bytes** (background) |
+| Performance | Native | Native | Native | 10-100x slower | **Native** |
 
 ## License
 
