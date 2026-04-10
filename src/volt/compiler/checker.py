@@ -115,6 +115,10 @@ METHOD_TYPES = {
     "Storage": {
         "save": (VOID, [("key", STRING), ("value", STRING)]),
         "load": (STRING, [("key", STRING)]),
+        "push": (VOID, [("list_name", STRING), ("value", INT)]),
+        "drain": (STRING, [("list_name", STRING)]),
+        "list_count": (INT, [("list_name", STRING)]),
+        "list_clear": (VOID, [("list_name", STRING)]),
     },
     "System": {
         "restart": (VOID, []),
