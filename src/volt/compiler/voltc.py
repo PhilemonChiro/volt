@@ -52,8 +52,17 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
     if errors.has_errors:
         return None, errors
 
+    # Load chip spec (if chip declaration exists)
+    chip = None
+    if program.chip:
+        try:
+            from volt.chips import get_chip
+            chip = get_chip(program.chip.target)
+        except (ValueError, ImportError):
+            pass  # fall back to legacy ESP32 validation
+
     # Pass 4: Hardware validation
-    validate_hardware(program, scope, errors)
+    validate_hardware(program, scope, errors, chip=chip)
     # Continue even with hardware warnings (only stop on errors)
     if errors.has_errors:
         return None, errors

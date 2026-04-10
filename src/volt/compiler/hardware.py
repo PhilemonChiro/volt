@@ -1,56 +1,140 @@
 """
 Volt Hardware Validator — Pass 4
 
-Validates hardware configuration against the ESP32 pin database.
+Validates hardware configuration against the chip's pin database.
 Catches pin conflicts, capability mismatches, and dangerous configurations
 that would crash or malfunction at runtime.
 
 No other embedded tool does this at compile time.
 
-Input:  AST + symbol table
+Input:  AST + symbol table + chip spec
 Output: Hardware errors and warnings
 """
 
 from .ast_nodes import *
 from .symbols import Scope
 from .errors import CompilerErrors
-from .pins_esp32 import PIN_DB, ADC2_GPIOS, RTC_GPIOS, SAFE_OUTPUT_PINS, VSPI_NATIVE, HSPI_NATIVE
+
+# Backwards compatibility: import PIN_DB for existing tests
+try:
+    from .pins_esp32 import PIN_DB, ADC2_GPIOS, RTC_GPIOS, SAFE_OUTPUT_PINS, VSPI_NATIVE, HSPI_NATIVE
+except ImportError:
+    PIN_DB = {}
+    ADC2_GPIOS = set()
+    RTC_GPIOS = set()
+    SAFE_OUTPUT_PINS = []
+    VSPI_NATIVE = {}
+    HSPI_NATIVE = {}
 
 
-def validate_hardware(program: Program, scope: Scope, errors: CompilerErrors):
-    """Run all hardware validations."""
+def validate_hardware(program: Program, scope: Scope, errors: CompilerErrors, chip=None):
+    """Run all hardware validations.
+    If chip is provided, uses chip's pin database and validation rules.
+    Otherwise falls back to hardcoded ESP32 (backwards compatibility)."""
     if not program.hardware:
         return
 
-    used_pins: dict[int, PinDecl] = {}  # gpio → PinDecl (for conflict detection)
-    used_i2c_addrs: dict[str, dict[int, SensorDecl]] = {}  # bus → {addr → SensorDecl}
+    # Check capability usage (wifi on a chip without wifi, etc.)
+    if chip:
+        _validate_capabilities(program, chip, errors)
+
+    used_pins: dict[str, PinDecl] = {}  # pin_name → PinDecl (for conflict detection)
+    used_i2c_addrs: dict[str, dict[int, SensorDecl]] = {}
     uses_wifi = _program_uses_wifi(program)
 
     # Validate each pin
     for pin in program.hardware.pins:
-        _validate_pin(pin, used_pins, uses_wifi, errors)
+        if chip:
+            _validate_pin_chip(pin, used_pins, uses_wifi, chip, errors)
+        else:
+            _validate_pin_legacy(pin, used_pins, uses_wifi, errors)
 
-    # Validate sensors (I2C address conflicts)
+    # Validate sensors (I2C address conflicts — chip-independent)
     for sensor in program.hardware.sensors:
         _validate_sensor(sensor, used_i2c_addrs, errors)
 
     # Validate buses
     for bus in program.hardware.buses:
-        _validate_bus(bus, errors)
+        _validate_bus(bus, chip, errors)
 
-    # Deep sleep wake pin validation
-    _validate_deep_sleep_pins(program, errors)
+    # Chip-specific validation (deep sleep, SPI speed, etc.)
+    if chip:
+        chip.validate_hardware(program, errors)
+    else:
+        _validate_deep_sleep_pins(program, errors)
+        _validate_spi_speed(program, errors)
 
-    # SPI speed warnings
-    _validate_spi_speed(program, errors)
+
+def _validate_capabilities(program: Program, chip, errors: CompilerErrors):
+    """Check that the program doesn't use features the chip doesn't support."""
+    if _program_uses_wifi(program) and not chip.supports("wifi"):
+        # Find the wifi.connect() call for the error region
+        errors.error(program.region, "HARDWARE ERROR",
+                     f"{chip.display_name} does not have WiFi hardware.",
+                     hint=f"Chips with WiFi: esp32, esp8266")
+
+    if _contains_method_call(program, "mqtt", "connect") and not chip.supports("wifi"):
+        errors.error(program.region, "HARDWARE ERROR",
+                     f"MQTT requires WiFi, but {chip.display_name} has no WiFi.",
+                     hint=f"Chips with WiFi: esp32, esp8266")
+
+    if _contains_method_call(program, "http", "get") and not chip.supports("wifi"):
+        errors.error(program.region, "HARDWARE ERROR",
+                     f"HTTP requires WiFi, but {chip.display_name} has no WiFi.",
+                     hint=f"Chips with WiFi: esp32, esp8266")
+
+
+# ============================================================
+# Pin Validation (new chip-aware path)
+# ============================================================
+
+def _validate_pin_chip(pin: PinDecl, used_pins: dict, uses_wifi: bool,
+                       chip, errors: CompilerErrors):
+    """Validate a pin using the chip's pin database."""
+    pin_name = str(pin.gpio)
+
+    # 1. Run chip-specific pin validation
+    pin_errors = chip.validate_pin(pin_name, pin.mode)
+    for severity, message, hint in pin_errors:
+        if severity == "error":
+            errors.error(pin.region, "HARDWARE ERROR", message, hint=hint)
+        else:
+            errors.warning(pin.region, "HARDWARE WARNING", message, hint=hint)
+
+    # Stop if there were errors (pin doesn't exist, blocked, etc.)
+    if any(sev == "error" for sev, _, _ in pin_errors):
+        return
+
+    # 2. Pin conflict detection (chip-independent)
+    if pin_name in used_pins:
+        first = used_pins[pin_name]
+        errors.error(pin.region, "HARDWARE ERROR",
+                     f"Pin {pin_name} is already used by `{first.name}` "
+                     f"(line {first.region.start_line}).",
+                     hint="Each pin can only be used once.")
+        return
+    used_pins[pin_name] = pin
+
+    # 3. ADC2 + WiFi conflict (if applicable for this chip)
+    adc2_gpios = chip.get_adc2_gpios()
+    if pin.mode == "Analog" and uses_wifi:
+        try:
+            gpio_num = int(pin_name)
+            if gpio_num in adc2_gpios:
+                errors.warning(pin.region, "HARDWARE WARNING",
+                               f"Pin {pin_name} is on ADC2, which is blocked while WiFi is active. "
+                               "Analog reads will return errors.",
+                               hint="Use ADC1 pins instead.")
+        except ValueError:
+            pass
 
 
 # ============================================================
 # Pin Validation
 # ============================================================
 
-def _validate_pin(pin: PinDecl, used_pins: dict, uses_wifi: bool,
-                  errors: CompilerErrors):
+def _validate_pin_legacy(pin: PinDecl, used_pins: dict, uses_wifi: bool,
+                        errors: CompilerErrors):
     """Validate a single pin declaration."""
     gpio = pin.gpio
     info = PIN_DB.get(gpio)
@@ -174,7 +258,7 @@ def _validate_sensor(sensor: SensorDecl, used_addrs: dict, errors: CompilerError
 # Bus Validation
 # ============================================================
 
-def _validate_bus(bus: BusDecl, errors: CompilerErrors):
+def _validate_bus(bus: BusDecl, chip, errors: CompilerErrors):
     """Validate bus pin assignments."""
     if bus.bus_type == "i2c":
         sda = bus.params.get("sda")
