@@ -72,12 +72,11 @@ task read_sensors() {
         } else {
             pump.set_pwm(0)
         }
-    }
-}
-
-task motor_control() {
-    every 1ms strict {
-        pump.set_pwm(0)
+        if temperature > 800 {
+            fan.on()
+        } else {
+            fan.off()
+        }
     }
 }
 
@@ -96,12 +95,11 @@ main {
 }
 ```
 
-You wrote `task` three times. The compiler generated **three different execution models**:
+You wrote `task` twice. The compiler generated **two different execution models**:
 
 | Task | Compiler decision | Memory cost |
 |------|-------------------|-------------|
 | `read_sensors` | **Background** protothread — no blocking calls | 12 bytes |
-| `motor_control` | **Critical** hardware timer ISR — `strict` = `IRAM_ATTR` | Timer peripheral |
 | `cloud_sync` | **Priority** FreeRTOS task — uses `mqtt.*` and `http.*` | 4KB stack |
 
 In Arduino, this is 150+ lines. In ESP-IDF, it's 300+. In Volt, you don't even think about it.
