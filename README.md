@@ -50,112 +50,161 @@ volt monitor
 
 ## Examples
 
-### Blink three LEDs at different rates
+### Smart greenhouse — 3 task tiers from one keyword
 
 ```volt
 chip esp32
 
 hardware {
-    pin green: Output = 23
-    pin red: Output = 22
-    pin yellow: Output = 21
+    pin fan: Output = 23
+    pin heater: Output = 22
+    pin pump: PWM = 4
+    pin soil: Analog = 36
+    pin temp: Analog = 39
 }
 
-task blink_red() {
-    every 100ms {
-        red.toggle()
+task read_sensors() {
+    every 2seconds {
+        let moisture = soil.read()
+        let temperature = temp.read()
+        if moisture < 400 {
+            pump.set_pwm(200)
+        } else {
+            pump.set_pwm(0)
+        }
     }
 }
 
-task blink_green() {
-    every 400ms {
-        green.toggle()
-    }
-}
-
-task blink_yellow() {
-    every 600ms {
-        yellow.toggle()
-    }
-}
-
-main {
-    run(blink_red, blink_green, blink_yellow)
-}
-```
-
-All three tasks run concurrently as **background protothreads** — 12 bytes each, cooperative multitasking, no RTOS overhead.
-
-### IoT sensor with three task tiers
-
-```volt
-chip esp32
-
-hardware {
-    pin led: Output = 2
-    pin motor: PWM = 4
-    pin battery: Analog = 36
-}
-
-task blink() {
-    every 500ms {
-        led.toggle()
-    }
-}
-
-task motor_pid() {
+task motor_control() {
     every 1ms strict {
-        motor.set_pwm(0)
+        pump.set_pwm(0)
     }
 }
 
-task telemetry() {
-    every 5seconds {
-        mqtt.send_int("volt/battery", battery.read())
+task cloud_sync() {
+    every 30seconds {
+        mqtt.send_int("greenhouse/soil", soil.read())
+        mqtt.send_int("greenhouse/temp", temp.read())
+        http.post("https://api.farm.io/log", "{\"soil\":" + soil.read() + "}")
     }
 }
 
 main {
-    wifi.connect("MyNetwork", "MyPassword")
+    wifi.connect("FarmNet", "password")
     mqtt.connect("mqtt://broker.local")
-    run(blink, motor_pid, telemetry)
+    run(read_sensors, motor_control, cloud_sync)
 }
 ```
 
-The compiler auto-classifies from **one keyword** — `task`:
+You wrote `task` three times. The compiler generated **three different execution models**:
 
-| Task | Tier | Why | Cost |
-|------|------|-----|------|
-| `blink` | Background | No blocking calls | 12 bytes (protothread) |
-| `motor_pid` | Critical | `strict` keyword — hardware timer ISR, `IRAM_ATTR` | Timer peripheral |
-| `telemetry` | Priority | Uses `mqtt.*` (blocking API) | 4KB stack (FreeRTOS) |
+| Task | Compiler decision | Memory cost |
+|------|-------------------|-------------|
+| `read_sensors` | **Background** protothread — no blocking calls | 12 bytes |
+| `motor_control` | **Critical** hardware timer ISR — `strict` = `IRAM_ATTR` | Timer peripheral |
+| `cloud_sync` | **Priority** FreeRTOS task — uses `mqtt.*` and `http.*` | 4KB stack |
 
-### State machine — blink with states
+In Arduino, this is 150+ lines. In ESP-IDF, it's 300+. In Volt, you don't even think about it.
+
+### Door lock — state machine with compile-time verification
 
 ```volt
 chip esp32
 
 hardware {
-    pin led: Output = 2
+    pin lock: Output = 23
+    pin buzzer: PWM = 18
+    pin button: Input = 4
 }
 
-machine Blinker {
-    initial state off {
+machine DoorLock {
+    let attempts: int = 0
+
+    initial state locked {
         enter {
-            led.off()
+            lock.off()
+            buzzer.set_pwm(0)
         }
-        after 500ms -> on
+        on valid_code -> unlocked
+        on wrong_code -> alarming when attempts > 3
+        on wrong_code -> locked
     }
-    state on {
+
+    state unlocked {
         enter {
-            led.on()
+            lock.on()
         }
-        after 500ms -> off
+        after 10seconds -> locked
+        on button_press -> locked
+    }
+
+    state alarming {
+        enter {
+            buzzer.set_pwm(255)
+        }
+        exit {
+            buzzer.set_pwm(0)
+        }
+        after 30seconds -> locked
+        on master_code -> locked
     }
 }
 ```
 
-The compiler verifies: all states are reachable, no dead states, no non-deterministic transitions, all transition targets exist.
+The compiler **proves at compile time**:
+- All states are reachable (no dead code)
+- Every transition target exists (no typo = `-> loccked`)
+- Guards are deterministic (no ambiguous `wrong_code` with overlapping conditions)
+- Entry/exit actions are ISR-safe
+
+Try doing that with a `switch` statement and a `state` variable.
+
+### Connected motor controller — all three tiers working together
+
+```volt
+chip esp32
+
+hardware {
+    pin motor_a: PWM = 4
+    pin motor_b: PWM = 5
+    pin encoder: Input = 34
+    pin temp_sensor: Analog = 36
+    pin fault_led: Output = 2
+}
+
+task pid_loop() {
+    every 1ms strict {
+        let speed = encoder.read()
+        motor_a.set_pwm(speed)
+    }
+}
+
+task thermal_monitor() {
+    every 500ms {
+        let temp = temp_sensor.read()
+        if temp > 800 {
+            fault_led.on()
+            motor_a.set_pwm(0)
+            motor_b.set_pwm(0)
+        }
+    }
+}
+
+task report() {
+    every 10seconds {
+        mqtt.send_int("motor/speed", encoder.read())
+        mqtt.send_int("motor/temp", temp_sensor.read())
+    }
+}
+
+main {
+    wifi.connect("Factory", "password")
+    mqtt.connect("mqtt://10.0.1.50")
+    run(pid_loop, thermal_monitor, report)
+}
+```
+
+The PID loop runs as a **hardware timer ISR** — 1ms precision, never interrupted. The thermal monitor runs as a **12-byte protothread**. Telemetry runs as a **FreeRTOS task** with its own stack. All from the same `task` keyword. The compiler figured it out.
 
 ## What the Compiler Catches
 
