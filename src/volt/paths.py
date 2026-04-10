@@ -259,48 +259,81 @@ def run_idf_command(args: list, cwd: str = None, env: dict = None,
     )
 
 
-def find_serial_port() -> str | None:
-    """Auto-detect ESP32 serial port. Cross-platform."""
+def detect_chip(port: str) -> str | None:
+    """Detect the chip type on a serial port using esptool.
+    Returns: 'esp32', 'esp8266', 'esp32s2', 'esp32s3', 'esp32c3', etc. or None."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "esptool", "--port", port, "chip-id"],
+            capture_output=True, text=True, timeout=10,
+        )
+        output = result.stdout + result.stderr
+        # esptool prints "Detecting chip type... ESP8266" or "ESP32" etc.
+        for line in output.splitlines():
+            low = line.lower()
+            if "detecting chip type" in low or "chip type:" in low:
+                for chip in ["esp32s3", "esp32s2", "esp32c3", "esp32c6", "esp32h2", "esp32", "esp8266"]:
+                    if chip in low.replace("-", "").replace(" ", ""):
+                        return chip
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        pass
+    return None
+
+
+def find_serial_ports() -> list[dict]:
+    """Find all connected microcontroller serial ports. Cross-platform.
+    Returns list of {'port': str, 'desc': str, 'chip': str|None}."""
+    devices = []
     try:
         import serial.tools.list_ports
         for port in serial.tools.list_ports.comports():
             desc = (port.description or "").lower()
             vid = port.vid or 0
 
-            # Known ESP32 USB-serial chips
+            is_mcu = False
             if any(chip in desc for chip in ["cp210", "ch340", "ch910", "ftdi"]):
-                return port.device
-            # Silicon Labs CP2102 VID
-            if vid == 0x10C4:
-                return port.device
-            # WCH CH340 VID
-            if vid == 0x1A86:
-                return port.device
-            # FTDI VID
-            if vid == 0x0403:
-                return port.device
+                is_mcu = True
+            if vid in (0x10C4, 0x1A86, 0x0403):  # Silicon Labs, WCH, FTDI
+                is_mcu = True
 
+            if is_mcu:
+                chip = detect_chip(port.device)
+                devices.append({
+                    "port": port.device,
+                    "desc": port.description or "",
+                    "chip": chip,
+                })
     except ImportError:
         pass
 
-    # Fallback: check common paths
-    platform = get_platform()
-    if platform == "windows":
-        # Try COM3-COM10
-        for i in range(3, 11):
-            port = f"COM{i}"
-            try:
-                import serial
-                s = serial.Serial(port)
-                s.close()
-                return port
-            except:
-                continue
-    else:
-        for path in ["/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyACM0", "/dev/ttyACM1"]:
-            if Path(path).exists():
-                return path
+    # Fallback: check common paths if pyserial not available
+    if not devices:
+        platform = get_platform()
+        if platform == "windows":
+            for i in range(3, 11):
+                p = f"COM{i}"
+                try:
+                    import serial
+                    s = serial.Serial(p)
+                    s.close()
+                    chip = detect_chip(p)
+                    devices.append({"port": p, "desc": "Serial", "chip": chip})
+                except:
+                    continue
+        else:
+            for p in ["/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyACM0", "/dev/ttyACM1"]:
+                if Path(p).exists():
+                    chip = detect_chip(p)
+                    devices.append({"port": p, "desc": "Serial", "chip": chip})
 
+    return devices
+
+
+def find_serial_port() -> str | None:
+    """Auto-detect first microcontroller serial port. Cross-platform."""
+    devices = find_serial_ports()
+    if devices:
+        return devices[0]["port"]
     return None
 
 

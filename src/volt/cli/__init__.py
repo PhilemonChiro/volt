@@ -64,11 +64,14 @@ def find_volt_source() -> Path:
 
 
 def find_port() -> str:
-    from volt.paths import find_serial_port
-    port = find_serial_port()
-    if port:
-        return port
-    console.print("[red]No ESP32 found. Is the device connected?[/red]")
+    from volt.paths import find_serial_ports
+    devices = find_serial_ports()
+    if devices:
+        d = devices[0]
+        chip = d.get("chip") or "unknown"
+        console.print(f"[dim]Detected {chip.upper()} on {d['port']}[/dim]")
+        return d["port"]
+    console.print("[red]No device found. Is a microcontroller connected?[/red]")
     raise SystemExit(1)
 
 
@@ -638,35 +641,28 @@ def format_volt(source: str) -> str:
 
 @cli.command()
 def devices():
-    """List connected ESP32 devices."""
-    try:
-        import serial.tools.list_ports
-        ports = list(serial.tools.list_ports.comports())
+    """List connected microcontroller devices."""
+    from volt.paths import find_serial_ports
 
-        if not ports:
-            console.print("\n[yellow]No serial devices found.[/yellow]\n")
-            return
+    console.print("\n[dim]Scanning ports...[/dim]")
+    devs = find_serial_ports()
 
-        table = Table(title="Connected Devices")
-        table.add_column("Port", style="cyan")
-        table.add_column("Description", style="white")
-        table.add_column("Hardware", style="dim")
+    if not devs:
+        console.print("[yellow]No devices found. Is a microcontroller connected?[/yellow]\n")
+        return
 
-        for p in ports:
-            esp = "🟢" if "USB" in (p.description or "") or "CP210" in (p.description or "") or "CH340" in (p.description or "") else "  "
-            table.add_row(
-                f"{esp} {p.device}",
-                p.description or "—",
-                p.hwid or "—",
-            )
+    table = Table(title="Connected Devices")
+    table.add_column("Port", style="cyan")
+    table.add_column("Chip", style="green bold")
+    table.add_column("Description", style="white")
 
-        console.print()
-        console.print(table)
-        console.print()
+    for d in devs:
+        chip = (d.get("chip") or "unknown").upper()
+        table.add_row(d["port"], chip, d.get("desc", ""))
 
-    except ImportError:
-        console.print("[red]pyserial not installed.[/red]")
-        raise SystemExit(1)
+    console.print()
+    console.print(table)
+    console.print()
 
 
 def main():

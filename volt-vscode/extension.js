@@ -169,15 +169,38 @@ function runCommand(command, callback) {
 
 function scanDevices() {
     const cmd = `${PYTHON} -c "
-import serial.tools.list_ports, json
-ports = []
+import json, sys, subprocess
+try:
+    import serial.tools.list_ports
+except ImportError:
+    print('[]'); sys.exit(0)
+
+devices = []
 for p in serial.tools.list_ports.comports():
-    if 'ttyUSB' in p.device or 'ttyACM' in p.device or 'CP210' in (p.description or '') or 'CH340' in (p.description or ''):
-        ports.append({'port': p.device, 'desc': p.description or '—', 'hwid': p.hwid or '—'})
-print(json.dumps(ports))
+    desc = (p.description or '').lower()
+    vid = p.vid or 0
+    is_mcu = any(c in desc for c in ['cp210', 'ch340', 'ch910', 'ftdi'])
+    is_mcu = is_mcu or vid in (0x10C4, 0x1A86, 0x0403)
+    if is_mcu:
+        chip = None
+        try:
+            r = subprocess.run([sys.executable, '-m', 'esptool', '--port', p.device, 'chip-id'],
+                               capture_output=True, text=True, timeout=8)
+            out = r.stdout + r.stderr
+            for line in out.splitlines():
+                low = line.lower()
+                if 'detecting chip type' in low or 'chip type:' in low:
+                    for c in ['esp32s3','esp32s2','esp32c3','esp32c6','esp32h2','esp32','esp8266']:
+                        if c in low.replace('-','').replace(' ',''):
+                            chip = c
+                            break
+                if chip: break
+        except: pass
+        devices.append({'port': p.device, 'desc': p.description or '', 'chip': chip or 'unknown'})
+print(json.dumps(devices))
 "`;
 
-    exec(cmd, (err, stdout) => {
+    exec(cmd, { timeout: 15000 }, (err, stdout) => {
         if (sidebarProvider) {
             try {
                 const devices = JSON.parse(stdout.trim());
@@ -708,7 +731,7 @@ class VoltSidebarProvider {
     </div>
 </div>
 
-<!-- DEVICE OUTPUT (serial data from ESP32) -->
+<!-- DEVICE OUTPUT (serial data from connected device) -->
 <div class="section">
     <div class="section-header" onclick="toggle(this)">
         <span class="chevron">▾</span> Device Output
@@ -925,14 +948,13 @@ class VoltSidebarProvider {
             } else {
                 let html = '';
                 msg.devices.forEach(d => {
-                    // Detect chip type from description
-                    const isESP = d.desc.includes('CP210') || d.desc.includes('CH340') || d.desc.includes('USB');
-                    const chipLabel = isESP ? 'ESP32' : 'Serial';
+                    const chip = (d.chip || 'unknown').toUpperCase();
+                    const dotClass = chip !== 'UNKNOWN' ? 'dot-g' : 'dot-y';
                     html += '<div class="device-card">' +
                         '<div class="device-header">' +
-                            '<span class="dot dot-g"></span>' +
+                            '<span class="dot ' + dotClass + '"></span>' +
                             '<span class="device-port">' + d.port + '</span>' +
-                            '<span class="device-chip">' + chipLabel + '</span>' +
+                            '<span class="device-chip">' + chip + '</span>' +
                         '</div>' +
                         '<div class="device-desc">' + d.desc + '</div>' +
                     '</div>';
