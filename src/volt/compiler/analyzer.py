@@ -319,18 +319,19 @@ def _detect_shared_state(program: Program, scope: Scope, errors: CompilerErrors)
         writers = [(t, tier) for t, tier, access in accesses if access == "write"]
         tiers = set(tier for _, tier, _ in accesses)
 
-        # CRITICAL + non-CRITICAL = data race (ISR preempts)
+        # CRITICAL + non-CRITICAL = shared across tiers (ISR preempts)
+        # The codegen automatically adds `volatile` for these variables,
+        # so this is a warning (awareness) not an error (blocker).
         if "critical" in tiers and tiers - {"critical"}:
             critical_tasks = [t for t, tier, _ in accesses if tier == "critical"]
             other_tasks = [t for t, tier, _ in accesses if tier != "critical"]
-            errors.error(
-                program.region, "CONCURRENCY ERROR",
-                f"Variable `{var_name}` is accessed by critical task "
-                f"({', '.join(critical_tasks)}) and non-critical task "
-                f"({', '.join(other_tasks)}). This is a data race — the ISR "
-                f"can preempt at any time.",
-                hint=f"Declare `{var_name}` as `volatile` in generated C, "
-                     f"or use atomic operations. Better: use a channel.",
+            errors.warning(
+                program.region, "CONCURRENCY",
+                f"Variable `{var_name}` is shared between critical task "
+                f"({', '.join(critical_tasks)}) and task "
+                f"({', '.join(other_tasks)}). The compiler will mark it "
+                f"`volatile` in generated C.",
+                hint="For multi-word values, consider using atomic operations.",
             )
 
         # Multiple writers across different tasks = warning

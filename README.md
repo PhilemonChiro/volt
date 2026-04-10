@@ -181,9 +181,9 @@ hardware {
     pin fault_led: Output = 2
 }
 
-let setpoint: int = 1000
-let integral: int = 0
-let last_error: int = 0
+var setpoint: int = 1000
+var integral: int = 0
+var last_error: int = 0
 
 let kp: int = 10
 let ki: int = 2

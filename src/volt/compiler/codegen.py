@@ -86,6 +86,67 @@ BUILTIN_MAP = {
 }
 
 
+def _collect_var_refs(stmts: list) -> set:
+    """Collect all variable names referenced in a statement list (recursive)."""
+    names = set()
+    for stmt in stmts:
+        if stmt is None:
+            continue
+        if isinstance(stmt, VarDecl) and stmt.value:
+            names |= _collect_expr_refs(stmt.value)
+        elif isinstance(stmt, AssignExpr):
+            if isinstance(stmt.target, VarRef):
+                names.add(stmt.target.name)
+            names |= _collect_expr_refs(stmt.value)
+        elif isinstance(stmt, ExprStmt):
+            names |= _collect_expr_refs(stmt.expr)
+        elif isinstance(stmt, ReturnStmt) and stmt.value:
+            names |= _collect_expr_refs(stmt.value)
+        elif isinstance(stmt, IfStmt):
+            names |= _collect_expr_refs(stmt.condition)
+            names |= _collect_var_refs(stmt.then_body)
+            if isinstance(stmt.else_body, list):
+                names |= _collect_var_refs(stmt.else_body)
+            elif isinstance(stmt.else_body, IfStmt):
+                names |= _collect_var_refs([stmt.else_body])
+        elif isinstance(stmt, WhileStmt):
+            names |= _collect_expr_refs(stmt.condition)
+            names |= _collect_var_refs(stmt.body)
+        elif isinstance(stmt, ForStmt):
+            names |= _collect_var_refs(stmt.body)
+        elif isinstance(stmt, EveryBlock):
+            names |= _collect_var_refs(stmt.body)
+        elif isinstance(stmt, OnBlock):
+            names |= _collect_var_refs(stmt.body)
+    return names
+
+
+def _collect_expr_refs(expr) -> set:
+    """Collect all variable names from an expression tree."""
+    if expr is None:
+        return set()
+    names = set()
+    if isinstance(expr, VarRef):
+        names.add(expr.name)
+    elif isinstance(expr, BinaryExpr):
+        names |= _collect_expr_refs(expr.left)
+        names |= _collect_expr_refs(expr.right)
+    elif isinstance(expr, UnaryExpr):
+        names |= _collect_expr_refs(expr.operand)
+    elif isinstance(expr, FuncCall):
+        for arg in expr.args:
+            names |= _collect_expr_refs(arg)
+    elif isinstance(expr, MethodCall):
+        names |= _collect_expr_refs(expr.obj)
+        for arg in expr.args:
+            names |= _collect_expr_refs(arg)
+    elif isinstance(expr, AssignExpr):
+        if isinstance(expr.target, VarRef):
+            names.add(expr.target.name)
+        names |= _collect_expr_refs(expr.value)
+    return names
+
+
 class CCodeGen:
     """Generates C source from a Volt AST."""
 
@@ -109,7 +170,10 @@ class CCodeGen:
         # Section 2: Forward declarations
         self._emit_forward_decls(program)
 
-        # Section 3: Context structs (for background tasks with lifted vars)
+        # Section 3: Module-level variables
+        self._emit_global_vars(program)
+
+        # Section 4: Context structs (for background tasks with lifted vars)
         self._emit_context_structs(program)
 
         # Section 4: Storage variables
@@ -210,6 +274,34 @@ class CCodeGen:
             if task.tier == "background":
                 self._out(f"static volt_task_t _{task.name}_t = {{0}};")
         self._out("")
+
+    def _emit_global_vars(self, program: Program):
+        if not program.global_vars:
+            return
+        self._out("// Module-level variables")
+        # Determine which vars are shared across tiers (need volatile)
+        volatile_vars = self._find_volatile_vars(program)
+        for var in program.global_vars:
+            c_type = TYPE_MAP.get(var.type_name, "int32_t")
+            vol = "volatile " if var.name in volatile_vars else ""
+            init = ""
+            if var.value is not None:
+                init = f" = {self._expr(var.value)}"
+            self._out(f"static {vol}{c_type} {_c_name(var.name)}{init};")
+        self._out("")
+
+    def _find_volatile_vars(self, program: Program) -> set:
+        """Find global vars accessed by tasks in different tiers — need volatile."""
+        var_tiers = {}  # var_name → set of tiers
+        global_names = {v.name for v in program.global_vars}
+        for task in program.tasks:
+            refs = _collect_var_refs(task.body)
+            for name in refs:
+                if name in global_names:
+                    if name not in var_tiers:
+                        var_tiers[name] = set()
+                    var_tiers[name].add(task.tier)
+        return {name for name, tiers in var_tiers.items() if len(tiers) > 1 or "critical" in tiers}
 
     def _emit_storage_vars(self, program: Program):
         if program.storage_vars:
