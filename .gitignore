@@ -1,0 +1,70 @@
+# Build artifacts
+build/
+framework/build/
+framework/sdkconfig
+framework/sdkconfig.old
+framework/managed_components/
+
+# Generated PDFs
+docs/pdf/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+compiler/.venv/
+*.egg-info/
+
+# VS Code extension
+volt-vscode/node_modules/
+volt-vscode/*.vsix
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+
+# ESP-IDF (don't commit the SDK itself)
+# framework/build/ already covered above
+
+# Credentials — NEVER commit
+framework/main/config.h
+
+# Temporary test files
+/tmp/
+*.tmp
+
+# Private docs — research and strategy
+docs/research/
+docs/community/
+
+# Old pre-restructure directories (code now lives in src/volt/)
+/cli/
+/compiler/
+
+# Internal / working files
+CLAUDE.md
+CONVENTIONS.md
+ROADMAP.md
+serial_monitor.py
+logo-reference.png
+docs/volt-docs-pdf.zip
+
+# Generated files — rebuilt every compile
+framework/main/main.c
+
+# Ad-hoc debug/test scripts
+compiler/test_expr.py
+compiler/test_grammar.py
+
+# Lock files
+package-lock.json
+volt-vscode/package-lock.json
+
+# Hardcoded paths in CLI/extension (machine-specific)
+# Users will configure their own paths after cloning

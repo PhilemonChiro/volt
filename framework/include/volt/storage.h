@@ -1,0 +1,54 @@
+#ifndef VOLT_STORAGE_H
+#define VOLT_STORAGE_H
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include "volt/error.h"
+
+// Save an integer. Buffered in RAM — written to flash on flush or timer.
+volt_error_t storage_save_int(const char *key, int value);
+
+// Load an integer. Returns default_val if key doesn't exist.
+int storage_load_int(const char *key, int default_val);
+
+// Save a float.
+volt_error_t storage_save_float(const char *key, float value);
+
+// Load a float. Returns default_val if key doesn't exist.
+float storage_load_float(const char *key, float default_val);
+
+// Save a string.
+volt_error_t storage_save_str(const char *key, const char *value);
+
+// Load a string into buf. Copies default_val if key doesn't exist.
+volt_error_t storage_load_str(const char *key, char *buf, size_t buf_size,
+                               const char *default_val);
+
+// Delete a key from storage.
+volt_error_t storage_delete(const char *key);
+
+// Check if a key exists.
+bool storage_exists(const char *key);
+
+// Force write all dirty values to flash immediately.
+// Called automatically every 30 seconds and on graceful shutdown.
+volt_error_t storage_flush(void);
+
+// Health monitoring — how full is the storage partition.
+typedef struct {
+    uint32_t used_entries;
+    uint32_t free_entries;
+    uint8_t  usage_pct;
+} storage_health_t;
+
+storage_health_t storage_get_health(void);
+
+// Erase all stored data and reboot. Use for unrecoverable corruption.
+volt_error_t storage_factory_reset(void);
+
+// Initialize storage subsystem. Called by volt_init().
+// Handles NVS init, boot loop detection, and starts the flush timer.
+volt_error_t storage_init(void);
+
+#endif // VOLT_STORAGE_H

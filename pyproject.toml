@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "volt-lang"
+version = "0.1.0"
+description = "Volt — A typed, hardware-aware language for embedded systems"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Philemon Chiro"},
+]
+keywords = ["embedded", "esp32", "microcontroller", "transpiler", "iot", "firmware"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Software Development :: Embedded Systems",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "lark>=1.1",
+    "click>=8.0",
+    "rich>=13.0",
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+volt = "volt.cli:main"
+voltc = "volt.compiler.voltc:main"
+
+[project.urls]
+Homepage = "https://github.com/volt-embedded/volt"
+Repository = "https://github.com/volt-embedded/volt"
+Issues = "https://github.com/volt-embedded/volt/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"volt.compiler" = ["grammar.lark"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

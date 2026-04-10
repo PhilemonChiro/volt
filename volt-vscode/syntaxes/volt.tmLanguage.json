@@ -1,0 +1,483 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Volt",
+  "scopeName": "source.volt",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#raw-block" },
+    { "include": "#declarations" },
+    { "include": "#state-machine" },
+    { "include": "#control-flow" },
+    { "include": "#block-keywords" },
+    { "include": "#variable-keywords" },
+    { "include": "#modifiers" },
+    { "include": "#hardware-types" },
+    { "include": "#builtin-objects" },
+    { "include": "#builtin-functions" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#durations" },
+    { "include": "#numbers" },
+    { "include": "#guards" },
+    { "include": "#operators" },
+    { "include": "#function-calls" },
+    { "include": "#method-calls" },
+    { "include": "#named-params" }
+  ],
+  "repository": {
+
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.volt",
+          "match": "//.*$"
+        }
+      ]
+    },
+
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.volt",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.volt",
+              "match": "\\\\."
+            },
+            {
+              "comment": "String interpolation: {expr}",
+              "contentName": "meta.interpolation.volt",
+              "begin": "(?<!\\\\)\\{",
+              "end": "\\}",
+              "beginCaptures": { "0": { "name": "punctuation.definition.interpolation.begin.volt" } },
+              "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.volt" } },
+              "patterns": [
+                { "include": "source.volt" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+
+    "raw-block": {
+      "patterns": [
+        {
+          "comment": "Raw C escape hatch — de-emphasized",
+          "name": "meta.raw-block.volt",
+          "match": "\\b(raw)\\b",
+          "captures": {
+            "1": { "name": "keyword.other.raw.volt" }
+          }
+        }
+      ]
+    },
+
+    "declarations": {
+      "patterns": [
+        {
+          "comment": "Chip declaration: chip esp32",
+          "match": "\\b(chip)\\s+([a-zA-Z0-9_]+)",
+          "captures": {
+            "1": { "name": "keyword.declaration.chip.volt" },
+            "2": { "name": "constant.other.chip-target.volt" }
+          }
+        },
+        {
+          "comment": "Function: func name(",
+          "match": "\\b(func)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.function.volt" },
+            "2": { "name": "entity.name.function.definition.volt" }
+          }
+        },
+        {
+          "comment": "Task: task name(",
+          "match": "\\b(task)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.task.volt" },
+            "2": { "name": "entity.name.function.task.volt" }
+          }
+        },
+        {
+          "comment": "Machine: machine Name {",
+          "match": "\\b(machine)\\s+([A-Z][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.machine.volt" },
+            "2": { "name": "entity.name.type.machine.volt" }
+          }
+        },
+        {
+          "comment": "Struct: struct Name {",
+          "match": "\\b(struct)\\s+([A-Z][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.struct.volt" },
+            "2": { "name": "entity.name.type.struct.volt" }
+          }
+        },
+        {
+          "comment": "Pin: pin name: Mode = N",
+          "match": "\\b(pin)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.pin.volt" },
+            "2": { "name": "variable.other.hardware.pin.volt" }
+          }
+        },
+        {
+          "comment": "Sensor: sensor name: Type",
+          "match": "\\b(sensor)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.sensor.volt" },
+            "2": { "name": "variable.other.hardware.sensor.volt" }
+          }
+        }
+      ]
+    },
+
+    "state-machine": {
+      "patterns": [
+        {
+          "comment": "Initial state: initial state name {",
+          "match": "\\b(initial)\\s+(state)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.initial.volt" },
+            "2": { "name": "keyword.declaration.state.volt" },
+            "3": { "name": "entity.name.tag.state.definition.volt" }
+          }
+        },
+        {
+          "comment": "State: state name {",
+          "match": "\\b(state)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.state.volt" },
+            "2": { "name": "entity.name.tag.state.definition.volt" }
+          }
+        },
+        {
+          "comment": "Transition arrow: -> target",
+          "match": "(->)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.operator.transition.volt" },
+            "2": { "name": "entity.name.tag.state.reference.volt" }
+          }
+        },
+        {
+          "comment": "Enter lifecycle hook",
+          "name": "keyword.control.lifecycle.enter.volt",
+          "match": "\\b(enter)\\b"
+        },
+        {
+          "comment": "Exit lifecycle hook",
+          "name": "keyword.control.lifecycle.exit.volt",
+          "match": "\\b(exit)\\b"
+        },
+        {
+          "comment": "After (timed transition)",
+          "name": "keyword.control.after.volt",
+          "match": "\\b(after)\\b"
+        }
+      ]
+    },
+
+    "control-flow": {
+      "patterns": [
+        {
+          "name": "keyword.control.flow.volt",
+          "match": "\\b(if|else|while|for|in|return|match)\\b"
+        },
+        {
+          "comment": "Event handler",
+          "name": "keyword.control.event.volt",
+          "match": "\\b(on|every|timeout)\\b"
+        },
+        {
+          "comment": "Run (starts tasks)",
+          "name": "keyword.control.run.volt",
+          "match": "\\b(run)\\b"
+        }
+      ]
+    },
+
+    "block-keywords": {
+      "patterns": [
+        {
+          "comment": "Main entry point — special emphasis",
+          "name": "keyword.declaration.main.volt",
+          "match": "\\b(main)\\b"
+        },
+        {
+          "name": "keyword.declaration.block.volt",
+          "match": "\\b(hardware|power)\\b"
+        }
+      ]
+    },
+
+    "variable-keywords": {
+      "patterns": [
+        {
+          "comment": "Immutable variable declaration",
+          "name": "keyword.declaration.let.volt",
+          "match": "\\b(let)\\b"
+        },
+        {
+          "comment": "Mutable variable declaration",
+          "name": "keyword.declaration.var.volt",
+          "match": "\\b(var)\\b"
+        },
+        {
+          "comment": "Persistent storage variable — gold/special",
+          "name": "keyword.declaration.storage.volt",
+          "match": "\\b(storage)\\b"
+        }
+      ]
+    },
+
+    "modifiers": {
+      "patterns": [
+        {
+          "comment": "Strict = critical tier (ISR) — red/danger emphasis",
+          "name": "keyword.modifier.strict.volt",
+          "match": "\\b(strict)\\b"
+        },
+        {
+          "comment": "Debounce / throttle event modifiers",
+          "name": "keyword.modifier.event.volt",
+          "match": "\\b(debounce|throttle)\\b"
+        },
+        {
+          "comment": "Initial state marker",
+          "name": "keyword.modifier.initial.volt",
+          "match": "\\b(initial)\\b"
+        }
+      ]
+    },
+
+    "hardware-types": {
+      "patterns": [
+        {
+          "comment": "Pin modes: Output, Input, PWM, Analog",
+          "name": "support.type.pin-mode.volt",
+          "match": "\\b(Output|Input|PWM|Analog)\\b"
+        },
+        {
+          "comment": "Pin mode with qualifier: Input.PullUp",
+          "match": "(Input)\\.(PullUp|PullDown)",
+          "captures": {
+            "1": { "name": "support.type.pin-mode.volt" },
+            "2": { "name": "support.type.pin-qualifier.volt" }
+          }
+        },
+        {
+          "comment": "Known sensor types",
+          "name": "support.type.sensor.volt",
+          "match": "\\b(BME280|DHT22|BH1750|SSD1306|SX1262|CapacitiveSoil)\\b"
+        },
+        {
+          "comment": "Bus type constructors",
+          "name": "support.type.bus.volt",
+          "match": "\\b(i2c|spi)\\b(?=\\s*[\\(=])"
+        }
+      ]
+    },
+
+    "builtin-objects": {
+      "patterns": [
+        {
+          "comment": "Framework builtin objects — wifi, mqtt, system, etc.",
+          "name": "support.class.builtin.volt",
+          "match": "\\b(wifi|mqtt|http|storage|system|ota)\\b(?=\\.)"
+        }
+      ]
+    },
+
+    "builtin-functions": {
+      "patterns": [
+        {
+          "comment": "Framework builtin functions — log, sleep, deep_sleep, etc.",
+          "name": "support.function.builtin.volt",
+          "match": "\\b(log|sleep|deep_sleep|light_sleep|run)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+
+    "types": {
+      "patterns": [
+        {
+          "comment": "Primitive types",
+          "name": "entity.name.type.primitive.volt",
+          "match": "\\b(int|float|bool|string|void|Duration)\\b"
+        },
+        {
+          "comment": "Type annotation after colon: x: Type",
+          "match": ":\\s*([A-Z][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "entity.name.type.annotation.volt" }
+          }
+        },
+        {
+          "comment": "Return type: -> type",
+          "match": "(->)\\s+([a-z][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.operator.return-type.volt" },
+            "2": { "name": "entity.name.type.return.volt" }
+          }
+        },
+        {
+          "comment": "Generic type: list<int>, buffer<128>",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(<)([a-zA-Z0-9_]+)(>)",
+          "captures": {
+            "1": { "name": "entity.name.type.generic.volt" },
+            "2": { "name": "punctuation.bracket.angle.begin.volt" },
+            "3": { "name": "entity.name.type.argument.volt" },
+            "4": { "name": "punctuation.bracket.angle.end.volt" }
+          }
+        }
+      ]
+    },
+
+    "constants": {
+      "patterns": [
+        {
+          "comment": "Boolean literals",
+          "name": "constant.language.boolean.volt",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "comment": "Pin level constants",
+          "name": "constant.language.level.volt",
+          "match": "\\b(HIGH|LOW|ON|OFF)\\b"
+        }
+      ]
+    },
+
+    "durations": {
+      "patterns": [
+        {
+          "comment": "Duration literals — stand out as time values",
+          "name": "constant.numeric.duration.volt",
+          "match": "\\b[0-9]+(us|ms|seconds|second|minutes|minute|hours|hour)\\b"
+        }
+      ]
+    },
+
+    "numbers": {
+      "patterns": [
+        {
+          "comment": "Hex numbers — hardware addresses",
+          "name": "constant.numeric.hex.volt",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.volt",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.volt",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+
+    "guards": {
+      "patterns": [
+        {
+          "comment": "Guard brackets: [condition]",
+          "begin": "\\[(?=[^\\]]*\\]\\s*->)",
+          "end": "\\]",
+          "beginCaptures": { "0": { "name": "punctuation.definition.guard.begin.volt" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.guard.end.volt" } },
+          "contentName": "meta.guard.condition.volt",
+          "patterns": [
+            { "include": "#numbers" },
+            { "include": "#constants" },
+            { "include": "#operators" },
+            { "include": "#builtin-objects" },
+            { "include": "#method-calls" }
+          ]
+        }
+      ]
+    },
+
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.volt",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.logical.volt",
+          "match": "(\\|\\||&&|!)"
+        },
+        {
+          "name": "keyword.operator.assignment.volt",
+          "match": "(?<![=!<>])=(?!=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.volt",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.range.volt",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.transition.volt",
+          "match": "->"
+        }
+      ]
+    },
+
+    "function-calls": {
+      "patterns": [
+        {
+          "comment": "Regular function calls: name(",
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.call.volt" }
+          }
+        }
+      ]
+    },
+
+    "method-calls": {
+      "patterns": [
+        {
+          "comment": "Method calls: .name(",
+          "match": "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.method.volt" }
+          }
+        },
+        {
+          "comment": "Property access: .name (no parens)",
+          "match": "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b(?!\\s*\\()",
+          "captures": {
+            "1": { "name": "variable.other.property.volt" }
+          }
+        }
+      ]
+    },
+
+    "named-params": {
+      "patterns": [
+        {
+          "comment": "Named parameters: sda: 21, scl: 22",
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*(?=:\\s*[0-9])",
+          "captures": {
+            "1": { "name": "variable.parameter.named.volt" }
+          }
+        },
+        {
+          "comment": "Named params in function: name: type",
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*(?=:\\s*[a-z])",
+          "captures": {
+            "1": { "name": "variable.parameter.typed.volt" }
+          }
+        }
+      ]
+    }
+  }
+}

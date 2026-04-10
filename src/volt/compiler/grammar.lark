@@ -1,0 +1,297 @@
+// ============================================================
+// Volt Language Grammar (Lark LALR(1))
+//
+// A typed, hardware-aware language for embedded systems.
+// Transpiles to C targeting ESP32 via ESP-IDF.
+// ============================================================
+
+
+// --- Top Level ---
+
+start: (_NL | top_level)*
+
+?top_level: chip_decl
+    | hardware_block
+    | power_block
+    | struct_decl
+    | func_decl
+    | task_decl
+    | machine_decl
+    | main_block
+    | raw_block
+    | storage_decl _NL
+    | var_decl _NL
+
+
+// --- Chip Declaration ---
+// chip esp32
+
+chip_decl: "chip" NAME _NL
+
+
+// --- Hardware Block ---
+// hardware { pin led: Output = 2 ... }
+
+hardware_block: "hardware" "{" (_NL | hardware_item)* "}"
+
+?hardware_item: pin_decl _NL
+    | bus_decl _NL
+    | sensor_decl _NL
+
+pin_decl: "pin" NAME ":" pin_mode "=" expr
+
+pin_mode: NAME ("." NAME)*
+
+bus_decl: NAME NAME "=" NAME "(" named_args ")"
+
+sensor_decl: "sensor" NAME ":" NAME "on" NAME "at" expr
+
+
+// --- Power Block (for compile-time power estimation) ---
+// power { source: battery(3700mv, 2000mah), charging: solar }
+
+power_block: "power" "{" (_NL | power_item)* "}"
+
+?power_item: NAME ":" power_value _NL
+
+power_value: NAME "(" arg_list ")"
+    | NAME
+
+
+// --- Struct ---
+// struct Reading { temperature: float ... }
+
+struct_decl: "struct" NAME "{" (_NL | struct_field)* "}"
+
+struct_field: NAME ":" type_name _NL
+
+
+// --- Function ---
+// func average(a: float, b: float) -> float { ... }
+
+func_decl: "func" NAME "(" param_list? ")" return_type? block
+
+return_type: "->" type_name
+
+param_list: param ("," param)*
+
+param: NAME ":" type_name
+
+
+// --- Task ---
+// task blink() { every 500ms { led.toggle() } }
+
+task_decl: "task" NAME "(" ")" block
+
+
+// --- State Machine (Volt-unique: first-class state machines) ---
+// machine DeviceState { var retry = 0  state idle { ... } state running { ... } }
+
+machine_decl: "machine" NAME "{" (_NL | machine_item)* "}"
+
+?machine_item: state_decl
+    | var_decl _NL
+
+state_decl: INITIAL? "state" NAME "{" (_NL | state_item)* "}"
+
+INITIAL: "initial"
+
+// State items: enter/exit blocks, transitions, and any normal statement
+?state_item: state_enter
+    | state_exit
+    | state_on _NL
+    | state_after _NL
+    | statement
+
+// Code to run when entering/exiting this state
+state_enter: "enter" block
+state_exit: "exit" block
+
+// Transition on event with optional guard and action:
+// on wifi.connected() -> running
+// on wifi.disconnected() [retry_count < 5] -> connecting
+// on wifi.disconnected() -> error { retry_count = 0 }
+state_on: "on" expr state_guard? "->" NAME state_action?
+
+// Timed transition: after 10seconds -> error
+state_after: "after" expr state_guard? "->" NAME state_action?
+
+// Guard: [condition]
+state_guard: "[" expr "]"
+
+// Action: { code } executed during transition
+state_action: block
+
+
+// --- Storage Declaration (persists across reboot/deep sleep) ---
+// storage boot_count: int = 0
+
+storage_decl: "storage" NAME ":" type_name "=" expr
+
+
+// --- Main Block ---
+
+main_block: "main" block
+
+
+// --- Raw C Block ---
+// raw { ... } — preprocessed before parsing
+
+raw_block: "raw" "{" ESCAPED_STRING "}"
+
+
+// --- Block (curly braces with statements) ---
+
+block: "{" (_NL | statement)* "}"
+
+
+// --- Statements ---
+
+// Statements: newline-terminated for simple stmts, self-terminating for blocks
+?statement: var_decl _NL
+    | return_stmt _NL
+    | expr_stmt _NL
+    | if_stmt
+    | while_stmt
+    | for_stmt
+    | match_stmt
+    | every_block
+    | on_block
+    | timeout_block
+
+var_decl: VAR_KEYWORD NAME type_annotation? "=" expr
+
+VAR_KEYWORD.4: "let" | "var"
+
+type_annotation: ":" type_name
+
+return_stmt: "return" expr?
+
+expr_stmt: expr
+
+if_stmt: "if" expr block else_clause?
+
+else_clause: "else" if_stmt
+    | "else" block
+
+while_stmt: "while" expr block
+
+// For loop: for i in 0..10 { ... }
+for_stmt: "for" NAME "in" expr ".." expr block
+
+every_block: "every" expr STRICT? block
+
+STRICT: "strict"
+
+// Event handler: on button.press() debounce 50ms { ... }
+on_block: "on" expr debounce_clause? throttle_clause? block
+
+debounce_clause: "debounce" expr
+
+throttle_clause: "throttle" expr
+
+// Timeout block: timeout 10seconds { wifi.connect("net", "pass") } { on_fail }
+// Changed syntax: timeout wraps the expression, not follows it.
+// This avoids LALR conflict with expr_stmt.
+timeout_block: "timeout" expr block block
+
+// Match: match(state) { .idle -> ... .active -> ... }
+match_stmt: "match" "(" expr ")" "{" (_NL | match_arm)* "}"
+
+match_arm: "." NAME "->" match_body _NL
+
+?match_body: expr
+    | block
+
+
+// --- Expressions (precedence: lowest to highest) ---
+
+?expr: assign_expr
+
+// Assignment: x = 5, data.temp = 23.5
+?assign_expr: or_expr
+    | postfix "=" or_expr -> assign_op
+
+// Boolean OR
+?or_expr: and_expr
+    | or_expr "||" and_expr -> or_op
+
+// Boolean AND
+?and_expr: comparison
+    | and_expr "&&" comparison -> and_op
+
+// Comparison
+?comparison: addition
+    | comparison COMP_OP addition -> comp_op
+
+COMP_OP: "==" | "!=" | "<=" | ">=" | "<" | ">"
+
+// Addition / subtraction
+?addition: multiplication
+    | addition "+" multiplication -> add_op
+    | addition "-" multiplication -> sub_op
+
+// Multiplication / division / modulo
+?multiplication: unary
+    | multiplication "*" unary -> mul_op
+    | multiplication "/" unary -> div_op
+    | multiplication "%" unary -> mod_op
+
+// Unary operators
+?unary: "!" unary -> not_expr
+    | "-" unary -> neg_expr
+    | postfix
+
+// Postfix: field access, method calls, function calls
+?postfix: primary
+    | postfix "." NAME -> dot_access
+    | postfix "(" arg_list? ")" -> func_call
+
+// Primary expressions
+?primary: DURATION -> duration_lit
+    | FLOAT -> float_lit
+    | INT -> int_lit
+    | ESCAPED_STRING -> string_lit
+    | "true" -> true_lit
+    | "false" -> false_lit
+    | NAME -> var_ref
+    | "(" expr ")"
+    | array_literal
+
+// Array literal: [1, 2, 3]
+array_literal: "[" (expr ("," expr)*)? "]"
+
+// Duration token: 500ms, 5seconds, 10minutes, 1hour
+DURATION.3: /[0-9]+(us|ms|seconds|second|minutes|minute|hours|hour)/
+
+// Float must be higher priority than INT
+FLOAT.2: /[0-9]+\.[0-9]+/
+INT.1: /[0-9]+/
+    | /0x[0-9a-fA-F]+/
+
+// Arguments
+arg_list: expr ("," expr)*
+
+named_args: named_arg ("," named_arg)*
+
+named_arg: NAME ":" expr
+
+
+// --- Type Names ---
+
+?type_name: NAME -> simple_type
+    | NAME "<" type_name ">" -> generic_type
+    | NAME "<" INT ">" -> sized_type
+
+
+// --- Tokens ---
+
+NAME: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+%import common.ESCAPED_STRING
+
+_NL: NEWLINE+
+NEWLINE: /\r?\n/
+
+%ignore /[ \t]+/
+%ignore /\/\/[^\n]*/

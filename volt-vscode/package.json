@@ -1,0 +1,224 @@
+{
+  "name": "volt-lang",
+  "displayName": "Volt Language",
+  "description": "Language support for Volt — typed language for embedded systems",
+  "version": "0.1.0",
+  "publisher": "volt-embedded",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:volt",
+    "workspaceContains:**/*.volt"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "volt",
+        "aliases": [
+          "Volt",
+          "volt"
+        ],
+        "extensions": [
+          ".volt"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icon_no_bg.png",
+          "dark": "./icon_no_bg.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "volt",
+        "scopeName": "source.volt",
+        "path": "./syntaxes/volt.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "volt.build",
+        "title": "Volt: Build",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "volt.flash",
+        "title": "Volt: Flash",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "volt.run",
+        "title": "Volt: Run (Build + Flash + Monitor)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "volt.monitor",
+        "title": "Volt: Monitor",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "volt.check",
+        "title": "Volt: Check",
+        "icon": "$(check)"
+      },
+      {
+        "command": "volt.devices",
+        "title": "Volt: List Devices",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "volt.format",
+        "title": "Volt: Format File",
+        "icon": "$(symbol-namespace)"
+      },
+      {
+        "command": "volt.stop",
+        "title": "Volt: Stop Monitor",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "volt.rerun",
+        "title": "Volt: Re-Run (Stop + Build + Flash + Monitor)",
+        "icon": "$(debug-restart)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "volt.build",
+          "when": "resourceExtname == .volt",
+          "group": "navigation@1"
+        },
+        {
+          "command": "volt.flash",
+          "when": "resourceExtname == .volt",
+          "group": "navigation@2"
+        },
+        {
+          "command": "volt.run",
+          "when": "resourceExtname == .volt",
+          "group": "navigation@3"
+        }
+      ],
+      "editor/title/run": [
+        {
+          "command": "volt.run",
+          "when": "resourceExtname == .volt"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "volt.build",
+          "when": "resourceExtname == .volt",
+          "group": "volt@1"
+        },
+        {
+          "command": "volt.flash",
+          "when": "resourceExtname == .volt",
+          "group": "volt@2"
+        },
+        {
+          "command": "volt.run",
+          "when": "resourceExtname == .volt",
+          "group": "volt@3"
+        },
+        {
+          "command": "volt.check",
+          "when": "resourceExtname == .volt",
+          "group": "volt@4"
+        },
+        {
+          "command": "volt.monitor",
+          "when": "resourceExtname == .volt",
+          "group": "volt@5"
+        },
+        {
+          "command": "volt.devices",
+          "when": "resourceExtname == .volt",
+          "group": "volt@6"
+        },
+        {
+          "command": "volt.format",
+          "when": "resourceExtname == .volt",
+          "group": "volt@7"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "volt.build",
+        "key": "ctrl+shift+b",
+        "when": "resourceExtname == .volt"
+      },
+      {
+        "command": "volt.flash",
+        "key": "ctrl+shift+f",
+        "when": "resourceExtname == .volt"
+      },
+      {
+        "command": "volt.run",
+        "key": "ctrl+shift+r",
+        "when": "resourceExtname == .volt"
+      },
+      {
+        "command": "volt.check",
+        "key": "ctrl+shift+c",
+        "when": "resourceExtname == .volt"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "volt-panel",
+          "title": "Volt",
+          "icon": "./icon_no_bg.png"
+        }
+      ]
+    },
+    "views": {
+      "volt-panel": [
+        {
+          "type": "webview",
+          "id": "volt.sidebar",
+          "name": "Volt Control"
+        }
+      ]
+    },
+    "taskDefinitions": [
+      {
+        "type": "volt",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "build",
+              "flash",
+              "run",
+              "check",
+              "monitor"
+            ],
+            "description": "The Volt command to run"
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}
