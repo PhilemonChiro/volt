@@ -82,9 +82,12 @@ task read_sensors() {
 
 task cloud_sync() {
     every 30seconds {
-        mqtt.send_int("greenhouse/soil", soil.read())
-        mqtt.send_int("greenhouse/temp", temp.read())
-        http.post("https://api.farm.io/log", "{\"soil\":" + soil.read() + "}")
+        storage.save("soil", soil.read())
+        storage.save("temp", temp.read())
+        if wifi.is_connected() {
+            mqtt.send_int("greenhouse/soil", storage.load("soil"))
+            mqtt.send_int("greenhouse/temp", storage.load("temp"))
+        }
     }
 }
 
