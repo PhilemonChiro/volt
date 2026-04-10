@@ -90,7 +90,9 @@ task log_data() {
 task cloud_sync() {
     every 60seconds {
         if wifi.is_connected() {
-            storage.drain("readings", "greenhouse/data")
+            let data = storage.drain("readings")
+            mqtt.send("greenhouse/data", data)
+            http.post("https://api.farm.io/readings", data)
         }
     }
 }
