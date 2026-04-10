@@ -232,7 +232,7 @@ main {
 }
 ```
 
-The PID loop runs as a **hardware timer ISR** — 1ms precision, never interrupted. The thermal monitor runs as a **12-byte protothread**. Telemetry runs as a **FreeRTOS task** with its own stack. All from the same `task` keyword. The compiler figured it out.
+Real PID — error calculation, integral accumulation, derivative from last error, Kp/Ki/Kd gains, output clamping. And it runs as a **1ms hardware timer ISR** because of `strict` — never interrupted, never delayed. The thermal protection task can override by zeroing the setpoint. The telemetry task runs as a **FreeRTOS task** with its own stack for MQTT. All from the same `task` keyword. The compiler figured it out.
 
 ## What the Compiler Catches
 
