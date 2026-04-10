@@ -9,6 +9,15 @@
 #include "esp_event.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
+
+// Mutex: protects s_dirty[] and s_lists[] from concurrent access.
+// The flush timer runs on the esp_timer task while user code runs
+// on other tasks — without this lock, a push during flush corrupts data.
+static SemaphoreHandle_t s_mutex = NULL;
+
+#define STORAGE_LOCK()   do { if (s_mutex) xSemaphoreTakeRecursive(s_mutex, portMAX_DELAY); } while(0)
+#define STORAGE_UNLOCK() do { if (s_mutex) xSemaphoreGiveRecursive(s_mutex); } while(0)
 
 // Shutdown handler: flush dirty storage before reboot/brownout
 static void shutdown_flush_handler(void)
@@ -150,6 +159,12 @@ volt_error_t storage_init(void)
         return VOLT_ERR_STORAGE_INIT_FAILED;
     }
 
+    // Recursive mutex: storage_save_* can call storage_flush() internally
+    // when the dirty buffer is full, and flush is also called by the timer.
+    if (s_mutex == NULL) {
+        s_mutex = xSemaphoreCreateRecursiveMutex();
+    }
+
     // Clear dirty buffer and lists
     memset(s_dirty, 0, sizeof(s_dirty));
     memset(s_lists, 0, sizeof(s_lists));
@@ -185,12 +200,12 @@ volt_error_t storage_save_int(const char *key, int value)
     if (!s_initialized) storage_init();
     if (key == NULL || strlen(key) > 15) return VOLT_ERR_INVALID_ARG;
 
+    STORAGE_LOCK();
     dirty_entry_t *slot = find_dirty_slot(key);
     if (slot == NULL) {
-        // Buffer full — flush first, then retry
         storage_flush();
         slot = find_dirty_slot(key);
-        if (slot == NULL) return VOLT_ERR_STORAGE_FULL;
+        if (slot == NULL) { STORAGE_UNLOCK(); return VOLT_ERR_STORAGE_FULL; }
     }
 
     strncpy(slot->key, key, 15);
@@ -198,6 +213,7 @@ volt_error_t storage_save_int(const char *key, int value)
     slot->type = DIRTY_INT;
     slot->value.i = value;
     slot->active = true;
+    STORAGE_UNLOCK();
 
     return VOLT_OK;
 }
@@ -207,15 +223,19 @@ int storage_load_int(const char *key, int default_val)
     if (!s_initialized) storage_init();
     if (key == NULL) return default_val;
 
+    STORAGE_LOCK();
     // Check dirty buffer first — may have unflushed value
     for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
         if (s_dirty[i].active && s_dirty[i].type == DIRTY_INT &&
             strcmp(s_dirty[i].key, key) == 0) {
-            return s_dirty[i].value.i;
+            int result = s_dirty[i].value.i;
+            STORAGE_UNLOCK();
+            return result;
         }
     }
+    STORAGE_UNLOCK();
 
-    // Read from NVS
+    // NVS read doesn't need the lock — NVS has its own internal protection
     nvs_handle_t handle;
     if (nvs_open_handle(&handle, NVS_READONLY) != ESP_OK) return default_val;
 
@@ -231,11 +251,12 @@ volt_error_t storage_save_float(const char *key, float value)
     if (!s_initialized) storage_init();
     if (key == NULL || strlen(key) > 15) return VOLT_ERR_INVALID_ARG;
 
+    STORAGE_LOCK();
     dirty_entry_t *slot = find_dirty_slot(key);
     if (slot == NULL) {
         storage_flush();
         slot = find_dirty_slot(key);
-        if (slot == NULL) return VOLT_ERR_STORAGE_FULL;
+        if (slot == NULL) { STORAGE_UNLOCK(); return VOLT_ERR_STORAGE_FULL; }
     }
 
     strncpy(slot->key, key, 15);
@@ -243,6 +264,7 @@ volt_error_t storage_save_float(const char *key, float value)
     slot->type = DIRTY_FLOAT;
     slot->value.f = value;
     slot->active = true;
+    STORAGE_UNLOCK();
 
     return VOLT_OK;
 }
@@ -252,15 +274,17 @@ float storage_load_float(const char *key, float default_val)
     if (!s_initialized) storage_init();
     if (key == NULL) return default_val;
 
-    // Check dirty buffer first
+    STORAGE_LOCK();
     for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
         if (s_dirty[i].active && s_dirty[i].type == DIRTY_FLOAT &&
             strcmp(s_dirty[i].key, key) == 0) {
-            return s_dirty[i].value.f;
+            float result = s_dirty[i].value.f;
+            STORAGE_UNLOCK();
+            return result;
         }
     }
+    STORAGE_UNLOCK();
 
-    // NVS doesn't have a native float type — we store as blob
     nvs_handle_t handle;
     if (nvs_open_handle(&handle, NVS_READONLY) != ESP_OK) return default_val;
 
@@ -277,11 +301,12 @@ volt_error_t storage_save_str(const char *key, const char *value)
     if (!s_initialized) storage_init();
     if (key == NULL || value == NULL || strlen(key) > 15) return VOLT_ERR_INVALID_ARG;
 
+    STORAGE_LOCK();
     dirty_entry_t *slot = find_dirty_slot(key);
     if (slot == NULL) {
         storage_flush();
         slot = find_dirty_slot(key);
-        if (slot == NULL) return VOLT_ERR_STORAGE_FULL;
+        if (slot == NULL) { STORAGE_UNLOCK(); return VOLT_ERR_STORAGE_FULL; }
     }
 
     strncpy(slot->key, key, 15);
@@ -290,6 +315,7 @@ volt_error_t storage_save_str(const char *key, const char *value)
     strncpy(slot->value.s, value, sizeof(slot->value.s) - 1);
     slot->value.s[sizeof(slot->value.s) - 1] = '\0';
     slot->active = true;
+    STORAGE_UNLOCK();
 
     return VOLT_OK;
 }
@@ -300,15 +326,17 @@ volt_error_t storage_load_str(const char *key, char *buf, size_t buf_size,
     if (!s_initialized) storage_init();
     if (key == NULL || buf == NULL || buf_size == 0) return VOLT_ERR_INVALID_ARG;
 
-    // Check dirty buffer first
+    STORAGE_LOCK();
     for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
         if (s_dirty[i].active && s_dirty[i].type == DIRTY_STR &&
             strcmp(s_dirty[i].key, key) == 0) {
             strncpy(buf, s_dirty[i].value.s, buf_size - 1);
             buf[buf_size - 1] = '\0';
+            STORAGE_UNLOCK();
             return VOLT_OK;
         }
     }
+    STORAGE_UNLOCK();
 
     // Read from NVS
     nvs_handle_t handle;
@@ -336,12 +364,13 @@ volt_error_t storage_delete(const char *key)
     if (!s_initialized) storage_init();
     if (key == NULL) return VOLT_ERR_INVALID_ARG;
 
-    // Remove from dirty buffer if present
+    STORAGE_LOCK();
     for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
         if (s_dirty[i].active && strcmp(s_dirty[i].key, key) == 0) {
             s_dirty[i].active = false;
         }
     }
+    STORAGE_UNLOCK();
 
     // Remove from NVS
     nvs_handle_t handle;
@@ -359,12 +388,14 @@ bool storage_exists(const char *key)
     if (!s_initialized) storage_init();
     if (key == NULL) return false;
 
-    // Check dirty buffer first
+    STORAGE_LOCK();
     for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
         if (s_dirty[i].active && strcmp(s_dirty[i].key, key) == 0) {
+            STORAGE_UNLOCK();
             return true;
         }
     }
+    STORAGE_UNLOCK();
 
     // Check NVS using nvs_find_key (ESP-IDF v5.3+)
     // This checks existence without reading the value or knowing the type.
@@ -382,12 +413,23 @@ volt_error_t storage_flush(void)
 {
     if (!s_initialized) return VOLT_OK;
 
+    STORAGE_LOCK();
+
     // Count dirty entries
     int dirty_count = 0;
     for (int i = 0; i < MAX_DIRTY_ENTRIES; i++) {
         if (s_dirty[i].active) dirty_count++;
     }
-    if (dirty_count == 0) return VOLT_OK;
+    if (dirty_count == 0) {
+        // Still flush lists even if no dirty key-value entries
+        for (int i = 0; i < MAX_LISTS; i++) {
+            if (s_lists[i].active && s_lists[i].count > 0) {
+                list_flush(&s_lists[i]);
+            }
+        }
+        STORAGE_UNLOCK();
+        return VOLT_OK;
+    }
 
     nvs_handle_t handle;
     esp_err_t err = nvs_open_handle(&handle, NVS_READWRITE);
@@ -440,6 +482,7 @@ volt_error_t storage_flush(void)
         }
     }
 
+    STORAGE_UNLOCK();
     return VOLT_OK;
 }
 
@@ -586,18 +629,20 @@ volt_error_t storage_push(const char *list_name, int value)
     if (!s_initialized) storage_init();
     if (list_name == NULL) return VOLT_ERR_INVALID_ARG;
 
+    STORAGE_LOCK();
     storage_list_t *list = find_list(list_name, true);
     if (list == NULL) {
+        STORAGE_UNLOCK();
         log_error("storage", "max lists reached (%d)", MAX_LISTS);
         return VOLT_ERR_STORAGE_FULL;
     }
 
-    // Write into ring buffer (overwrites oldest if full)
     list->ring[list->head] = (int32_t)value;
     list->head = (list->head + 1) % STORAGE_LIST_MAX;
     if (list->count < STORAGE_LIST_MAX) {
         list->count++;
     }
+    STORAGE_UNLOCK();
 
     return VOLT_OK;
 }
@@ -607,13 +652,13 @@ int storage_list_count(const char *list_name)
     if (!s_initialized) storage_init();
     if (list_name == NULL) return 0;
 
-    // Count NVS entries
+    STORAGE_LOCK();
     int32_t tmp[STORAGE_LIST_MAX];
     int nvs_count = list_load_nvs(list_name, tmp, STORAGE_LIST_MAX);
 
-    // Count RAM entries
     storage_list_t *list = find_list(list_name, false);
     int ram_count = list ? list->count : 0;
+    STORAGE_UNLOCK();
 
     return nvs_count + ram_count;
 }
@@ -623,6 +668,7 @@ int storage_drain(const char *list_name, int *buf, int buf_size)
     if (!s_initialized) storage_init();
     if (list_name == NULL || buf == NULL || buf_size <= 0) return 0;
 
+    STORAGE_LOCK();
     int total = 0;
 
     // 1. Read NVS entries first (oldest data)
@@ -655,6 +701,7 @@ int storage_drain(const char *list_name, int *buf, int buf_size)
             nvs_close(handle);
         }
     }
+    STORAGE_UNLOCK();
 
     log_info("storage", "drained %d entries from '%s'", total, list_name);
     return total;
@@ -665,14 +712,14 @@ volt_error_t storage_list_clear(const char *list_name)
     if (!s_initialized) storage_init();
     if (list_name == NULL) return VOLT_ERR_INVALID_ARG;
 
-    // Clear RAM
+    STORAGE_LOCK();
     storage_list_t *list = find_list(list_name, false);
     if (list != NULL) {
         list->count = 0;
         list->head = 0;
     }
+    STORAGE_UNLOCK();
 
-    // Clear NVS
     char key[16];
     list_nvs_key(list_name, key, sizeof(key));
     nvs_handle_t handle;
