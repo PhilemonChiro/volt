@@ -29,8 +29,6 @@ Volt is a typed language that transpiles to C for embedded microcontrollers. You
 - **Bidirectional type checking** — full type inference with hardware-aware types
 - **Zero overhead** — compiles to clean C, runs at native speed
 
-ESP32 is the first supported target, with more chips planned.
-
 ## Quick Start
 
 ```bash
