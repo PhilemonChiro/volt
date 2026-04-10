@@ -15,6 +15,7 @@ const VOLT_HOME = process.env.VOLT_HOME || path.join(os.homedir(), '.volt');
 let lspClient = null;
 let sidebarProvider = null;
 let monitorProcess = null;
+const chipCache = {};  // port -> detected chip name (persists across scans)
 
 // ============================================================
 // Run volt commands and capture output
@@ -204,6 +205,8 @@ print(json.dumps(devices))
         if (sidebarProvider) {
             try {
                 const devices = JSON.parse(stdout.trim());
+                // Cache chip results so the poller doesn't re-detect
+                devices.forEach(d => { chipCache[d.port] = d.chip || 'unknown'; });
                 sidebarProvider.sendEvent('deviceList', { devices });
             } catch (e) {
                 sidebarProvider.sendEvent('deviceList', { devices: [] });
@@ -1068,26 +1071,51 @@ function activate(context) {
     );
 
     // Device watcher — polls every 3 seconds for USB changes
-    let lastDeviceJson = '';
+    // Caches chip type per port to avoid running esptool every poll
+    let lastPortList = '';
     const devicePoller = setInterval(() => {
         const cmd = `${PYTHON} -c "
 import serial.tools.list_ports, json
 ports = []
 for p in serial.tools.list_ports.comports():
-    if 'ttyUSB' in p.device or 'ttyACM' in p.device or 'CP210' in (p.description or '') or 'CH340' in (p.description or ''):
-        ports.append({'port': p.device, 'desc': p.description or '', 'hwid': p.hwid or ''})
+    desc = (p.description or '').lower()
+    vid = p.vid or 0
+    is_mcu = any(c in desc for c in ['cp210', 'ch340', 'ch910', 'ftdi'])
+    is_mcu = is_mcu or vid in (0x10C4, 0x1A86, 0x0403)
+    if is_mcu:
+        ports.append({'port': p.device, 'desc': p.description or ''})
 print(json.dumps(ports))
 "`;
         exec(cmd, (err, stdout) => {
             if (err) return;
-            const json = (stdout || '').trim();
-            if (json !== lastDeviceJson) {
-                lastDeviceJson = json;
+            const portJson = (stdout || '').trim();
+            if (portJson !== lastPortList) {
+                lastPortList = portJson;
                 try {
-                    const devices = JSON.parse(json);
-                    if (sidebarProvider) {
-                        sidebarProvider.sendEvent('deviceList', { devices });
+                    const ports = JSON.parse(portJson);
+                    // Check for new ports that need chip detection
+                    const newPorts = ports.filter(p => !(p.port in chipCache));
+                    if (newPorts.length > 0) {
+                        // Run full scan with esptool for new ports only
+                        scanDevices();
+                        // Cache results after scan completes (scanDevices updates sidebar)
+                        newPorts.forEach(p => { chipCache[p.port] = 'pending'; });
+                    } else {
+                        // Use cached chip info
+                        const devices = ports.map(p => ({
+                            port: p.port,
+                            desc: p.desc,
+                            chip: chipCache[p.port] || 'unknown'
+                        }));
+                        if (sidebarProvider) {
+                            sidebarProvider.sendEvent('deviceList', { devices });
+                        }
                     }
+                    // Clean cache for disconnected ports
+                    const activePorts = new Set(ports.map(p => p.port));
+                    Object.keys(chipCache).forEach(k => {
+                        if (!activePorts.has(k)) delete chipCache[k];
+                    });
                 } catch (e) {}
             }
         });
