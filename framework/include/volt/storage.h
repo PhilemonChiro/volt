@@ -44,6 +44,29 @@ typedef struct {
 
 storage_health_t storage_get_health(void);
 
+// ============================================================
+// Store-and-forward lists
+// ============================================================
+
+// Maximum entries per named list.
+#define STORAGE_LIST_MAX 64
+
+// Push an int onto a named list. Buffered in RAM, flushed to NVS on timer.
+// Oldest entries are dropped when the list is full.
+volt_error_t storage_push(const char *list_name, int value);
+
+// Number of entries currently in a list (RAM + NVS combined).
+int storage_list_count(const char *list_name);
+
+// Drain all entries from a named list into buf (up to buf_size entries).
+// Returns number of entries copied. Clears the list after draining.
+int storage_drain(const char *list_name, int *buf, int buf_size);
+
+// Clear a named list without reading it.
+volt_error_t storage_list_clear(const char *list_name);
+
+// ============================================================
+
 // Erase all stored data and reboot. Use for unrecoverable corruption.
 volt_error_t storage_factory_reset(void);
 

@@ -150,8 +150,9 @@ volt_error_t storage_init(void)
         return VOLT_ERR_STORAGE_INIT_FAILED;
     }
 
-    // Clear dirty buffer
+    // Clear dirty buffer and lists
     memset(s_dirty, 0, sizeof(s_dirty));
+    memset(s_lists, 0, sizeof(s_lists));
 
     // Boot loop detection
     check_boot_loop();
@@ -431,6 +432,14 @@ volt_error_t storage_flush(void)
     }
 
     log_debug("storage", "flushed %d entries to flash", written);
+
+    // Flush store-and-forward lists too
+    for (int i = 0; i < MAX_LISTS; i++) {
+        if (s_lists[i].active && s_lists[i].count > 0) {
+            list_flush(&s_lists[i]);
+        }
+    }
+
     return VOLT_OK;
 }
 
@@ -448,6 +457,235 @@ storage_health_t storage_get_health(void)
 
     return health;
 }
+
+// ============================================================
+// Store-and-forward lists
+// ============================================================
+//
+// Each named list is stored as:
+//   - RAM: ring buffer of pending (unflushed) entries
+//   - NVS: blob of int32_t values (flushed entries)
+//
+// On push: value goes into the RAM ring buffer.
+// On flush: RAM entries are appended to the NVS blob.
+// On drain: NVS blob + RAM entries are returned, list is cleared.
+//
+// This means pushes are free (no flash wear), and data survives
+// reboots because the flush timer writes to NVS every 30 seconds.
+
+#define MAX_LISTS 4
+#define LIST_NVS_PREFIX "_l_"  // NVS key: "_l_readings" etc.
+
+typedef struct {
+    char name[12];                      // list name
+    int32_t ring[STORAGE_LIST_MAX];     // RAM ring buffer
+    int head;                           // next write position
+    int count;                          // entries in RAM
+    bool active;
+} storage_list_t;
+
+static storage_list_t s_lists[MAX_LISTS];
+
+// Find or create a list slot
+static storage_list_t *find_list(const char *name, bool create)
+{
+    storage_list_t *empty = NULL;
+
+    for (int i = 0; i < MAX_LISTS; i++) {
+        if (s_lists[i].active && strcmp(s_lists[i].name, name) == 0) {
+            return &s_lists[i];
+        }
+        if (!s_lists[i].active && empty == NULL) {
+            empty = &s_lists[i];
+        }
+    }
+
+    if (create && empty != NULL) {
+        memset(empty, 0, sizeof(*empty));
+        strncpy(empty->name, name, sizeof(empty->name) - 1);
+        empty->active = true;
+        return empty;
+    }
+
+    return NULL;
+}
+
+// Build the NVS key for a list: "_l_" + name
+static void list_nvs_key(const char *name, char *out, size_t out_size)
+{
+    snprintf(out, out_size, "%s%.12s", LIST_NVS_PREFIX, name);
+}
+
+// Load existing entries from NVS blob into buf. Returns count.
+static int list_load_nvs(const char *name, int32_t *buf, int buf_size)
+{
+    char key[16];
+    list_nvs_key(name, key, sizeof(key));
+
+    nvs_handle_t handle;
+    if (nvs_open_handle(&handle, NVS_READONLY) != ESP_OK) return 0;
+
+    size_t blob_size = 0;
+    if (nvs_get_blob(handle, key, NULL, &blob_size) != ESP_OK || blob_size == 0) {
+        nvs_close(handle);
+        return 0;
+    }
+
+    int nvs_count = blob_size / sizeof(int32_t);
+    if (nvs_count > buf_size) nvs_count = buf_size;
+
+    nvs_get_blob(handle, key, buf, &blob_size);
+    nvs_close(handle);
+
+    return nvs_count;
+}
+
+// Flush a single list's RAM entries to NVS
+static void list_flush(storage_list_t *list)
+{
+    if (list->count == 0) return;
+
+    char key[16];
+    list_nvs_key(list->name, key, sizeof(key));
+
+    // Load existing NVS entries
+    int32_t combined[STORAGE_LIST_MAX];
+    int nvs_count = list_load_nvs(list->name, combined, STORAGE_LIST_MAX);
+
+    // Append RAM entries
+    int start = (list->head - list->count + STORAGE_LIST_MAX) % STORAGE_LIST_MAX;
+    for (int i = 0; i < list->count && nvs_count < STORAGE_LIST_MAX; i++) {
+        int idx = (start + i) % STORAGE_LIST_MAX;
+        combined[nvs_count++] = list->ring[idx];
+    }
+
+    // If over limit, keep newest entries
+    if (nvs_count > STORAGE_LIST_MAX) {
+        int drop = nvs_count - STORAGE_LIST_MAX;
+        memmove(combined, combined + drop, STORAGE_LIST_MAX * sizeof(int32_t));
+        nvs_count = STORAGE_LIST_MAX;
+    }
+
+    // Write blob
+    nvs_handle_t handle;
+    if (nvs_open_handle(&handle, NVS_READWRITE) == ESP_OK) {
+        nvs_set_blob(handle, key, combined, nvs_count * sizeof(int32_t));
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+
+    // Clear RAM buffer
+    list->count = 0;
+    list->head = 0;
+
+    log_debug("storage", "list '%s' flushed — %d entries in NVS", list->name, nvs_count);
+}
+
+volt_error_t storage_push(const char *list_name, int value)
+{
+    if (!s_initialized) storage_init();
+    if (list_name == NULL) return VOLT_ERR_INVALID_ARG;
+
+    storage_list_t *list = find_list(list_name, true);
+    if (list == NULL) {
+        log_error("storage", "max lists reached (%d)", MAX_LISTS);
+        return VOLT_ERR_STORAGE_FULL;
+    }
+
+    // Write into ring buffer (overwrites oldest if full)
+    list->ring[list->head] = (int32_t)value;
+    list->head = (list->head + 1) % STORAGE_LIST_MAX;
+    if (list->count < STORAGE_LIST_MAX) {
+        list->count++;
+    }
+
+    return VOLT_OK;
+}
+
+int storage_list_count(const char *list_name)
+{
+    if (!s_initialized) storage_init();
+    if (list_name == NULL) return 0;
+
+    // Count NVS entries
+    int32_t tmp[STORAGE_LIST_MAX];
+    int nvs_count = list_load_nvs(list_name, tmp, STORAGE_LIST_MAX);
+
+    // Count RAM entries
+    storage_list_t *list = find_list(list_name, false);
+    int ram_count = list ? list->count : 0;
+
+    return nvs_count + ram_count;
+}
+
+int storage_drain(const char *list_name, int *buf, int buf_size)
+{
+    if (!s_initialized) storage_init();
+    if (list_name == NULL || buf == NULL || buf_size <= 0) return 0;
+
+    int total = 0;
+
+    // 1. Read NVS entries first (oldest data)
+    int32_t nvs_buf[STORAGE_LIST_MAX];
+    int nvs_count = list_load_nvs(list_name, nvs_buf, STORAGE_LIST_MAX);
+    for (int i = 0; i < nvs_count && total < buf_size; i++) {
+        buf[total++] = (int)nvs_buf[i];
+    }
+
+    // 2. Read RAM entries (newest data)
+    storage_list_t *list = find_list(list_name, false);
+    if (list != NULL && list->count > 0) {
+        int start = (list->head - list->count + STORAGE_LIST_MAX) % STORAGE_LIST_MAX;
+        for (int i = 0; i < list->count && total < buf_size; i++) {
+            int idx = (start + i) % STORAGE_LIST_MAX;
+            buf[total++] = (int)list->ring[idx];
+        }
+        list->count = 0;
+        list->head = 0;
+    }
+
+    // 3. Clear NVS blob
+    if (nvs_count > 0) {
+        char key[16];
+        list_nvs_key(list_name, key, sizeof(key));
+        nvs_handle_t handle;
+        if (nvs_open_handle(&handle, NVS_READWRITE) == ESP_OK) {
+            nvs_erase_key(handle, key);
+            nvs_commit(handle);
+            nvs_close(handle);
+        }
+    }
+
+    log_info("storage", "drained %d entries from '%s'", total, list_name);
+    return total;
+}
+
+volt_error_t storage_list_clear(const char *list_name)
+{
+    if (!s_initialized) storage_init();
+    if (list_name == NULL) return VOLT_ERR_INVALID_ARG;
+
+    // Clear RAM
+    storage_list_t *list = find_list(list_name, false);
+    if (list != NULL) {
+        list->count = 0;
+        list->head = 0;
+    }
+
+    // Clear NVS
+    char key[16];
+    list_nvs_key(list_name, key, sizeof(key));
+    nvs_handle_t handle;
+    if (nvs_open_handle(&handle, NVS_READWRITE) == ESP_OK) {
+        nvs_erase_key(handle, key);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+
+    return VOLT_OK;
+}
+
+// ============================================================
 
 volt_error_t storage_factory_reset(void)
 {
