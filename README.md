@@ -80,13 +80,17 @@ task read_sensors() {
     }
 }
 
-task cloud_sync() {
+task log_data() {
     every 30seconds {
-        storage.save("soil", soil.read())
-        storage.save("temp", temp.read())
+        storage.push("readings", soil.read())
+        storage.push("readings", temp.read())
+    }
+}
+
+task cloud_sync() {
+    every 60seconds {
         if wifi.is_connected() {
-            mqtt.send_int("greenhouse/soil", storage.load("soil"))
-            mqtt.send_int("greenhouse/temp", storage.load("temp"))
+            storage.drain("readings", "greenhouse/data")
         }
     }
 }
@@ -94,16 +98,17 @@ task cloud_sync() {
 main {
     wifi.connect("FarmNet", "password")
     mqtt.connect("mqtt://broker.local")
-    run(read_sensors, motor_control, cloud_sync)
+    run(read_sensors, log_data, cloud_sync)
 }
 ```
 
-You wrote `task` twice. The compiler generated **two different execution models**:
+You wrote `task` three times. The compiler generated **two different execution models**:
 
 | Task | Compiler decision | Memory cost |
 |------|-------------------|-------------|
 | `read_sensors` | **Background** protothread — no blocking calls | 12 bytes |
-| `cloud_sync` | **Priority** FreeRTOS task — uses `mqtt.*` and `http.*` | 4KB stack |
+| `log_data` | **Background** protothread — local storage only | 12 bytes |
+| `cloud_sync` | **Priority** FreeRTOS task — uses `mqtt.*` | 4KB stack |
 
 In Arduino, this is 150+ lines. In ESP-IDF, it's 300+. In Volt, you don't even think about it.
 
