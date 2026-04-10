@@ -5,8 +5,8 @@
 <h1 align="center">Volt</h1>
 
 <p align="center">
-  <strong>A typed, hardware-aware language for embedded systems.</strong><br>
-  Write firmware in 15 lines. The compiler catches hardware bugs before you flash.
+  <strong>Arduino is too simple. ESP-IDF is too complex. Volt is neither.</strong><br>
+  A typed embedded language with automatic task scheduling, compile-time pin validation (hardware-aware), and first-class state machines.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 
 ## What is Volt?
 
-Volt is a typed language that transpiles to C for embedded microcontrollers. You write clean, high-level code — the compiler handles the rest:
+Volt is a typed language that transpiles to C for embedded microcontrollers. You write clean, high-level code — the compiler knows your chip's datasheet:
 
 - **Three-tier task scheduling** — one `task` keyword, auto-classified into background (protothreads, 12 bytes), priority (FreeRTOS, 4KB), or critical (hardware timer ISR)
 - **Compile-time hardware validation** — pin conflicts, flash pins, input-only pins, ADC2/WiFi interference, ISR safety
