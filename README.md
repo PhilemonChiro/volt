@@ -356,7 +356,7 @@ Works on Linux, macOS, and Windows.
 | Task scheduling | Manual | Manual | Manual | Cooperative | **Automatic** |
 | ISR safety | None | None | None | N/A | **Compile-time** |
 | State machines | None | None | None | None | **Language feature** |
-| Memory per task | 1KB+ | 4KB+ | 1KB+ | 4KB+ | **12 bytes** (background) |
+| Memory per task | 1KB+ | 4KB+ | 1KB+ | 4KB+ | **12B / 4KB / timer** (auto) |
 | Performance | Native | Native | Native | 10-100x slower | **Native** |
 
 ## License
