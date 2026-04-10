@@ -1,13 +1,22 @@
+#include <stdbool.h>
+#include <stdint.h>
 #include "volt/task.h"
 #include "volt/log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_task_wdt.h"
 #include "esp_system.h"
-#include "driver/gptimer.h"
 #include "esp_attr.h"
 #include "esp_timer.h"
+
+// ESP32 has gptimer for hardware timer ISRs; ESP8266 uses esp_timer only
+#if !defined(CONFIG_IDF_TARGET_ESP8266) && !defined(ESP8266_RTOS_SDK)
+#include "esp_task_wdt.h"
+#include "driver/gptimer.h"
+#define HAS_GPTIMER 1
+#else
+#define HAS_GPTIMER 0
+#endif
 
 // ============================================================
 // Tier 3: Background scheduler (protothreads)
@@ -20,10 +29,10 @@ void volt_run(volt_task_entry_t *tasks, int count)
 {
     log_info("task", "scheduler started with %d background tasks", count);
 
+#if HAS_GPTIMER
     // Register this task with the watchdog timer.
-    // If the scheduler loop stops cycling (a task blocks forever),
-    // the watchdog resets the device after the configured timeout (~5s).
     esp_task_wdt_add(NULL);
+#endif
 
     uint32_t last_health_check = 0;
 
@@ -52,7 +61,9 @@ void volt_run(volt_task_entry_t *tasks, int count)
         // Feed the watchdog — proves the scheduler is alive.
         // If a task blocks without yielding, this line is never reached,
         // and the watchdog resets the device.
+#if HAS_GPTIMER
         esp_task_wdt_reset();
+#endif
 
         // Periodic health check: stack remaining + heap free
         if (now - last_health_check > HEALTH_CHECK_INTERVAL_MS) {
@@ -89,14 +100,8 @@ volt_error_t volt_rt_create(const char *name, volt_rt_func_t func,
 
     BaseType_t result;
 
-    if (core < 0) {
-        // Any core — let FreeRTOS decide
-        result = xTaskCreate(func, name, stack_size, arg, priority, NULL);
-    } else {
-        // Pin to specific core
-        result = xTaskCreatePinnedToCore(func, name, stack_size, arg,
-                                         priority, NULL, core);
-    }
+    (void)core;  // ignored on single-core chips
+    result = xTaskCreate(func, name, stack_size, arg, priority, NULL);
 
     if (result != pdPASS) {
         log_error("task", "failed to create priority task '%s' (not enough memory?)", name);
@@ -111,6 +116,8 @@ volt_error_t volt_rt_create(const char *name, volt_rt_func_t func,
 // ============================================================
 // Tier 1: Critical tasks (hardware timer ISR)
 // ============================================================
+
+#if HAS_GPTIMER
 
 // Context for ISR: stores both the user function and user arg
 typedef struct {
@@ -200,6 +207,32 @@ volt_error_t volt_critical_create(const char *name, volt_crit_func_t func,
              (unsigned long)(1000000 / period_us));
     return VOLT_OK;
 }
+
+#else  // !HAS_GPTIMER — use esp_timer for critical tasks
+
+volt_error_t volt_critical_create(const char *name, volt_crit_func_t func,
+                                  uint32_t period_us, void *arg)
+{
+    if (func == NULL || name == NULL) return VOLT_ERR_INVALID_ARG;
+
+    esp_timer_create_args_t timer_args = {
+        .callback = (esp_timer_cb_t)func,
+        .arg = arg,
+        .name = name,
+    };
+    esp_timer_handle_t timer;
+    esp_err_t err = esp_timer_create(&timer_args, &timer);
+    if (err != ESP_OK) return VOLT_ERR_TIMER_FAILED;
+
+    err = esp_timer_start_periodic(timer, period_us);
+    if (err != ESP_OK) return VOLT_ERR_TIMER_FAILED;
+
+    log_info("task", "critical task '%s' created via esp_timer (period=%luus)",
+             name, (unsigned long)period_us);
+    return VOLT_OK;
+}
+
+#endif  // HAS_GPTIMER
 
 // ============================================================
 // Shared: tick counters

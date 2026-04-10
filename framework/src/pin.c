@@ -1,3 +1,5 @@
+#include <stdbool.h>
+#include <stdint.h>
 #include "volt/pin.h"
 #include "volt/log.h"
 #include "driver/gpio.h"
@@ -227,8 +229,10 @@ volt_error_t pin_release(uint8_t pin)
     // Remove ISR handler if any
     gpio_isr_handler_remove(pin);
 
-    // Reset pin to default state
+    // Reset pin to default state (ESP32 only — ESP8266 doesn't have gpio_reset_pin)
+#ifdef CONFIG_IDF_TARGET_ESP32
     gpio_reset_pin(pin);
+#endif
 
     pin_modes[pin] = PIN_MODE_UNUSED;
     log_debug("pin", "GPIO %d released", pin);

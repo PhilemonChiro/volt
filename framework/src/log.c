@@ -33,7 +33,9 @@ void volt_log_write(int level, const char *tag, const char *fmt, ...)
 
     // Print: color + timestamp + level + tag + message + reset
     printf("%s%02lu:%02lu:%02lu.%03lu [%s] %s: ",
-           level_colors[level], h, m, s, ml,
+           level_colors[level],
+           (unsigned long)h, (unsigned long)m,
+           (unsigned long)s, (unsigned long)ml,
            level_names[level], tag);
 
     // Print the user's formatted message
