@@ -114,6 +114,8 @@ You wrote `task` three times. The compiler generated **two different execution m
 
 In Arduino, this is 150+ lines. In ESP-IDF, it's 300+. In Volt, you don't even think about it.
 
+**Built for devices that run for years:** `storage.push()` writes to RAM — zero flash wear. The flush timer batches everything into one write every 30 seconds. But if WiFi is up, `drain()` sends the data over MQTT/HTTP and clears the list before it ever touches flash. Flash is the backup path, not the primary path. Typical NVS flash survives ~100,000 erase cycles — this approach keeps your device running for years, not months.
+
 ### Door lock — state machine with compile-time verification
 
 ```volt
