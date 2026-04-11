@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Volt IDE",
   "version": "0.1.0",
-  "identifier": "com.volt.ide2",
+  "identifier": "com.volt.ide.v1775920786",
   "build": {
     "frontendDist": "../dist-frontend",
     "beforeBuildCommand": "npm run package",

@@ -406,13 +406,46 @@ body {
 }
 
 /* ================================================================
+   WELCOME OVERLAY
+   ================================================================ */
+#welcomeOverlay {
+    position: absolute;
+    inset: 44px 0 0 0;
+    z-index: 50;
+    background: var(--bg-0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#welcomeOverlay.hidden { display: none; }
+
+.welcome-content { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 360px; }
+.welcome-logo { width: 72px; height: 72px; margin-bottom: 8px; opacity: 0.9; }
+.welcome-title { font-size: 28px; font-weight: 700; color: var(--t1); letter-spacing: -0.04em; }
+.welcome-sub { font-size: 13px; color: var(--t3); text-align: center; margin-bottom: 16px; }
+.welcome-actions { display: flex; gap: 8px; width: 100%; }
+.welcome-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 16px; background: var(--bg-3); border: none; border-radius: 8px;
+    color: var(--t1); font-size: 13px; font-weight: 500; font-family: var(--sans); cursor: pointer;
+}
+.welcome-btn:hover { background: var(--bg-4); }
+.welcome-btn-primary { background: var(--volt); color: white; }
+.welcome-btn-primary:hover { background: var(--volt-hover); }
+.welcome-recent { width: 100%; margin-top: 16px; }
+.welcome-recent-title { font-size: 11px; font-weight: 500; color: var(--t3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; padding: 0 4px; }
+.welcome-recent-item { display: flex; align-items: center; padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--t2); font-size: 13px; }
+.welcome-recent-item:hover { background: var(--bg-3); color: var(--t1); }
+.welcome-recent-chip { font-size: 10px; color: var(--volt); font-weight: 600; margin-left: auto; }
+
+/* ================================================================
    EDITOR
    ================================================================ */
 #editorContainer {
     flex: 1;
     overflow: hidden;
     position: relative;
-    min-height: 0;  /* critical for flex children — Monaco needs this */
+    min-height: 0;
 }
 
 /* ================================================================
