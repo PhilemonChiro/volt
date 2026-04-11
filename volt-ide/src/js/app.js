@@ -91,7 +91,7 @@ setTimeout(() => {
             const [text, category, icon] = info;
             hoverBar.className = `active type-${category}`;
             hoverIcon.textContent = icon;
-            hoverText.textContent = `${word}  —  ${text}`;
+            hoverText.innerHTML = `<span class="hover-word">${word}</span>  —  ${text}`;
         } else {
             resetHoverBar();
         }

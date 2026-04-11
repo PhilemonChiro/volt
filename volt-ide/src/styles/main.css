@@ -742,11 +742,17 @@ button:focus-visible {
     background: var(--bg-3);
 }
 #hoverBar.type-keyword  { border-top: 2px solid #c586c0; }
-#hoverBar.type-type     { border-top: 2px solid var(--volt); }
+#hoverBar.type-keyword .hover-word { color: #c586c0; }
+#hoverBar.type-type     { border-top: 2px solid #4ec9b0; }
+#hoverBar.type-type .hover-word { color: #4ec9b0; }
 #hoverBar.type-builtin  { border-top: 2px solid #dcdcaa; }
+#hoverBar.type-builtin .hover-word { color: #dcdcaa; }
 #hoverBar.type-chip     { border-top: 2px solid var(--ok); }
+#hoverBar.type-chip .hover-word { color: var(--ok); }
 #hoverBar.type-pin      { border-top: 2px solid #b5cea8; }
+#hoverBar.type-pin .hover-word { color: #b5cea8; }
 #hoverBar.type-control  { border-top: 2px solid #569cd6; }
+#hoverBar.type-control .hover-word { color: #569cd6; }
 
 #hoverIcon {
     font-size: 12px;
@@ -757,6 +763,11 @@ button:focus-visible {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+.hover-word {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 12px;
 }
 
 /* ---- CodeMirror autocomplete ---- */
