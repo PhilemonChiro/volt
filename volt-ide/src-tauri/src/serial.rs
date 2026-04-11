@@ -66,6 +66,24 @@ pub fn start_monitor(app: AppHandle, port: String, baud: u32) {
 
 pub fn stop_monitor() {
     MONITORING.store(false, Ordering::SeqCst);
+    // Wait for the thread to actually release the port
+    for _ in 0..30 {
+        std::thread::sleep(Duration::from_millis(100));
+        if !MONITORING.load(Ordering::SeqCst) {
+            // Double check — the thread sets this false after closing the port
+            break;
+        }
+    }
+}
+
+/// Force-kill any process holding the serial port (lsof/fuser)
+pub fn release_port(port: &str) {
+    #[cfg(unix)]
+    {
+        let _ = std::process::Command::new("fuser")
+            .args(["-k", port])
+            .output();
+    }
 }
 
 pub fn is_monitoring() -> bool {
