@@ -827,6 +827,47 @@ button:focus-visible {
     border-bottom: 2px wavy var(--warn) !important;
 }
 
+/* ---- CodeMirror lint (squiggly underlines) ---- */
+.cm-lintRange-error {
+    background: none !important;
+    border-bottom: 2px wavy #e55 !important;
+}
+.cm-lintRange-warning {
+    background: none !important;
+    border-bottom: 2px wavy #cc7a00 !important;
+}
+.cm-diagnostic {
+    font-family: var(--sans) !important;
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+    border-radius: 6px !important;
+    background: var(--bg-3) !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    color: var(--t1) !important;
+}
+.cm-diagnostic-error {
+    border-left: 3px solid #e55 !important;
+}
+.cm-diagnostic-warning {
+    border-left: 3px solid #cc7a00 !important;
+}
+.cm-lint-marker-error, .cm-lint-marker-warning {
+    content: none !important;
+}
+/* Gutter dot for errors */
+.cm-lint-marker {
+    width: 6px !important;
+    height: 6px !important;
+    border-radius: 50% !important;
+    margin: 4px 2px;
+}
+.cm-lint-marker-error {
+    background: #e55 !important;
+}
+.cm-lint-marker-warning {
+    background: #cc7a00 !important;
+}
+
 /* ---- CodeMirror tooltips — spatial awareness ---- */
 .cm-tooltip {
     z-index: 200 !important;

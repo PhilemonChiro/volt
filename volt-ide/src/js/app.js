@@ -12,6 +12,7 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
 import { voltAutocompletion } from "./volt-completions.js";
+import { lintGutter } from "@codemirror/lint";
 // ---- Hover info bar (between editor and bottom panel) ----
 const HOVER_INFO = {
     // [text, category, icon]
@@ -175,6 +176,7 @@ const state = EditorState.create({
         voltTheme,
         voltAutocompletion,
         voltLinter,
+        lintGutter(),
         // Update cursor position in status bar
         EditorView.updateListener.of(update => {
             if (update.selectionSet) {
