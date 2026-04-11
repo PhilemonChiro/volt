@@ -1088,11 +1088,13 @@ function activate(context) {
         const cmd = `${PYTHON} -c "
 import serial.tools.list_ports, json
 ports = []
+MCU_VIDS = {0x10C4, 0x1A86, 0x0403, 0x2E8A, 0x0483, 0x303A, 0x2341, 0x239A, 0x1D50}
 for p in serial.tools.list_ports.comports():
     desc = (p.description or '').lower()
     vid = p.vid or 0
-    is_mcu = any(c in desc for c in ['cp210', 'ch340', 'ch910', 'ftdi'])
-    is_mcu = is_mcu or vid in (0x10C4, 0x1A86, 0x0403)
+    is_mcu = vid in MCU_VIDS
+    is_mcu = is_mcu or any(c in desc for c in ['cp210', 'ch340', 'ch910', 'ftdi'])
+    is_mcu = is_mcu or 'ttyACM' in p.device
     if is_mcu:
         ports.append({'port': p.device, 'desc': p.description or ''})
 print(json.dumps(ports))
