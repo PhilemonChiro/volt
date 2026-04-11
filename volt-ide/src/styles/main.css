@@ -891,19 +891,51 @@ button:focus-visible {
     max-height: 240px !important;
 }
 
-/* ---- Error/warning line highlighting (custom decorations) ---- */
-.cm-errorLine {
-    background-color: rgba(238, 68, 68, 0.15) !important;
-    border-left: 3px solid #e55 !important;
+/* ---- Volt error line highlight ---- */
+.volt-error-line {
+    background-color: rgba(238, 68, 68, 0.18) !important;
 }
-.cm-warnLine {
-    background-color: rgba(204, 150, 0, 0.12) !important;
-    border-left: 3px solid #cc7a00 !important;
+.volt-warn-line {
+    background-color: rgba(204, 150, 0, 0.14) !important;
 }
 
-/* ---- CodeMirror lint range (inline spans — may not render on WebKitGTK) ---- */
-.cm-lintRange-error { box-shadow: 0 2px 0 0 #e55 !important; }
-.cm-lintRange-warning { box-shadow: 0 2px 0 0 #cc7a00 !important; }
+/* ---- Inline error message (shown below the error line) ---- */
+.volt-inline-error {
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 4px 12px 4px 16px;
+    margin: 0;
+    line-height: 1.4;
+}
+.volt-inline-error-red {
+    color: #f88;
+    border-left: 3px solid #e55;
+    background: rgba(238, 68, 68, 0.06);
+}
+.volt-inline-error-yellow {
+    color: #dda;
+    border-left: 3px solid #cc7a00;
+    background: rgba(204, 150, 0, 0.06);
+}
+
+/* ---- Gutter error/warning dots ---- */
+.volt-diagnostic-gutter {
+    width: 14px !important;
+}
+.volt-gutter-error {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #e55;
+    margin: 4px auto;
+}
+.volt-gutter-warn {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #cc7a00;
+    margin: 4px auto;
+}
 .cm-diagnostic {
     font-family: var(--sans) !important;
     font-size: 12px !important;

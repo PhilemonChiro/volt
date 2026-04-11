@@ -1,98 +1,159 @@
 /**
- * Volt real-time diagnostics for CodeMirror 6
- * Two systems:
- * 1. CM linter API → gutter dots + diagnostic popups
- * 2. Custom line decorations → visible error line highlighting
+ * Volt diagnostics — custom implementation, no CM lint API
+ * Shows: red line highlight + inline error message + gutter dot
  */
 
-import { linter } from "@codemirror/lint";
-import { EditorView, Decoration } from "@codemirror/view";
+import { EditorView, Decoration, gutter, GutterMarker } from "@codemirror/view";
 import { StateEffect, StateField, RangeSet } from "@codemirror/state";
 
-// ---- Effect to set error lines ----
-const setErrorLines = StateEffect.define();
+// ---- State effects ----
+const setDiagnostics = StateEffect.define();
 
-const errorLineField = StateField.define({
-    create() { return Decoration.none; },
-    update(decorations, tr) {
+// ---- Error line decoration ----
+const errorLineDeco = Decoration.line({ class: "volt-error-line" });
+const warnLineDeco = Decoration.line({ class: "volt-warn-line" });
+
+// ---- Inline error message widget ----
+class ErrorWidget {
+    constructor(message, severity) {
+        this.message = message;
+        this.severity = severity;
+    }
+    eq(other) { return this.message === other.message; }
+    toDOM() {
+        const el = document.createElement("div");
+        el.className = `volt-inline-error ${this.severity === "error" ? "volt-inline-error-red" : "volt-inline-error-yellow"}`;
+        el.textContent = this.message;
+        return el;
+    }
+}
+
+// ---- Gutter marker ----
+class ErrorMarker extends GutterMarker {
+    constructor(severity) { super(); this.severity = severity; }
+    toDOM() {
+        const dot = document.createElement("div");
+        dot.className = this.severity === "error" ? "volt-gutter-error" : "volt-gutter-warn";
+        return dot;
+    }
+}
+const errorMarker = new ErrorMarker("error");
+const warnMarker = new ErrorMarker("warning");
+
+// ---- State field for decorations ----
+const diagnosticField = StateField.define({
+    create() { return { lines: Decoration.none, widgets: Decoration.none, gutters: [] }; },
+    update(state, tr) {
         for (const e of tr.effects) {
-            if (e.is(setErrorLines)) {
-                return e.value;
-            }
+            if (e.is(setDiagnostics)) return e.value;
         }
-        return decorations;
+        return state;
     },
-    provide: f => EditorView.decorations.from(f),
 });
 
-const errorLineDeco = Decoration.line({ class: "cm-errorLine" });
-const warnLineDeco = Decoration.line({ class: "cm-warnLine" });
+// Line decorations provider
+const lineDecorations = EditorView.decorations.from(diagnosticField, s => s.lines);
+// Widget decorations provider
+const widgetDecorations = EditorView.decorations.from(diagnosticField, s => s.widgets);
 
-export { errorLineField };
+// Gutter
+const diagnosticGutter = gutter({
+    class: "volt-diagnostic-gutter",
+    markers: view => {
+        const state = view.state.field(diagnosticField, false);
+        if (!state || !state.gutters.length) return RangeSet.empty;
+        return RangeSet.of(state.gutters, true);
+    },
+});
 
-// ---- Linter (provides gutter dots + popups + drives line highlighting) ----
-export const voltLinter = linter(async (view) => {
+export const voltDiagnosticExtensions = [
+    diagnosticField,
+    lineDecorations,
+    widgetDecorations,
+    diagnosticGutter,
+];
+
+// ---- Run diagnostics ----
+let diagTimer = null;
+
+export function setupDiagnostics(editorView) {
+    // Run on changes, debounced
+    editorView.dom.addEventListener("keyup", () => {
+        clearTimeout(diagTimer);
+        diagTimer = setTimeout(() => runCheck(editorView), 1200);
+    });
+    // Initial check
+    setTimeout(() => runCheck(editorView), 2000);
+}
+
+async function runCheck(view) {
     const code = view.state.doc.toString();
     if (code.trim().length < 10) {
-        view.dispatch({ effects: setErrorLines.of(Decoration.none) });
-        return [];
+        clearDiagnostics(view);
+        return;
     }
 
     try {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke("check_code", { source: code });
 
-        if (!result || !Array.isArray(result)) {
-            view.dispatch({ effects: setErrorLines.of(Decoration.none) });
-            return [];
+        if (!result || !Array.isArray(result) || result.length === 0) {
+            clearDiagnostics(view);
+            return;
         }
 
-        // Update problems badge
-        const errorCount = result.filter(e => e.severity === "error").length;
-        const warnCount = result.filter(e => e.severity === "warning").length;
-        const badge = document.getElementById("problemCount");
-        if (badge) {
-            const total = errorCount + warnCount;
-            if (total > 0) {
-                badge.textContent = total;
-                badge.style.display = "inline";
-            } else {
-                badge.style.display = "none";
-            }
-        }
-
-        // Build line decorations
         const lineDecos = [];
+        const widgetDecos = [];
+        const gutterMarkers = [];
+
         for (const err of result) {
             const lineNum = Math.min(Math.max(err.line, 1), view.state.doc.lines);
             const line = view.state.doc.line(lineNum);
+
+            // Line highlight
             const deco = err.severity === "error" ? errorLineDeco : warnLineDeco;
             lineDecos.push(deco.range(line.from));
+
+            // Inline error message below the line
+            const widget = Decoration.widget({
+                widget: new ErrorWidget(err.message, err.severity),
+                block: true,
+            });
+            widgetDecos.push(widget.range(line.to));
+
+            // Gutter marker
+            const marker = err.severity === "error" ? errorMarker : warnMarker;
+            gutterMarkers.push(marker.range(line.from));
         }
-        const decoSet = lineDecos.length > 0
-            ? RangeSet.of(lineDecos, true)
-            : Decoration.none;
-        view.dispatch({ effects: setErrorLines.of(decoSet) });
 
-        // Return diagnostics for CM (gutter dots + popups)
-        return result.map(err => {
-            const lineNum = Math.min(Math.max(err.line, 1), view.state.doc.lines);
-            const line = view.state.doc.line(lineNum);
-            const trimStart = line.text.search(/\S/);
-            const from = line.from + (trimStart >= 0 ? trimStart : 0);
-            const to = line.to;
+        // Update badge
+        const badge = document.getElementById("problemCount");
+        if (badge) {
+            badge.textContent = result.length;
+            badge.style.display = "inline";
+        }
 
-            return {
-                from,
-                to: Math.max(from + 1, to),
-                severity: err.severity === "error" ? "error" : "warning",
-                message: err.message + (err.hint ? "\n→ " + err.hint : ""),
-            };
+        view.dispatch({
+            effects: setDiagnostics.of({
+                lines: RangeSet.of(lineDecos, true),
+                widgets: RangeSet.of(widgetDecos, true),
+                gutters: gutterMarkers,
+            }),
         });
     } catch (e) {
-        view.dispatch({ effects: setErrorLines.of(Decoration.none) });
-        return [];
+        clearDiagnostics(view);
     }
-}, {
-    delay: 1000,
-});
+}
+
+function clearDiagnostics(view) {
+    const badge = document.getElementById("problemCount");
+    if (badge) badge.style.display = "none";
+
+    view.dispatch({
+        effects: setDiagnostics.of({
+            lines: Decoration.none,
+            widgets: Decoration.none,
+            gutters: [],
+        }),
+    });
+}

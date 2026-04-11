@@ -12,8 +12,7 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
 import { voltAutocompletion } from "./volt-completions.js";
-import { voltLinter, errorLineField } from "./volt-diagnostics.js";
-import { lintGutter } from "@codemirror/lint";
+import { voltDiagnosticExtensions, setupDiagnostics } from "./volt-diagnostics.js";
 // ---- Hover info bar (between editor and bottom panel) ----
 const HOVER_INFO = {
     // [text, category, icon]
@@ -174,9 +173,7 @@ const state = EditorState.create({
         syntaxHighlighting(voltHighlight),
         voltTheme,
         voltAutocompletion,
-        voltLinter,
-        errorLineField,
-        lintGutter(),
+        ...voltDiagnosticExtensions,
         // Update cursor position in status bar
         EditorView.updateListener.of(update => {
             if (update.selectionSet) {
@@ -194,6 +191,9 @@ const editor = new EditorView({
     state,
     parent: container,
 });
+
+// Start diagnostics checker
+setupDiagnostics(editor);
 
 // ---- Run button — real build + flash + monitor ----
 document.getElementById("runBtn").addEventListener("click", async () => {
