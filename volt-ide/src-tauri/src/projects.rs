@@ -71,16 +71,78 @@ main {{
     Ok(project_dir.to_string_lossy().to_string())
 }
 
-/// Open a folder dialog and return the selected path
-pub fn open_project_dialog() -> Option<String> {
+/// List all Volt projects in ~/Volt/ (folders containing main.volt)
+pub fn list_projects() -> Vec<ProjectInfo> {
     let projects_dir = dirs::home_dir()
         .map(|h| h.join("Volt"))
         .unwrap_or_default();
 
-    let folder = rfd::FileDialog::new()
-        .set_title("Open Volt Project")
-        .set_directory(&projects_dir)
-        .pick_folder();
+    let mut projects = Vec::new();
 
-    folder.map(|p| p.to_string_lossy().to_string())
+    if let Ok(entries) = fs::read_dir(&projects_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.join("main.volt").exists() {
+                let name = path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+
+                // Read chip from volt.toml or main.volt
+                let chip = read_project_chip(&path).unwrap_or_else(|| "unknown".to_string());
+
+                // Get last modified time
+                let modified = fs::metadata(path.join("main.volt"))
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+
+                projects.push(ProjectInfo {
+                    name,
+                    path: path.to_string_lossy().to_string(),
+                    chip,
+                    modified,
+                });
+            }
+        }
+    }
+
+    // Sort by most recently modified first
+    projects.sort_by(|a, b| b.modified.cmp(&a.modified));
+    projects
+}
+
+fn read_project_chip(path: &std::path::Path) -> Option<String> {
+    // Try volt.toml
+    if let Ok(toml) = fs::read_to_string(path.join("volt.toml")) {
+        for line in toml.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("chip") && trimmed.contains('=') {
+                let val = trimmed.split('=').nth(1)?.trim().trim_matches('"').trim_matches('\'');
+                if !val.is_empty() {
+                    return Some(val.to_string());
+                }
+            }
+        }
+    }
+    // Try main.volt
+    if let Ok(src) = fs::read_to_string(path.join("main.volt")) {
+        for line in src.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("chip ") {
+                return Some(trimmed[5..].trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+#[derive(serde::Serialize)]
+pub struct ProjectInfo {
+    pub name: String,
+    pub path: String,
+    pub chip: String,
+    pub modified: u64,
 }

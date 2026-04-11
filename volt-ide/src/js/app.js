@@ -266,18 +266,68 @@ document.getElementById("monitorClearBtn").addEventListener("click", () => {
     document.getElementById("monitorOutput").innerHTML = "";
 });
 
-// ---- Open Project ----
+// ---- Open Project (project picker) ----
+const pickerOverlay = document.getElementById("projectPickerOverlay");
+const projectListEl = document.getElementById("projectList");
+
 document.getElementById("openProjectBtn").addEventListener("click", async () => {
     try {
         const { invoke } = await import("@tauri-apps/api/core");
-        const path = await invoke("open_project_dialog");
-        if (path) {
-            await loadProject(path);
+        const projects = await invoke("list_projects");
+
+        if (projects.length === 0) {
+            projectListEl.innerHTML = '<div class="picker-empty">No projects in ~/Volt/. Click New to create one.</div>';
+        } else {
+            projectListEl.innerHTML = projects.map(p => {
+                const ago = timeAgo(p.modified);
+                return `<div class="picker-item" data-path="${p.path}">
+                    <div class="picker-item-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    </div>
+                    <div class="picker-item-info">
+                        <div class="picker-item-name">${p.name}</div>
+                        <div class="picker-item-meta">
+                            <span class="picker-item-chip">${p.chip.toUpperCase()}</span>
+                            <span>${ago}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }).join("");
+
+            projectListEl.querySelectorAll(".picker-item").forEach(item => {
+                item.addEventListener("click", async () => {
+                    pickerOverlay.classList.remove("open");
+                    await loadProject(item.dataset.path);
+                });
+            });
         }
+
+        pickerOverlay.classList.add("open");
     } catch (e) {
-        appendMonitor("Open project failed: " + e, "error");
+        appendMonitor("Cannot list projects: " + e, "error");
     }
 });
+
+document.getElementById("pickerCloseBtn").addEventListener("click", () => {
+    pickerOverlay.classList.remove("open");
+});
+pickerOverlay.addEventListener("click", (e) => {
+    if (e.target === pickerOverlay) pickerOverlay.classList.remove("open");
+});
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") pickerOverlay.classList.remove("open");
+});
+
+function timeAgo(timestamp) {
+    if (!timestamp) return "";
+    const now = Math.floor(Date.now() / 1000);
+    const diff = now - timestamp;
+    if (diff < 60) return "just now";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+    if (diff < 604800) return Math.floor(diff / 86400) + "d ago";
+    return new Date(timestamp * 1000).toLocaleDateString();
+}
 
 // ---- New Project ----
 document.getElementById("newProjectBtn").addEventListener("click", async () => {

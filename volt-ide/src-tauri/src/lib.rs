@@ -4,6 +4,7 @@ mod runner;
 mod projects;
 
 use devices::Device;
+use projects::ProjectInfo;
 
 #[tauri::command]
 fn scan_devices() -> Vec<Device> {
@@ -50,6 +51,11 @@ fn open_project_dialog() -> Option<String> {
     projects::open_project_dialog()
 }
 
+#[tauri::command]
+fn list_projects() -> Vec<ProjectInfo> {
+    projects::list_projects()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -63,6 +69,7 @@ pub fn run() {
             save_file,
             create_project,
             open_project_dialog,
+            list_projects,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
