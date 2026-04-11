@@ -18,7 +18,13 @@ pub fn run_pipeline(app: AppHandle, project_path: String, volt_file: String, por
         // Stage 1: Compile .volt → C
         // Stop serial monitor before flashing (releases the port)
         crate::serial::stop_monitor();
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        // Wait until the monitor thread actually closes the port
+        for _ in 0..20 {
+            if !crate::serial::is_monitoring() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        // Extra safety margin for OS to release the port handle
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
         emit(&app, "compile", "Compiling Volt source...", 10);
 
