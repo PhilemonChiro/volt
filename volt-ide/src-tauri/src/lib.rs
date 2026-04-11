@@ -45,6 +45,11 @@ fn create_project(name: String, chip: String) -> Result<String, String> {
     projects::create_project(&name, &chip)
 }
 
+#[tauri::command]
+fn open_project_dialog() -> Option<String> {
+    projects::open_project_dialog()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -57,6 +62,7 @@ pub fn run() {
             read_file,
             save_file,
             create_project,
+            open_project_dialog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

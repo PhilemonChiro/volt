@@ -40,21 +40,22 @@ pub fn create_project(name: &str, chip: &str) -> Result<String, String> {
 
     // Write main.volt
     let source = format!(
-        "chip {chip}\n\n\
-         hardware {{\n\
-         \    pin led: Output = {led}\n\
-         }}\n\n\
-         task blink() {{\n\
-         \    every 500ms {{\n\
-         \        led.toggle()\n\
-         \    }}\n\
-         }}\n\n\
-         main {{\n\
-         \    run(blink)\n\
-         }}\n",
-        chip = chip,
-        led = led_pin,
-    );
+"chip {chip}
+
+hardware {{
+    pin led: Output = {led}
+}}
+
+task blink() {{
+    every 500ms {{
+        led.toggle()
+    }}
+}}
+
+main {{
+    run(blink)
+}}
+", chip = chip, led = led_pin);
     fs::write(project_dir.join("main.volt"), &source).map_err(|e| e.to_string())?;
 
     // Write volt.toml
@@ -76,7 +77,10 @@ pub fn open_project_dialog() -> Option<String> {
         .map(|h| h.join("Volt"))
         .unwrap_or_default();
 
-    // Use native dialog via rfd or fall back
-    // For now return None — the frontend will use @tauri-apps/plugin-dialog
-    None
+    let folder = rfd::FileDialog::new()
+        .set_title("Open Volt Project")
+        .set_directory(&projects_dir)
+        .pick_folder();
+
+    folder.map(|p| p.to_string_lossy().to_string())
 }

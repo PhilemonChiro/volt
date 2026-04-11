@@ -269,25 +269,13 @@ document.getElementById("monitorClearBtn").addEventListener("click", () => {
 // ---- Open Project ----
 document.getElementById("openProjectBtn").addEventListener("click", async () => {
     try {
-        const { open } = await import("@tauri-apps/plugin-dialog");
-        const selected = await open({
-            directory: true,
-            multiple: false,
-            title: "Open Volt Project",
-            defaultPath: (await getVoltProjectsDir()),
-        });
-        if (selected) {
-            await loadProject(selected);
+        const { invoke } = await import("@tauri-apps/api/core");
+        const path = await invoke("open_project_dialog");
+        if (path) {
+            await loadProject(path);
         }
     } catch (e) {
-        // Fallback — use Tauri invoke
-        try {
-            const { invoke } = await import("@tauri-apps/api/core");
-            const path = await invoke("open_project_dialog");
-            if (path) await loadProject(path);
-        } catch (e2) {
-            appendMonitor("Open project: " + e2, "error");
-        }
+        appendMonitor("Open project failed: " + e, "error");
     }
 });
 
