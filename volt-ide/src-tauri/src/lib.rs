@@ -1,6 +1,7 @@
 mod devices;
 mod serial;
 mod runner;
+mod projects;
 
 use devices::Device;
 
@@ -29,6 +30,21 @@ fn run_project(app: tauri::AppHandle, project_path: String, port: String, chip: 
     runner::run_pipeline(app, project_path, port, chip);
 }
 
+#[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    projects::read_file(&path)
+}
+
+#[tauri::command]
+fn save_file(path: String, content: String) -> Result<(), String> {
+    projects::save_file(&path, &content)
+}
+
+#[tauri::command]
+fn create_project(name: String, chip: String) -> Result<String, String> {
+    projects::create_project(&name, &chip)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -38,6 +54,9 @@ pub fn run() {
             stop_monitor,
             is_monitoring,
             run_project,
+            read_file,
+            save_file,
+            create_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

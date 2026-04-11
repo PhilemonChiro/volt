@@ -134,8 +134,25 @@ document.getElementById("runBtn").addEventListener("click", async () => {
         // For now, this is a placeholder — will use actual project path
         statusBuild.textContent = "Running...";
 
+        if (!currentProjectPath) {
+            appendMonitor("No project open — click Open or New first", "warn");
+            statusBuild.textContent = "";
+            return;
+        }
+
+        // Save current editor content before building
+        try {
+            const content = editor.state.doc.toString();
+            await invoke("save_file", {
+                path: currentProjectPath + "/main.volt",
+                content,
+            });
+        } catch (e) {
+            appendMonitor("Cannot save: " + e, "error");
+        }
+
         await invoke("run_project", {
-            projectPath: ".",   // TODO: use actual project path
+            projectPath: currentProjectPath,
             port: device.port,
             chip: device.chip,
         });
@@ -246,8 +263,85 @@ function appendMonitor(text, level) {
 }
 
 document.getElementById("monitorClearBtn").addEventListener("click", () => {
-    document.getElementById("monitorOutput").textContent = "";
+    document.getElementById("monitorOutput").innerHTML = "";
 });
+
+// ---- Open Project ----
+document.getElementById("openProjectBtn").addEventListener("click", async () => {
+    try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({
+            directory: true,
+            multiple: false,
+            title: "Open Volt Project",
+            defaultPath: (await getVoltProjectsDir()),
+        });
+        if (selected) {
+            await loadProject(selected);
+        }
+    } catch (e) {
+        // Fallback — use Tauri invoke
+        try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const path = await invoke("open_project_dialog");
+            if (path) await loadProject(path);
+        } catch (e2) {
+            appendMonitor("Open project: " + e2, "error");
+        }
+    }
+});
+
+// ---- New Project ----
+document.getElementById("newProjectBtn").addEventListener("click", async () => {
+    const name = prompt("Project name:");
+    if (!name) return;
+
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const chip = currentDevices.length > 0 ? currentDevices[selectedDeviceIndex].chip : "esp32";
+        const path = await invoke("create_project", { name, chip: chip.toLowerCase() });
+        if (path) {
+            await loadProject(path);
+            appendMonitor("Created project: " + path, "info");
+        }
+    } catch (e) {
+        appendMonitor("New project failed: " + e, "error");
+    }
+});
+
+// ---- Project loading ----
+let currentProjectPath = null;
+
+async function loadProject(path) {
+    currentProjectPath = path;
+
+    // Read main.volt
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const content = await invoke("read_file", { path: path + "/main.volt" });
+
+        // Replace editor content
+        editor.dispatch({
+            changes: { from: 0, to: editor.state.doc.length, insert: content }
+        });
+
+        // Update UI
+        const projectName = path.split("/").pop();
+        document.title = projectName + " — Volt IDE";
+        appendMonitor("Opened: " + path, "info");
+    } catch (e) {
+        appendMonitor("Cannot read main.volt: " + e, "error");
+    }
+}
+
+async function getVoltProjectsDir() {
+    try {
+        const { homeDir } = await import("@tauri-apps/api/path");
+        return (await homeDir()) + "Volt";
+    } catch {
+        return "";
+    }
+}
 
 // ---- Window controls + drag ----
 try {
