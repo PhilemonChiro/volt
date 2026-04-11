@@ -111,7 +111,7 @@ else:
 
         emit(&app, "flash", &format!("Flashing to {} on {}...", actual_chip.to_uppercase(), port), 65);
 
-        let flash_ok = run_flash(&app, &project_path, &port);
+        let flash_ok = run_flash(&app, &project_path, &port, &chip_lower);
 
         if !flash_ok { return; }
 
@@ -181,18 +181,56 @@ fn stream_command(app: &AppHandle, mut cmd: Command, stage: &str) -> bool {
     }
 }
 
+fn get_framework_dir() -> std::path::PathBuf {
+    let home = dirs::home_dir().unwrap();
+    let dev = home.join("dev/volt/framework");
+    if dev.exists() { return dev; }
+    home.join(".volt/sdk/framework")
+}
+
+fn get_idf_path(chip: &str) -> std::path::PathBuf {
+    let home = dirs::home_dir().unwrap();
+    if chip.contains("8266") {
+        home.join(".volt/toolchains/esp8266-rtos-sdk")
+    } else if home.join("esp/esp-idf").exists() {
+        home.join("esp/esp-idf")
+    } else {
+        home.join(".volt/toolchains/esp-idf")
+    }
+}
+
 fn run_build(app: &AppHandle, project_path: &str, chip: &str) -> bool {
-    let mut cmd = Command::new("volt");
-    cmd.arg("build")
-       .current_dir(project_path);
+    let fw_dir = get_framework_dir();
+    if !fw_dir.exists() {
+        emit(app, "error", &format!("Framework not found at {}", fw_dir.display()), 0);
+        return false;
+    }
+
+    // Copy generated main.c into framework
+    let src = format!("{}/build/main.c", project_path);
+    let dst = fw_dir.join("main/main.c");
+    if let Err(e) = std::fs::copy(&src, &dst) {
+        emit(app, "error", &format!("Cannot copy main.c: {}", e), 0);
+        return false;
+    }
+
+    let idf = get_idf_path(chip);
+    let mut cmd = Command::new("bash");
+    cmd.arg("-c")
+       .arg(format!("source {}/export.sh 2>/dev/null && idf.py build", idf.display()))
+       .current_dir(&fw_dir);
 
     stream_command(app, cmd, "Build")
 }
 
-fn run_flash(app: &AppHandle, project_path: &str, port: &str) -> bool {
-    let mut cmd = Command::new("volt");
-    cmd.args(["flash", "--port", port])
-       .current_dir(project_path);
+fn run_flash(app: &AppHandle, _project_path: &str, port: &str, chip: &str) -> bool {
+    let fw_dir = get_framework_dir();
+    let idf = get_idf_path(chip);
+
+    let mut cmd = Command::new("bash");
+    cmd.arg("-c")
+       .arg(format!("source {}/export.sh 2>/dev/null && idf.py -p {} flash", idf.display(), port))
+       .current_dir(&fw_dir);
 
     stream_command(app, cmd, "Flash")
 }
