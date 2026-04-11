@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volt IDE</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+        <div class="sidebar-logo">
+            <span class="logo-icon">⚡</span>
+            <span class="logo-text">Volt</span>
+        </div>
+
+        <!-- DEVICES -->
+        <div class="sidebar-section">
+            <div class="section-title">DEVICES <span class="section-action" id="scanBtn">Scan</span></div>
+            <div id="deviceList" class="section-content">
+                <div class="empty-hint">Plug in a board</div>
+            </div>
+        </div>
+
+        <!-- BUILD & DEPLOY -->
+        <div class="sidebar-section">
+            <div class="section-title">BUILD & DEPLOY</div>
+            <div class="section-content">
+                <button class="action-btn" id="buildBtn">
+                    <span class="btn-icon">▶</span> Build
+                    <span class="shortcut">Ctrl+B</span>
+                </button>
+                <button class="action-btn" id="flashBtn">
+                    <span class="btn-icon">⚡</span> Flash
+                    <span class="shortcut">Ctrl+Shift+F</span>
+                </button>
+                <button class="action-btn" id="monitorBtn">
+                    <span class="btn-icon">📡</span> Monitor
+                    <span class="shortcut">Ctrl+M</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- PROJECT -->
+        <div class="sidebar-section">
+            <div class="section-title">PROJECT</div>
+            <div id="projectInfo" class="section-content">
+                <div class="empty-hint">No project open</div>
+            </div>
+            <div class="section-content">
+                <button class="action-btn action-btn-secondary" id="newProjectBtn">
+                    <span class="btn-icon">+</span> New Project
+                </button>
+                <button class="action-btn action-btn-secondary" id="openProjectBtn">
+                    <span class="btn-icon">📁</span> Open Project
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN AREA -->
+    <main id="main">
+        <!-- EDITOR -->
+        <div id="editorContainer"></div>
+
+        <!-- SERIAL MONITOR -->
+        <div id="monitorPanel">
+            <div id="monitorHeader">
+                <span id="monitorDot" class="dot dot-off"></span>
+                <span>Serial Monitor</span>
+                <span id="monitorStatus">Disconnected</span>
+                <div class="monitor-actions">
+                    <button id="monitorClearBtn" class="icon-btn" title="Clear">✕</button>
+                    <button id="monitorPauseBtn" class="icon-btn" title="Pause">⏸</button>
+                </div>
+            </div>
+            <div id="monitorOutput"></div>
+        </div>
+    </main>
+
+    <!-- STATUS BAR -->
+    <footer id="statusBar">
+        <span id="statusChip">No device</span>
+        <span id="statusPort"></span>
+        <span id="statusBuild"></span>
+        <span id="statusSize"></span>
+        <span class="status-spacer"></span>
+        <span id="statusLine">Ln 1, Col 1</span>
+    </footer>
+
+    <script type="module" src="dist/app.js"></script>
+</body>
+</html>
