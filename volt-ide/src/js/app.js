@@ -73,9 +73,11 @@ function createEditor(content = "") {
 // ---- Diagnostics ----
 async function runDiagnostics() {
     if (!editor || !currentModel) return;
-    const code = editor.getValue();
+    // Snapshot the model to avoid race conditions
+    const model = currentModel;
+    const code = model.getValue();
     if (code.trim().length < 10) {
-        monaco.editor.setModelMarkers(currentModel, "volt", []);
+        monaco.editor.setModelMarkers(model, "volt", []);
         updateProblemBadge(0);
         return;
     }
@@ -84,44 +86,54 @@ async function runDiagnostics() {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke("check_code", { source: code });
 
+        // Verify model hasn't changed while we were checking
+        if (model !== currentModel || model.isDisposed()) return;
+
         if (!result || !Array.isArray(result)) {
-            monaco.editor.setModelMarkers(currentModel, "volt", []);
+            monaco.editor.setModelMarkers(model, "volt", []);
             updateProblemBadge(0);
             return;
         }
 
-        const markers = result.map(err => {
-            let line = err.line;
-            let col = err.col || 1;
+        const totalLines = model.getLineCount();
+        const markers = [];
 
-            // Extract real line from parser error messages
-            const lineMatch = err.message.match(/at line (\d+)/);
-            if (lineMatch && line <= 1) line = parseInt(lineMatch[1]);
-            const colMatch = err.message.match(/column (\d+)/);
-            if (colMatch && col <= 1) col = parseInt(colMatch[1]);
+        for (const err of result) {
+            try {
+                let line = err.line;
+                let col = err.col || 1;
 
-            // Clamp to valid range
-            const totalLines = currentModel.getLineCount();
-            line = Math.min(Math.max(line, 1), totalLines);
-            const lineContent = currentModel.getLineContent(line);
-            const endCol = Math.min(col + 20, lineContent.length + 1);
+                const lineMatch = err.message.match(/at line (\d+)/);
+                if (lineMatch && line <= 1) line = parseInt(lineMatch[1]);
+                const colMatch = err.message.match(/column (\d+)/);
+                if (colMatch && col <= 1) col = parseInt(colMatch[1]);
 
-            return {
-                startLineNumber: line,
-                startColumn: Math.max(col, 1),
-                endLineNumber: line,
-                endColumn: endCol,
-                message: err.message + (err.hint ? "\n→ " + err.hint : ""),
-                severity: err.severity === "error"
-                    ? monaco.MarkerSeverity.Error
-                    : monaco.MarkerSeverity.Warning,
-            };
-        });
+                line = Math.min(Math.max(line, 1), totalLines);
+                col = Math.max(col, 1);
+                const lineContent = model.getLineContent(line);
+                const endCol = Math.min(col + 20, lineContent.length + 1);
 
-        monaco.editor.setModelMarkers(currentModel, "volt", markers);
+                markers.push({
+                    startLineNumber: line,
+                    startColumn: col,
+                    endLineNumber: line,
+                    endColumn: Math.max(col + 1, endCol),
+                    message: err.message + (err.hint ? "\n→ " + err.hint : ""),
+                    severity: err.severity === "error"
+                        ? monaco.MarkerSeverity.Error
+                        : monaco.MarkerSeverity.Warning,
+                });
+            } catch (parseErr) {
+                // Skip malformed diagnostics
+            }
+        }
+
+        monaco.editor.setModelMarkers(model, "volt", markers);
         updateProblemBadge(markers.length);
     } catch (e) {
-        monaco.editor.setModelMarkers(currentModel, "volt", []);
+        if (model && !model.isDisposed()) {
+            monaco.editor.setModelMarkers(model, "volt", []);
+        }
         updateProblemBadge(0);
     }
 }
