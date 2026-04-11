@@ -11,10 +11,8 @@
     <header id="toolbar">
         <div class="toolbar-left">
             <div class="toolbar-brand">
-                <svg class="brand-logo" viewBox="0 0 7510 6540" width="20" height="20">
-                    <g transform="translate(0,6540) scale(1,-1)" fill="currentColor" stroke="none">
-                        <path d="M372 6430 c-233 -5 -234 -5 -254 -29 -24 -31 -18 -59 28 -126 19 -28 34 -55 34 -61 0 -7 16 -35 36 -64 20 -29 45 -73 56 -96 10 -24 29 -56 43 -72 13 -15 34 -53 48 -83 13 -30 36 -68 50 -85 14 -17 33 -50 43 -75 9 -24 30 -61 46 -81 15 -21 38 -59 49 -85 11 -26 29 -57 39 -68 11 -11 31 -47 45 -80 15 -32 39 -74 55 -91 15 -18 33 -50 40 -71 7 -21 25 -55 41 -75 16 -21 38 -58 49 -84 11 -26 33 -63 49 -83 15 -20 38 -58 50 -86 12 -27 31 -59 41 -70 10 -11 31 -47 45 -80 15 -33 37 -71 50 -85 13 -14 31 -45 41 -70 9 -25 30 -62 46 -82 15 -21 38 -59 49 -85 11 -26 29 -57 39 -68 11 -11 30 -45 44 -76 13 -30 36 -69 50 -86 14 -17 35 -52 46 -78z"/>
-                    </g>
+                <svg class="brand-logo" viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <path d="M13 2L4.5 13H12L11 22L19.5 11H12L13 2Z" fill="currentColor"/>
                 </svg>
                 <span class="brand-name">Volt</span>
             </div>
@@ -66,6 +64,21 @@
             <button class="toolbar-btn-icon" id="settingsBtn" title="Settings">
                 <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
+
+            <div class="toolbar-divider"></div>
+
+            <!-- Window controls -->
+            <div class="window-controls">
+                <button class="win-btn" id="winMinimize" title="Minimize">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button class="win-btn" id="winMaximize" title="Maximize">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                </button>
+                <button class="win-btn win-close" id="winClose" title="Close">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
         </div>
     </header>
 

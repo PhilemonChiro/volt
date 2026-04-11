@@ -146,5 +146,16 @@ document.getElementById("monitorClearBtn").addEventListener("click", () => {
     document.getElementById("monitorOutput").textContent = "";
 });
 
+// ---- Window controls ----
+try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    document.getElementById("winMinimize")?.addEventListener("click", () => win.minimize());
+    document.getElementById("winMaximize")?.addEventListener("click", () => win.toggleMaximize());
+    document.getElementById("winClose")?.addEventListener("click", () => win.close());
+} catch (e) {
+    // Not running in Tauri (dev mode in browser)
+}
+
 // ---- Focus editor on load ----
 editor.focus();
