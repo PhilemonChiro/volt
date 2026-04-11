@@ -134,23 +134,23 @@ document.getElementById("runBtn").addEventListener("click", async () => {
         // For now, this is a placeholder — will use actual project path
         statusBuild.textContent = "Running...";
 
-        if (!currentProjectPath) {
-            appendMonitor("No project open — click Open or New first", "warn");
+        if (!currentProjectPath || !currentVoltFile) {
+            appendMonitor("No file open — click Open or New first", "warn");
             statusBuild.textContent = "";
             return;
         }
 
         // Save current editor content before building
-        const savePath = currentVoltFile || (currentProjectPath + "/main.volt");
         try {
             const content = editor.state.doc.toString();
-            await invoke("save_file", { path: savePath, content });
+            await invoke("save_file", { path: currentVoltFile, content });
         } catch (e) {
             appendMonitor("Cannot save: " + e, "error");
         }
 
         await invoke("run_project", {
             projectPath: currentProjectPath,
+            voltFile: currentVoltFile,
             port: device.port,
             chip: device.chip,
         });

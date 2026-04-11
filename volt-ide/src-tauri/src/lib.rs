@@ -27,8 +27,8 @@ fn is_monitoring() -> bool {
 }
 
 #[tauri::command]
-fn run_project(app: tauri::AppHandle, project_path: String, port: String, chip: String) {
-    runner::run_pipeline(app, project_path, port, chip);
+fn run_project(app: tauri::AppHandle, project_path: String, volt_file: String, port: String, chip: String) {
+    runner::run_pipeline(app, project_path, volt_file, port, chip);
 }
 
 #[tauri::command]

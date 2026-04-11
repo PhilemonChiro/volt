@@ -11,31 +11,39 @@ struct RunProgress {
 
 /// Run the full pipeline: compile .volt → build → flash
 /// Streams progress to the frontend via events
-pub fn run_pipeline(app: AppHandle, project_path: String, port: String, chip: String) {
+pub fn run_pipeline(app: AppHandle, project_path: String, volt_file: String, port: String, chip: String) {
     std::thread::spawn(move || {
         let app = app.clone();
 
         // Stage 1: Compile .volt → C
         emit(&app, "compile", "Compiling Volt source...", 10);
 
-        let volt_file = format!("{}/main.volt", project_path);
         if !std::path::Path::new(&volt_file).exists() {
-            emit(&app, "error", "No main.volt found in project", 0);
+            emit(&app, "error", &format!("File not found: {}", volt_file), 0);
             return;
         }
 
-        // Find the volt compiler
+        // Extract just the filename for the compiler
+        let file_name = std::path::Path::new(&volt_file)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        // Ensure build dir exists
+        std::fs::create_dir_all(format!("{}/build", project_path)).ok();
+
         let compile_result = Command::new("python3")
             .args(["-c", &format!(
                 "import sys; sys.path.insert(0, '{}'); \
                  from volt.compiler.voltc import compile_volt; \
                  from pathlib import Path; \
                  source = Path('{}').read_text(); \
-                 c, e = compile_volt(source, 'main.volt'); \
+                 c, e = compile_volt(source, '{}'); \
                  errs = [x for x in e.errors if x.severity == 'error']; \
                  if errs: print('ERROR:' + errs[0].message); \
                  elif c: Path('{}/build/main.c').write_text(c); print('OK')",
-                get_volt_src_path(), volt_file, project_path
+                get_volt_src_path(), volt_file, file_name, project_path
             )])
             .output();
 
