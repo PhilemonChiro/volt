@@ -40,6 +40,7 @@ function createEditor(content) {
         scrollBeyondLastLine: false,
         renderLineHighlight: "all",
         cursorBlinking: "smooth",
+        cursorWidth: 2,
         automaticLayout: true,
         padding: { top: 8 },
         glyphMargin: true,

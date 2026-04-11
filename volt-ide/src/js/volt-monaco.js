@@ -191,7 +191,7 @@ export function defineVoltTheme(monaco) {
         colors: {
             "editor.background": "#111318",
             "editor.foreground": "#d4d4d4",
-            "editorCursor.foreground": "#5BA4D9",
+            "editorCursor.foreground": "#ffffff",
             "editor.lineHighlightBackground": "#1a1d24",
             "editor.selectionBackground": "#264f7833",
             "editorLineNumber.foreground": "#454a55",
