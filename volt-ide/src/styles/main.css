@@ -551,6 +551,36 @@ body {
     font-weight: 500;
 }
 
+.picker-footer {
+    padding: 8px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.picker-browse-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px dashed var(--border-default);
+    border-radius: 6px;
+    color: var(--t2);
+    font-size: 12px;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: all 80ms;
+}
+.picker-browse-btn:hover {
+    background: var(--bg-3);
+    border-color: var(--volt);
+    color: var(--t1);
+}
+.picker-browse-btn svg {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
 /* ================================================================
    TRANSITIONS — subtle, fast
    ================================================================ */

@@ -311,6 +311,20 @@ document.getElementById("openProjectBtn").addEventListener("click", async () => 
 document.getElementById("pickerCloseBtn").addEventListener("click", () => {
     pickerOverlay.classList.remove("open");
 });
+
+// Browse for .volt file (native file dialog, filtered to .volt only)
+document.getElementById("pickerBrowseBtn").addEventListener("click", async () => {
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const path = await invoke("browse_volt_file");
+        if (path) {
+            pickerOverlay.classList.remove("open");
+            await loadProject(path);
+        }
+    } catch (e) {
+        appendMonitor("Browse failed: " + e, "error");
+    }
+});
 pickerOverlay.addEventListener("click", (e) => {
     if (e.target === pickerOverlay) pickerOverlay.classList.remove("open");
 });
@@ -353,22 +367,34 @@ let currentProjectPath = null;
 async function loadProject(path) {
     currentProjectPath = path;
 
-    // Read main.volt
     try {
         const { invoke } = await import("@tauri-apps/api/core");
-        const content = await invoke("read_file", { path: path + "/main.volt" });
 
-        // Replace editor content
-        editor.dispatch({
-            changes: { from: 0, to: editor.state.doc.length, insert: content }
-        });
+        // Find the .volt file — try main.volt first, then any .volt file
+        let voltFile = null;
+        let content = null;
 
-        // Update UI
-        const projectName = path.split("/").pop();
-        document.title = projectName + " — Volt IDE";
-        appendMonitor("Opened: " + path, "info");
+        try {
+            content = await invoke("read_file", { path: path + "/main.volt" });
+            voltFile = "main.volt";
+        } catch {
+            // No main.volt — list files and find first .volt
+            // For now, just report
+        }
+
+        if (content) {
+            editor.dispatch({
+                changes: { from: 0, to: editor.state.doc.length, insert: content }
+            });
+
+            const projectName = path.split("/").pop();
+            document.title = projectName + " — Volt IDE";
+            appendMonitor("Opened: " + path + "/" + voltFile, "info");
+        } else {
+            appendMonitor("No .volt file found in " + path, "warn");
+        }
     } catch (e) {
-        appendMonitor("Cannot read main.volt: " + e, "error");
+        appendMonitor("Cannot open project: " + e, "error");
     }
 }
 

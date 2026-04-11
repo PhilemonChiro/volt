@@ -146,3 +146,19 @@ pub struct ProjectInfo {
     pub chip: String,
     pub modified: u64,
 }
+
+/// Open a native file dialog filtered to .volt files.
+/// Returns the parent folder (project path) of the selected file.
+pub fn browse_volt_file() -> Option<String> {
+    let projects_dir = dirs::home_dir()
+        .map(|h| h.join("Volt"))
+        .unwrap_or_default();
+
+    let file = rfd::FileDialog::new()
+        .set_title("Open Volt File")
+        .set_directory(&projects_dir)
+        .add_filter("Volt source files", &["volt"])
+        .pick_file();
+
+    file.and_then(|f| f.parent().map(|p| p.to_string_lossy().to_string()))
+}

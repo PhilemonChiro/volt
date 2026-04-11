@@ -47,8 +47,8 @@ fn create_project(name: String, chip: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn open_project_dialog() -> Option<String> {
-    projects::open_project_dialog()
+fn browse_volt_file() -> Option<String> {
+    projects::browse_volt_file()
 }
 
 #[tauri::command]
@@ -68,7 +68,7 @@ pub fn run() {
             read_file,
             save_file,
             create_project,
-            open_project_dialog,
+            browse_volt_file,
             list_projects,
         ])
         .run(tauri::generate_context!())
