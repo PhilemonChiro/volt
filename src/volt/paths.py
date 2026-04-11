@@ -40,6 +40,15 @@ def volt_home() -> Path:
     return _home() / ".volt"
 
 
+def volt_projects() -> Path:
+    """~/Volt — default projects directory (like Arduino's ~/Arduino/).
+    Override with VOLT_PROJECTS environment variable."""
+    custom = os.environ.get("VOLT_PROJECTS")
+    if custom:
+        return Path(custom)
+    return _home() / "Volt"
+
+
 def volt_bin() -> Path:
     """~/.volt/bin — CLI binaries."""
     return volt_home() / "bin"

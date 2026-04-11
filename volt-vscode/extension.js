@@ -323,14 +323,28 @@ class VoltSidebarProvider {
                 case 'newProject':
                     vscode.window.showInputBox({ prompt: 'Project name' }).then(name => {
                         if (!name) return;
-                        const cwd = getCwd();
-                        const projectPath = path.join(cwd, name);
-                        runCommand(`new ${name}`);
-                        // Open the new project folder in VS Code after creation
-                        setTimeout(() => {
-                            const uri = vscode.Uri.file(projectPath);
-                            vscode.commands.executeCommand('vscode.openFolder', uri, false);
-                        }, 1500);
+                        const os = require('os');
+                        const fs = require('fs');
+                        // Default projects folder: ~/Volt/ (like Arduino's ~/Arduino/)
+                        const voltProjects = path.join(os.homedir(), 'Volt');
+                        if (!fs.existsSync(voltProjects)) {
+                            fs.mkdirSync(voltProjects, { recursive: true });
+                        }
+                        const projectPath = path.join(voltProjects, name);
+                        // Run volt new from the Volt projects folder
+                        const { exec: ex } = require('child_process');
+                        ex(`cd "${voltProjects}" && ${PYTHON} -m volt.cli new ${name} 2>&1 || volt new ${name} 2>&1`, (err, stdout) => {
+                            if (sidebarProvider) {
+                                sidebarProvider.appendOutput(stdout || '', 'output');
+                            }
+                            // Open the new project folder
+                            if (fs.existsSync(projectPath)) {
+                                const uri = vscode.Uri.file(projectPath);
+                                vscode.commands.executeCommand('vscode.openFolder', uri, false);
+                            } else {
+                                vscode.window.showErrorMessage(`Failed to create project: ${name}`);
+                            }
+                        });
                     });
                     break;
                 case 'openFile':

@@ -384,10 +384,21 @@ def paths():
 @click.argument("name")
 @click.option("--chip", default=None, help="Target chip (auto-detected if not specified)")
 def new(name, chip):
-    """Create a new Volt project."""
-    project_dir = Path(name)
+    """Create a new Volt project in ~/Volt/."""
+    from volt.paths import volt_projects
+
+    # Create projects in ~/Volt/ by default (like Arduino's ~/Arduino/)
+    projects_root = volt_projects()
+    projects_root.mkdir(parents=True, exist_ok=True)
+
+    # If name is a bare name (no slashes), put it in ~/Volt/
+    if os.sep not in name and not Path(name).is_absolute():
+        project_dir = projects_root / name
+    else:
+        project_dir = Path(name)
+
     if project_dir.exists():
-        console.print(f"[red]Directory '{name}' already exists.[/red]")
+        console.print(f"[red]Project '{name}' already exists at {project_dir}[/red]")
         raise SystemExit(1)
 
     # Auto-detect chip if not specified
@@ -454,12 +465,13 @@ chip = "{chip}"
 
     console.print(f"\n[bold green]✓[/bold green] Created project [bold]{name}[/bold] for [bold]{chip.upper()}[/bold]\n")
     console.print(f"  {project_dir}/")
+    console.print(f"  {project_dir}/")
     console.print(f"  ├── main.volt      [dim]← your code (pin {defaults['led_pin']} = onboard LED)[/dim]")
     console.print(f"  ├── volt.toml      [dim]← project config[/dim]")
     console.print(f"  ├── build/         [dim]← generated files[/dim]")
     console.print(f"  └── .gitignore")
     console.print()
-    console.print(f"  [cyan]cd {name}[/cyan]")
+    console.print(f"  [cyan]cd {project_dir}[/cyan]")
     console.print(f"  [cyan]volt build[/cyan]")
     console.print(f"  [cyan]volt flash[/cyan]")
     console.print(f"  [cyan]volt monitor[/cyan]")
