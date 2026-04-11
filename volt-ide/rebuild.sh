@@ -1,25 +1,23 @@
 #!/bin/bash
-# Volt IDE — clean rebuild with cache clear
+# Volt IDE — clean rebuild with Tauri cache bust
 set -e
+cd "$(dirname "$0")"
 
-# Kill running instance
 pkill -f "target/release/app" 2>/dev/null || true
+sleep 0.5
 
-# Clear ALL caches
-rm -rf ~/.local/share/com.volt.ide/ 2>/dev/null
-rm -rf ~/.cache/com.volt.ide/ 2>/dev/null
-rm -rf ~/.config/com.volt.ide/ 2>/dev/null
-rm -rf ~/.local/share/webkitgtk/ 2>/dev/null
-rm -rf ~/.cache/webkitgtk/ 2>/dev/null
+# Bust Tauri's WebKitGTK cache by rotating the identifier
+CACHE_ID="com.volt.ide.v$(date +%s)"
+sed -i "s/\"com\.volt\.ide[^\"]*\"/\"$CACHE_ID\"/" src-tauri/tauri.conf.json
 
-# Clean build
-rm -f src/dist/app.js
-npm run build
+rm -rf ~/.local/share/com.volt.* ~/.cache/com.volt.* 2>/dev/null
+rm -rf ~/.local/share/webkitgtk/ ~/.cache/webkitgtk/ 2>/dev/null
+rm -rf dist-frontend/ src/dist/
+mkdir -p src/dist
 
-# Rebuild Rust
+npm run package
 source $HOME/.cargo/env
 cargo build --manifest-path src-tauri/Cargo.toml --release 2>&1 | tail -2
 
-# Launch
 ./src-tauri/target/release/app &
-echo "Volt IDE launched (caches cleared)"
+echo "Volt IDE launched ($CACHE_ID)"
