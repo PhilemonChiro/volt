@@ -891,13 +891,19 @@ button:focus-visible {
     max-height: 240px !important;
 }
 
-/* ---- CodeMirror lint error highlighting ---- */
-.cm-lintRange-error {
-    box-shadow: 0 2px 0 0 #e55 !important;
+/* ---- Error/warning line highlighting (custom decorations) ---- */
+.cm-errorLine {
+    background-color: rgba(238, 68, 68, 0.15) !important;
+    border-left: 3px solid #e55 !important;
 }
-.cm-lintRange-warning {
-    box-shadow: 0 2px 0 0 #cc7a00 !important;
+.cm-warnLine {
+    background-color: rgba(204, 150, 0, 0.12) !important;
+    border-left: 3px solid #cc7a00 !important;
 }
+
+/* ---- CodeMirror lint range (inline spans — may not render on WebKitGTK) ---- */
+.cm-lintRange-error { box-shadow: 0 2px 0 0 #e55 !important; }
+.cm-lintRange-warning { box-shadow: 0 2px 0 0 #cc7a00 !important; }
 .cm-diagnostic {
     font-family: var(--sans) !important;
     font-size: 12px !important;

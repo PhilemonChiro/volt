@@ -12,6 +12,7 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
 import { voltAutocompletion } from "./volt-completions.js";
+import { voltLinter, errorLineField } from "./volt-diagnostics.js";
 import { lintGutter } from "@codemirror/lint";
 // ---- Hover info bar (between editor and bottom panel) ----
 const HOVER_INFO = {
@@ -100,8 +101,6 @@ setTimeout(() => {
 
     editorEl.addEventListener("mouseleave", resetHoverBar);
 }, 500);
-import { voltLinter } from "./volt-diagnostics.js";
-
 // ---- Dark theme for the editor chrome ----
 const voltTheme = EditorView.theme({
     "&": {
@@ -176,6 +175,7 @@ const state = EditorState.create({
         voltTheme,
         voltAutocompletion,
         voltLinter,
+        errorLineField,
         lintGutter(),
         // Update cursor position in status bar
         EditorView.updateListener.of(update => {
