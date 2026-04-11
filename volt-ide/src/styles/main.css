@@ -893,14 +893,10 @@ button:focus-visible {
 
 /* ---- CodeMirror lint error highlighting ---- */
 .cm-lintRange-error {
-    text-decoration: underline 2px #e55 !important;
-    text-underline-offset: 3px !important;
-    background-color: rgba(238, 85, 85, 0.12) !important;
+    box-shadow: 0 2px 0 0 #e55 !important;
 }
 .cm-lintRange-warning {
-    text-decoration: underline 2px #cc7a00 !important;
-    text-underline-offset: 3px !important;
-    background-color: rgba(204, 122, 0, 0.08) !important;
+    box-shadow: 0 2px 0 0 #cc7a00 !important;
 }
 .cm-diagnostic {
     font-family: var(--sans) !important;
