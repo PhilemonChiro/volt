@@ -163,6 +163,8 @@ class CCodeGen:
 
         # Build maps
         self._build_maps(program)
+        self._needs_sprintf_buf = False
+        self._sprintf_buf_idx = 0
 
         # Section 1: Header
         self._emit_header(program)
@@ -236,6 +238,9 @@ class CCodeGen:
         self._out('#include "esp_system.h"')
         self._out('#include "freertos/FreeRTOS.h"')
         self._out('#include "freertos/task.h"')
+        self._out("")
+        # String interpolation buffers (used by string + int concat)
+        self._out("static char _volt_strbuf[4][128];")
         self._out("")
 
     def _emit_forward_decls(self, program: Program):
@@ -789,6 +794,9 @@ class CCodeGen:
             return name
 
         if isinstance(expr, BinaryExpr):
+            # String concatenation: "text" + int → snprintf
+            if expr.op == "+" and self._is_string_concat(expr):
+                return self._emit_string_concat(expr, ctx_prefix, cv)
             left = self._emit_expr_str(expr.left, ctx_prefix, cv)
             right = self._emit_expr_str(expr.right, ctx_prefix, cv)
             return f"({left} {expr.op} {right})"
@@ -882,6 +890,72 @@ class CCodeGen:
 
     def _uses_storage(self, prog):
         return bool(prog.storage_vars) or any(True for _ in _find_calls(self._all_stmts(prog), "storage"))
+
+    # ---- String concatenation with non-string types ----
+
+    def _is_string_concat(self, expr) -> bool:
+        """Check if this binary + expression involves string concatenation with non-strings."""
+        if not isinstance(expr, BinaryExpr) or expr.op != "+":
+            return False
+        # Flatten the concat chain and check if any part is a string literal
+        parts = self._flatten_concat(expr)
+        has_string = any(isinstance(p, StringLiteral) for p in parts)
+        has_nonstring = any(not isinstance(p, StringLiteral) for p in parts)
+        return has_string and has_nonstring
+
+    def _flatten_concat(self, expr) -> list:
+        """Flatten a chain of + expressions into a list of leaf expressions."""
+        if isinstance(expr, BinaryExpr) and expr.op == "+":
+            return self._flatten_concat(expr.left) + self._flatten_concat(expr.right)
+        return [expr]
+
+    def _emit_string_concat(self, expr, ctx_prefix, cv) -> str:
+        """Generate snprintf for string + int/float/bool concatenation.
+        Uses a rotating set of static buffers for nested concat."""
+        parts = self._flatten_concat(expr)
+
+        # Build format string and args
+        fmt_parts = []
+        args = []
+        for part in parts:
+            if isinstance(part, StringLiteral):
+                # Escape % in the string for printf
+                fmt_parts.append(part.value.replace("%", "%%"))
+            elif isinstance(part, IntLiteral):
+                fmt_parts.append("%ld")
+                args.append(f"(long){part.value}")
+            elif isinstance(part, FloatLiteral):
+                fmt_parts.append("%.2f")
+                args.append(f"{part.value}f")
+            elif isinstance(part, BoolLiteral):
+                fmt_parts.append("%s")
+                args.append(f'{"true" if part.value else "false"}')
+            else:
+                # Variable or expression — infer type from context
+                c_expr = self._emit_expr_str(part, ctx_prefix, cv)
+                # Check if it's a method call that returns bool
+                if isinstance(part, MethodCall) and part.method in ("is_connected", "is_on"):
+                    fmt_parts.append("%s")
+                    args.append(f'({c_expr} ? "true" : "false")')
+                elif isinstance(part, MethodCall) and part.method in ("free_heap", "read", "list_count", "uptime", "id"):
+                    fmt_parts.append("%ld")
+                    args.append(f"(long){c_expr}")
+                elif isinstance(part, BinaryExpr):
+                    # Nested expression — assume int
+                    fmt_parts.append("%ld")
+                    args.append(f"(long)({c_expr})")
+                else:
+                    # Default: assume int for VarRef
+                    fmt_parts.append("%ld")
+                    args.append(f"(long){c_expr}")
+
+        # Use a static buffer (volt_sprintf_buf) — declared in volt.h or generated
+        self._needs_sprintf_buf = True
+        buf_idx = getattr(self, '_sprintf_buf_idx', 0)
+        self._sprintf_buf_idx = (buf_idx + 1) % 4
+        fmt = "".join(fmt_parts)
+        args_str = ", ".join(args)
+        return f'(snprintf(_volt_strbuf[{buf_idx}], sizeof(_volt_strbuf[{buf_idx}]), "{fmt}", {args_str}), _volt_strbuf[{buf_idx}])'
 
 
 # ============================================================
