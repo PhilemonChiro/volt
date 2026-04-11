@@ -4,7 +4,8 @@
  */
 
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         highlightActiveLineGutter, drawSelection, rectangularSelection } from "@codemirror/view";
+         highlightActiveLineGutter, drawSelection, rectangularSelection,
+         tooltips } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { bracketMatching, foldGutter, indentOnInput } from "@codemirror/language";
@@ -90,6 +91,8 @@ const state = EditorState.create({
         voltAutocompletion,
         voltHover,
         voltLinter,
+        // Render tooltips in document.body — full viewport positioning
+        tooltips({ parent: document.body }),
         // Update cursor position in status bar
         EditorView.updateListener.of(update => {
             if (update.selectionSet) {
@@ -524,49 +527,6 @@ document.addEventListener("keydown", (e) => {
 // Scan on launch, then every 3 seconds
 scanDevices();
 setInterval(scanDevices, 3000);
-
-// ---- Tooltip viewport containment ----
-// CodeMirror creates tooltips inside .cm-editor with position:absolute
-// We continuously check and reposition any that overflow
-setInterval(() => {
-    document.querySelectorAll(".cm-tooltip").forEach(constrainToViewport);
-}, 100);
-
-function constrainToViewport(el) {
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0) return; // not visible
-
-    const pad = 8;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const toolbarH = 52;
-    let changed = false;
-
-    // Right edge
-    if (rect.right > vw - pad) {
-        el.style.left = Math.max(pad, vw - rect.width - pad) + "px";
-        el.style.position = "fixed";
-        changed = true;
-    }
-    // Left edge
-    if (rect.left < pad) {
-        el.style.left = pad + "px";
-        el.style.position = "fixed";
-        changed = true;
-    }
-    // Top edge — don't go behind toolbar
-    if (rect.top < toolbarH) {
-        el.style.top = toolbarH + "px";
-        el.style.position = "fixed";
-        changed = true;
-    }
-    // Bottom edge
-    if (rect.bottom > vh - pad) {
-        el.style.top = Math.max(toolbarH, vh - rect.height - pad) + "px";
-        el.style.position = "fixed";
-        changed = true;
-    }
-}
 
 // ---- Welcome screen ----
 function showWelcome() {
