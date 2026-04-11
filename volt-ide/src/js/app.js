@@ -176,5 +176,48 @@ try {
     // Not running in Tauri
 }
 
+// ---- Device detection ----
+let currentDevices = [];
+
+async function scanDevices() {
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const devices = await invoke("scan_devices");
+        currentDevices = devices;
+        updateDeviceUI(devices);
+    } catch (e) {
+        // Not in Tauri or scan failed
+        updateDeviceUI([]);
+    }
+}
+
+function updateDeviceUI(devices) {
+    const label = document.getElementById("deviceLabel");
+    const dot = document.getElementById("deviceDot");
+    const statusChip = document.getElementById("statusChip");
+    const statusDot = document.getElementById("statusDot");
+    const statusPort = document.getElementById("statusPort");
+
+    if (devices.length === 0) {
+        label.textContent = "No device";
+        dot.className = "device-dot";
+        statusChip.innerHTML = '<span class="status-dot" id="statusDot"></span> No device';
+        statusPort.textContent = "";
+    } else {
+        const d = devices[0];
+        label.textContent = `${d.chip}`;
+        dot.className = "device-dot connected";
+        statusChip.innerHTML = `<span class="status-dot on" id="statusDot"></span> ${d.chip}`;
+        statusPort.textContent = d.port;
+    }
+}
+
+// Scan on launch, then every 3 seconds
+scanDevices();
+setInterval(scanDevices, 3000);
+
+// Manual scan button
+document.getElementById("deviceSelector")?.addEventListener("click", scanDevices);
+
 // ---- Focus editor on load ----
 editor.focus();
