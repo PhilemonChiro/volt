@@ -136,7 +136,21 @@ class ASTBuilder(Transformer):
         name = children[0]
         mode = children[1]
         gpio_expr = children[2]
-        gpio_val = gpio_expr.value if isinstance(gpio_expr, IntLiteral) else 0
+        # Extract GPIO number from: integer (2), GP-prefixed name (GP25), or PA-style (PA5)
+        if isinstance(gpio_expr, IntLiteral):
+            gpio_val = gpio_expr.value
+        elif isinstance(gpio_expr, VarRef):
+            pin_str = gpio_expr.name.upper()
+            if pin_str.startswith("GP") and pin_str[2:].isdigit():
+                gpio_val = int(pin_str[2:])
+            elif pin_str.startswith("P") and len(pin_str) >= 3 and pin_str[1].isalpha() and pin_str[2:].isdigit():
+                # STM32 style: PA5 → port=0, pin=5 — store as (port * 16 + pin) for now
+                port = ord(pin_str[1]) - ord('A')
+                gpio_val = port * 16 + int(pin_str[2:])
+            else:
+                gpio_val = 0
+        else:
+            gpio_val = 0
         return PinDecl(
             name=str(name), mode=mode, gpio=gpio_val,
             region=_region(name),
