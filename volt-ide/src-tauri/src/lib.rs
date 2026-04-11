@@ -4,7 +4,7 @@ mod runner;
 mod projects;
 
 use devices::Device;
-use projects::ProjectInfo;
+use projects::{ProjectInfo, BrowseResult};
 
 #[tauri::command]
 fn scan_devices() -> Vec<Device> {
@@ -47,7 +47,7 @@ fn create_project(name: String, chip: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn browse_volt_file() -> Option<String> {
+fn browse_volt_file() -> Option<BrowseResult> {
     projects::browse_volt_file()
 }
 

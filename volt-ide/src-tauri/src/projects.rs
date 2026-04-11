@@ -148,8 +148,8 @@ pub struct ProjectInfo {
 }
 
 /// Open a native file dialog filtered to .volt files.
-/// Returns the parent folder (project path) of the selected file.
-pub fn browse_volt_file() -> Option<String> {
+/// Returns { folder, file } — the full file path and its parent folder.
+pub fn browse_volt_file() -> Option<BrowseResult> {
     let projects_dir = dirs::home_dir()
         .map(|h| h.join("Volt"))
         .unwrap_or_default();
@@ -160,5 +160,16 @@ pub fn browse_volt_file() -> Option<String> {
         .add_filter("Volt source files", &["volt"])
         .pick_file();
 
-    file.and_then(|f| f.parent().map(|p| p.to_string_lossy().to_string()))
+    file.map(|f| BrowseResult {
+        file: f.to_string_lossy().to_string(),
+        folder: f.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
+        name: f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+    })
+}
+
+#[derive(serde::Serialize)]
+pub struct BrowseResult {
+    pub file: String,
+    pub folder: String,
+    pub name: String,
 }

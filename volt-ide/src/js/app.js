@@ -141,12 +141,10 @@ document.getElementById("runBtn").addEventListener("click", async () => {
         }
 
         // Save current editor content before building
+        const savePath = currentVoltFile || (currentProjectPath + "/main.volt");
         try {
             const content = editor.state.doc.toString();
-            await invoke("save_file", {
-                path: currentProjectPath + "/main.volt",
-                content,
-            });
+            await invoke("save_file", { path: savePath, content });
         } catch (e) {
             appendMonitor("Cannot save: " + e, "error");
         }
@@ -316,10 +314,10 @@ document.getElementById("pickerCloseBtn").addEventListener("click", () => {
 document.getElementById("pickerBrowseBtn").addEventListener("click", async () => {
     try {
         const { invoke } = await import("@tauri-apps/api/core");
-        const path = await invoke("browse_volt_file");
-        if (path) {
+        const result = await invoke("browse_volt_file");
+        if (result) {
             pickerOverlay.classList.remove("open");
-            await loadProject(path);
+            await loadProjectFile(result.folder, result.file, result.name);
         }
     } catch (e) {
         appendMonitor("Browse failed: " + e, "error");
@@ -364,37 +362,30 @@ document.getElementById("newProjectBtn").addEventListener("click", async () => {
 // ---- Project loading ----
 let currentProjectPath = null;
 
-async function loadProject(path) {
-    currentProjectPath = path;
+let currentVoltFile = null;
 
+async function loadProject(folder) {
+    // Try main.volt first, then first .volt file found
+    await loadProjectFile(folder, folder + "/main.volt", "main.volt");
+}
+
+async function loadProjectFile(folder, filePath, fileName) {
     try {
         const { invoke } = await import("@tauri-apps/api/core");
+        const content = await invoke("read_file", { path: filePath });
 
-        // Find the .volt file — try main.volt first, then any .volt file
-        let voltFile = null;
-        let content = null;
+        currentProjectPath = folder;
+        currentVoltFile = filePath;
 
-        try {
-            content = await invoke("read_file", { path: path + "/main.volt" });
-            voltFile = "main.volt";
-        } catch {
-            // No main.volt — list files and find first .volt
-            // For now, just report
-        }
+        editor.dispatch({
+            changes: { from: 0, to: editor.state.doc.length, insert: content }
+        });
 
-        if (content) {
-            editor.dispatch({
-                changes: { from: 0, to: editor.state.doc.length, insert: content }
-            });
-
-            const projectName = path.split("/").pop();
-            document.title = projectName + " — Volt IDE";
-            appendMonitor("Opened: " + path + "/" + voltFile, "info");
-        } else {
-            appendMonitor("No .volt file found in " + path, "warn");
-        }
+        const projectName = folder.split("/").pop();
+        document.title = fileName + " — " + projectName + " — Volt IDE";
+        appendMonitor("Opened: " + filePath, "info");
     } catch (e) {
-        appendMonitor("Cannot open project: " + e, "error");
+        appendMonitor("Cannot read " + filePath + ": " + e, "error");
     }
 }
 
