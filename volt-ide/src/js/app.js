@@ -80,25 +80,28 @@ function showHover(e) {
 
     hoverTip.textContent = doc;
 
-    // Position: below and to the right of cursor, clamped to viewport
+    // Position tooltip near cursor, always inside viewport
     const pad = 8;
+    const toolbarBottom = 52;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    let x = e.clientX + 12;
-    let y = e.clientY + 16;
 
-    // Measure tooltip
+    // Measure first
+    hoverTip.style.left = "0px";
+    hoverTip.style.top = "0px";
     hoverTip.classList.add("visible");
-    const rect = hoverTip.getBoundingClientRect();
+    const tw = hoverTip.offsetWidth;
+    const th = hoverTip.offsetHeight;
 
-    // Clamp right
-    if (x + rect.width > vw - pad) x = vw - rect.width - pad;
-    // Clamp left
+    // X: to the right of cursor, clamp to edges
+    let x = e.clientX + 12;
+    if (x + tw > vw - pad) x = vw - tw - pad;
     if (x < pad) x = pad;
-    // Clamp bottom — show above cursor if no room below
-    if (y + rect.height > vh - pad) y = e.clientY - rect.height - 8;
-    // Clamp top
-    if (y < pad) y = pad;
+
+    // Y: always below cursor. If that goes off-screen, still below but clamped.
+    let y = e.clientY + 20;
+    if (y + th > vh - pad) y = vh - th - pad;
+    if (y < toolbarBottom) y = toolbarBottom;
 
     hoverTip.style.left = x + "px";
     hoverTip.style.top = y + "px";
