@@ -6,8 +6,13 @@ import { hoverTooltip } from "@codemirror/view";
 import { HOVER_DOCS } from "./volt-completions.js";
 
 export const voltHover = hoverTooltip((view, pos) => {
-    const { from, to, text } = view.state.doc.lineAt(pos);
+    const { from, to, text, number: lineNumber } = view.state.doc.lineAt(pos);
     const lineText = text;
+
+    // Decide positioning: show below if near the top of the editor
+    const coords = view.coordsAtPos(pos);
+    const editorTop = view.dom.getBoundingClientRect().top;
+    const showAbove = coords ? (coords.top - editorTop > 80) : false;
 
     // Find the word under cursor
     let start = pos - from;
@@ -25,7 +30,7 @@ export const voltHover = hoverTooltip((view, pos) => {
         return {
             pos: from + start,
             end: from + end,
-            above: false,
+            above: showAbove,
             create() {
                 const dom = document.createElement("div");
                 dom.className = "volt-tooltip";
@@ -46,7 +51,7 @@ export const voltHover = hoverTooltip((view, pos) => {
                 return {
                     pos: from + start,
                     end: from + end,
-                    above: false,
+                    above: showAbove,
                     create() {
                         const dom = document.createElement("div");
                         dom.className = "volt-tooltip";
@@ -65,7 +70,7 @@ export const voltHover = hoverTooltip((view, pos) => {
         return {
             pos: from + start,
             end: from + end,
-            above: false,
+            above: showAbove,
             create() {
                 const dom = document.createElement("div");
                 dom.className = "volt-tooltip";
@@ -85,7 +90,7 @@ export const voltHover = hoverTooltip((view, pos) => {
         return {
             pos: from + start,
             end: from + start + durMatch[0].length,
-            above: false,
+            above: showAbove,
             create() {
                 const dom = document.createElement("div");
                 dom.className = "volt-tooltip";
