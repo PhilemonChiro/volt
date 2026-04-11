@@ -16,11 +16,6 @@ pub fn run_pipeline(app: AppHandle, project_path: String, volt_file: String, por
         let app = app.clone();
 
         // Stage 1: Compile .volt → C
-        // Stop any existing monitor and release the serial port
-        crate::serial::stop_monitor();
-        crate::serial::release_port(&port);
-        std::thread::sleep(std::time::Duration::from_millis(300));
-
         emit(&app, "compile", "Compiling Volt source...", 10);
 
         if !std::path::Path::new(&volt_file).exists() {
@@ -118,6 +113,12 @@ else:
         emit(&app, "build", "Build complete", 60);
 
         // Stage 3: Flash
+        // Stop monitor and force-release port RIGHT before flash
+        crate::serial::stop_monitor();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        crate::serial::release_port(&port);
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
         emit(&app, "flash", &format!("Flashing to {} on {}...", actual_chip.to_uppercase(), port), 65);
 
         let flash_ok = if chip_lower.contains("esp") {
