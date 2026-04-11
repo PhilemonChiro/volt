@@ -90,15 +90,21 @@ else:
 
         emit(&app, "compile", "Compiled successfully", 25);
 
-        // Stage 2: Build (SDK-specific)
-        emit(&app, "build", "Building firmware...", 30);
+        // Read the actual chip from the compiled source (not from USB detection)
+        let actual_chip = read_chip_from_source(&volt_file).unwrap_or(chip.clone());
+        let chip_lower = actual_chip.to_lowercase();
 
-        let build_ok = if chip.contains("esp") {
-            run_esp_build(&app, &project_path, &chip)
-        } else if chip.contains("rp2040") || chip.contains("pico") {
+        emit(&app, "build", &format!("Building for {}...", actual_chip.to_uppercase()), 30);
+
+        let build_ok = if chip_lower.contains("esp") {
+            run_esp_build(&app, &project_path, &chip_lower)
+        } else if chip_lower.contains("rp2040") || chip_lower.contains("pico") {
             run_pico_build(&app, &project_path)
+        } else if chip_lower.contains("stm32") {
+            emit(&app, "error", "STM32 build not yet implemented", 0);
+            false
         } else {
-            emit(&app, "error", &format!("Unknown chip: {}", chip), 0);
+            emit(&app, "error", &format!("Unknown chip: {}. Supported: esp32, esp8266, rp2040", actual_chip), 0);
             false
         };
 
@@ -107,11 +113,11 @@ else:
         emit(&app, "build", "Build complete", 60);
 
         // Stage 3: Flash
-        emit(&app, "flash", "Flashing to device...", 65);
+        emit(&app, "flash", &format!("Flashing to {} on {}...", actual_chip.to_uppercase(), port), 65);
 
-        let flash_ok = if chip.contains("esp") {
-            run_esp_flash(&app, &project_path, &port, &chip)
-        } else if chip.contains("rp2040") || chip.contains("pico") {
+        let flash_ok = if chip_lower.contains("esp") {
+            run_esp_flash(&app, &project_path, &port, &chip_lower)
+        } else if chip_lower.contains("rp2040") || chip_lower.contains("pico") {
             run_pico_flash(&app, &project_path, &port)
         } else {
             false
@@ -262,6 +268,18 @@ fn run_pico_flash(app: &AppHandle, project_path: &str, port: &str) -> bool {
         emit(app, "error", "Pico not in BOOTSEL mode — hold BOOTSEL and replug", 0);
         false
     }
+}
+
+/// Read the chip declaration from a .volt source file
+fn read_chip_from_source(volt_file: &str) -> Option<String> {
+    let source = std::fs::read_to_string(volt_file).ok()?;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("chip ") {
+            return Some(trimmed[5..].trim().to_string());
+        }
+    }
+    None
 }
 
 fn get_volt_src_path() -> String {

@@ -1,11 +1,36 @@
 use serde::Serialize;
 use serialport;
+use std::process::Command;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct Device {
     pub port: String,
     pub chip: String,
     pub desc: String,
+}
+
+/// Try to identify Espressif chip via esptool (runs in ~3 seconds)
+fn detect_espressif_chip(port: &str) -> Option<String> {
+    let output = Command::new("python3")
+        .args(["-m", "esptool", "--port", port, "chip-id"])
+        .output()
+        .ok()?;
+
+    let text = String::from_utf8_lossy(&output.stdout).to_string()
+        + &String::from_utf8_lossy(&output.stderr);
+
+    for line in text.lines() {
+        let lower = line.to_lowercase();
+        if lower.contains("detecting chip type") || lower.contains("chip type:") {
+            let cleaned = lower.replace("-", "").replace(" ", "");
+            for chip in ["esp32s3", "esp32s2", "esp32c3", "esp32c6", "esp32h2", "esp32", "esp8266"] {
+                if cleaned.contains(chip) {
+                    return Some(chip.to_uppercase());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Known USB vendor IDs for microcontrollers
@@ -38,9 +63,9 @@ pub fn scan_devices() -> Vec<Device> {
                 let chip = if let Some(c) = chip_from_vid_pid(vid, pid) {
                     c.to_string()
                 } else if vid == 0x10C4 || vid == 0x1A86 || vid == 0x0403 {
-                    // CH340/CP2102/FTDI — could be ESP32 or ESP8266
-                    // Would need esptool to identify, mark as pending
-                    "Espressif".to_string()
+                    // CH340/CP2102/FTDI — try esptool to identify
+                    detect_espressif_chip(&port.port_name)
+                        .unwrap_or_else(|| "ESP".to_string())
                 } else {
                     continue; // Skip non-MCU devices
                 };
