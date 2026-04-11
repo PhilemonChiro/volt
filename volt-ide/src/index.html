@@ -41,22 +41,8 @@
         </div>
     </header>
 
-    <!-- WELCOME -->
-    <main id="welcomeScreen">
-        <div class="welcome-content">
-            <img src="assets/volt-logo.svg" class="welcome-logo" alt="Volt" width="72" height="72">
-            <h1 class="welcome-title">Volt IDE</h1>
-            <p class="welcome-sub">A typed, hardware-aware language for embedded systems</p>
-            <div class="welcome-actions">
-                <button class="welcome-btn welcome-btn-primary" id="welcomeNewBtn">+ New Project</button>
-                <button class="welcome-btn" id="welcomeOpenBtn">Open Project</button>
-            </div>
-            <div id="welcomeRecent"></div>
-        </div>
-    </main>
-
-    <!-- EDITOR -->
-    <div id="editorContainer" style="display:none"></div>
+    <!-- EDITOR (always visible — Monaco needs a visible container) -->
+    <div id="editorContainer"></div>
 
     <!-- BOTTOM PANEL -->
     <section id="bottomPanel">

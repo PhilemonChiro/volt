@@ -64,43 +64,38 @@ monaco.editor.defineTheme("volt-dark", {
     },
 });
 
-// ---- Editor ----
-const container = document.getElementById("editorContainer");
-let editor = null;
+// ---- Editor — created immediately, always visible ----
+var container = document.getElementById("editorContainer");
 
-function createEditor(content) {
-    if (editor) { editor.setValue(content); return; }
-    editor = monaco.editor.create(container, {
-        value: content,
-        language: "volt",
-        theme: "volt-dark",
-        fontSize: 14,
-        fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-        lineHeight: 24,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        renderLineHighlight: "all",
-        cursorBlinking: "smooth",
-        cursorWidth: 2,
-        automaticLayout: true,
-        padding: { top: 8 },
-        glyphMargin: true,
-        overviewRulerBorder: false,
-        scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-    });
+var editor = monaco.editor.create(container, {
+    value: "// Open or create a project to start\n",
+    language: "volt",
+    theme: "volt-dark",
+    fontSize: 14,
+    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+    lineHeight: 24,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    renderLineHighlight: "all",
+    cursorBlinking: "smooth",
+    cursorWidth: 2,
+    automaticLayout: true,
+    padding: { top: 8 },
+    glyphMargin: true,
+    overviewRulerBorder: false,
+    scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
+});
 
-    editor.onDidChangeCursorPosition(function(e) {
-        var el = document.getElementById("statusLine");
-        if (el) el.textContent = "Ln " + e.position.lineNumber + ", Col " + e.position.column;
-    });
+editor.onDidChangeCursorPosition(function(e) {
+    var el = document.getElementById("statusLine");
+    if (el) el.textContent = "Ln " + e.position.lineNumber + ", Col " + e.position.column;
+});
 
-    // Diagnostics after typing
-    var diagTimer = null;
-    editor.onDidChangeModelContent(function() {
-        clearTimeout(diagTimer);
-        diagTimer = setTimeout(runDiagnostics, 1500);
-    });
-}
+var diagTimer = null;
+editor.onDidChangeModelContent(function() {
+    clearTimeout(diagTimer);
+    diagTimer = setTimeout(runDiagnostics, 1500);
+});
 
 // ---- Diagnostics ----
 function runDiagnostics() {
@@ -214,9 +209,7 @@ function loadProject(folder) {
     window.__TAURI__.core.invoke("read_file", { path: folder + "/main.volt" }).then(function(content) {
         currentProjectPath = folder;
         currentVoltFile = folder + "/main.volt";
-        document.getElementById("welcomeScreen").style.display = "none";
-        container.style.display = "block";
-        createEditor(content);
+        editor.setValue(content);
         document.title = folder.split("/").pop() + " — Volt IDE";
         appendMonitor("Opened: " + currentVoltFile, "info");
         setTimeout(runDiagnostics, 500);
@@ -251,8 +244,7 @@ document.getElementById("openProjectBtn")?.addEventListener("click", function() 
     window.__TAURI__.core.invoke("browse_volt_file").then(function(result) { if (result) loadProject(result.folder); });
 });
 
-document.getElementById("welcomeNewBtn")?.addEventListener("click", function() { document.getElementById("newProjectBtn")?.click(); });
-document.getElementById("welcomeOpenBtn")?.addEventListener("click", function() { document.getElementById("openProjectBtn")?.click(); });
+// Welcome buttons removed — editor always visible
 
 // Load recent projects
 (function() {
