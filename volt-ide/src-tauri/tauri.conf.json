@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.volt.ide",
   "build": {
-    "frontendDist": "../src",
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run build"
+    "frontendDist": "../dist-frontend",
+    "beforeBuildCommand": "npm run package",
+    "beforeDevCommand": "npm run package"
   },
   "app": {
     "windows": [
