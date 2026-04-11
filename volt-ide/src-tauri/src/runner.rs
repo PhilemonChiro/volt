@@ -16,6 +16,10 @@ pub fn run_pipeline(app: AppHandle, project_path: String, volt_file: String, por
         let app = app.clone();
 
         // Stage 1: Compile .volt → C
+        // Stop serial monitor before flashing (releases the port)
+        crate::serial::stop_monitor();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
         emit(&app, "compile", "Compiling Volt source...", 10);
 
         if !std::path::Path::new(&volt_file).exists() {
@@ -126,6 +130,11 @@ else:
         if !flash_ok { return; }
 
         emit(&app, "done", "Running on device", 100);
+
+        // Auto-start serial monitor after successful flash
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let baud = if chip_lower.contains("8266") { 74880 } else { 115200 };
+        crate::serial::start_monitor(app.clone(), port, baud);
     });
 }
 
@@ -148,10 +157,26 @@ fn stream_command(app: &AppHandle, mut cmd: Command, stage: &str) -> bool {
         }
     };
 
-    // Stream stdout
+    // Stream stdout — filter noisy SDK output
     if let Some(stdout) = child.stdout.take() {
         let reader = BufReader::new(stdout);
         for line in reader.lines().flatten() {
+            let trimmed = line.trim();
+            // Skip noisy/useless lines
+            if trimmed.is_empty() { continue; }
+            if trimmed.starts_with("Checking \"python") { continue; }
+            if trimmed.starts_with("Python ") { continue; }
+            if trimmed.starts_with("\"python") { continue; }
+            if trimmed.starts_with("Done! You can now") { continue; }
+            if trimmed.starts_with("Go to the project") { continue; }
+            if trimmed.starts_with("  idf.py") { continue; }
+            if trimmed.starts_with("  make") { continue; }
+            if trimmed.starts_with("-- Component paths:") { continue; }
+            if trimmed.starts_with("-- Components:") { continue; }
+            if trimmed.starts_with("-- Adding linker") { continue; }
+            if trimmed.starts_with("or from the") { continue; }
+            if trimmed.starts_with("  python -m esptool") { continue; }
+            if trimmed == "or" { continue; }
             let _ = app.emit("run:output", &line);
         }
     }
