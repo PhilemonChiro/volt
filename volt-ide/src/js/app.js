@@ -526,41 +526,45 @@ scanDevices();
 setInterval(scanDevices, 3000);
 
 // ---- Tooltip viewport containment ----
-// Watch for CodeMirror tooltips and nudge them inside the window
-const tooltipObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-        for (const node of m.addedNodes) {
-            if (node.nodeType === 1 && node.classList?.contains("cm-tooltip")) {
-                requestAnimationFrame(() => constrainToViewport(node));
-            }
-        }
-    }
-});
-tooltipObserver.observe(document.body, { childList: true, subtree: true });
+// CodeMirror creates tooltips inside .cm-editor with position:absolute
+// We continuously check and reposition any that overflow
+setInterval(() => {
+    document.querySelectorAll(".cm-tooltip").forEach(constrainToViewport);
+}, 100);
 
 function constrainToViewport(el) {
     const rect = el.getBoundingClientRect();
+    if (rect.width === 0) return; // not visible
+
     const pad = 8;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const toolbarH = 52;
+    let changed = false;
 
-    // Right edge overflow
+    // Right edge
     if (rect.right > vw - pad) {
-        const shift = rect.right - (vw - pad);
-        el.style.left = (parseFloat(el.style.left || 0) - shift) + "px";
+        el.style.left = Math.max(pad, vw - rect.width - pad) + "px";
+        el.style.position = "fixed";
+        changed = true;
     }
-    // Left edge overflow
+    // Left edge
     if (rect.left < pad) {
         el.style.left = pad + "px";
+        el.style.position = "fixed";
+        changed = true;
     }
-    // Bottom edge overflow — move above the target
+    // Top edge — don't go behind toolbar
+    if (rect.top < toolbarH) {
+        el.style.top = toolbarH + "px";
+        el.style.position = "fixed";
+        changed = true;
+    }
+    // Bottom edge
     if (rect.bottom > vh - pad) {
-        const shift = rect.bottom - (vh - pad);
-        el.style.top = (parseFloat(el.style.top || 0) - shift) + "px";
-    }
-    // Top edge overflow (behind toolbar)
-    if (rect.top < 52) {
-        el.style.top = "52px";
+        el.style.top = Math.max(toolbarH, vh - rect.height - pad) + "px";
+        el.style.position = "fixed";
+        changed = true;
     }
 }
 
