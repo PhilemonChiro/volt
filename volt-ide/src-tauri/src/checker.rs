@@ -19,7 +19,7 @@ pub fn check_code(source: &str) -> Vec<DiagnosticItem> {
     std::fs::write(&tmp, source).ok();
 
     let script = format!(
-r#"import sys, json
+r#"import sys, json, re
 sys.path.insert(0, '{}')
 from volt.compiler.voltc import compile_volt
 
@@ -27,10 +27,20 @@ source = open('{}').read()
 _, errors = compile_volt(source, 'check.volt')
 result = []
 for e in errors.errors:
+    line = e.region.start_line if e.region else 1
+    col = e.region.start_col if e.region else 1
+    msg = e.message
+    # Extract real line number from parser error messages like "at line 15, column 8"
+    m = re.search(r'at line (\d+)', msg)
+    if m and line <= 1:
+        line = int(m.group(1))
+    mc = re.search(r'column (\d+)', msg)
+    if mc and col <= 1:
+        col = int(mc.group(1))
     result.append({{
-        'line': e.region.start_line if e.region else 1,
-        'col': e.region.start_col if e.region else 1,
-        'message': e.message,
+        'line': line,
+        'col': col,
+        'message': msg,
         'severity': e.severity,
         'hint': e.hint or ''
     }})
