@@ -33,18 +33,34 @@ pub fn run_pipeline(app: AppHandle, project_path: String, volt_file: String, por
         // Ensure build dir exists
         std::fs::create_dir_all(format!("{}/build", project_path)).ok();
 
+        // Write a temp Python script (avoids shell escaping issues with -c)
+        let script_path = format!("{}/build/_volt_compile.py", project_path);
+        let script = format!(
+r#"import sys
+sys.path.insert(0, "{src}")
+from volt.compiler.voltc import compile_volt
+from pathlib import Path
+
+source = Path("{volt_file}").read_text()
+c_code, errors = compile_volt(source, "{name}")
+errs = [e for e in errors.errors if e.severity == "error"]
+if errs:
+    print("ERROR:" + errs[0].message)
+elif c_code:
+    Path("{out}").write_text(c_code)
+    print("OK")
+else:
+    print("ERROR:compilation produced no output")
+"#,
+            src = get_volt_src_path(),
+            volt_file = volt_file,
+            name = file_name,
+            out = format!("{}/build/main.c", project_path),
+        );
+        std::fs::write(&script_path, &script).ok();
+
         let compile_result = Command::new("python3")
-            .args(["-c", &format!(
-                "import sys; sys.path.insert(0, '{}'); \
-                 from volt.compiler.voltc import compile_volt; \
-                 from pathlib import Path; \
-                 source = Path('{}').read_text(); \
-                 c, e = compile_volt(source, '{}'); \
-                 errs = [x for x in e.errors if x.severity == 'error']; \
-                 if errs: print('ERROR:' + errs[0].message); \
-                 elif c: Path('{}/build/main.c').write_text(c); print('OK')",
-                get_volt_src_path(), volt_file, file_name, project_path
-            )])
+            .arg(&script_path)
             .output();
 
         match compile_result {
