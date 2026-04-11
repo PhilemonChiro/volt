@@ -63,9 +63,9 @@ pub fn scan_devices() -> Vec<Device> {
                 let chip = if let Some(c) = chip_from_vid_pid(vid, pid) {
                     c.to_string()
                 } else if vid == 0x10C4 || vid == 0x1A86 || vid == 0x0403 {
-                    // CH340/CP2102/FTDI — try esptool to identify
-                    detect_espressif_chip(&port.port_name)
-                        .unwrap_or_else(|| "ESP".to_string())
+                    // CH340/CP2102/FTDI — mark as ESP, don't probe every scan
+                    // esptool probe is too slow and holds the port
+                    "ESP".to_string()
                 } else {
                     continue; // Skip non-MCU devices
                 };

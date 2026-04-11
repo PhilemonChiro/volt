@@ -96,24 +96,14 @@ else:
 
         emit(&app, "build", &format!("Building for {}...", actual_chip.to_uppercase()), 30);
 
-        let build_ok = if chip_lower.contains("esp") {
-            run_esp_build(&app, &project_path, &chip_lower)
-        } else if chip_lower.contains("rp2040") || chip_lower.contains("pico") {
-            run_pico_build(&app, &project_path)
-        } else if chip_lower.contains("stm32") {
-            emit(&app, "error", "STM32 build not yet implemented", 0);
-            false
-        } else {
-            emit(&app, "error", &format!("Unknown chip: {}. Supported: esp32, esp8266, rp2040", actual_chip), 0);
-            false
-        };
+        let build_ok = run_build(&app, &project_path, &chip_lower);
 
         if !build_ok { return; }
 
         emit(&app, "build", "Build complete", 60);
 
         // Stage 3: Flash
-        // Stop monitor and force-release port RIGHT before flash
+        // Stop monitor and release port before flash
         crate::serial::stop_monitor();
         std::thread::sleep(std::time::Duration::from_millis(500));
         crate::serial::release_port(&port);
@@ -121,13 +111,7 @@ else:
 
         emit(&app, "flash", &format!("Flashing to {} on {}...", actual_chip.to_uppercase(), port), 65);
 
-        let flash_ok = if chip_lower.contains("esp") {
-            run_esp_flash(&app, &project_path, &port, &chip_lower)
-        } else if chip_lower.contains("rp2040") || chip_lower.contains("pico") {
-            run_pico_flash(&app, &project_path, &port)
-        } else {
-            false
-        };
+        let flash_ok = run_flash(&app, &project_path, &port);
 
         if !flash_ok { return; }
 
@@ -197,129 +181,20 @@ fn stream_command(app: &AppHandle, mut cmd: Command, stage: &str) -> bool {
     }
 }
 
-fn get_framework_dir() -> std::path::PathBuf {
-    let home = dirs::home_dir().unwrap();
-    // Try dev location first, then installed SDK
-    let dev = home.join("dev/volt/framework");
-    if dev.exists() { return dev; }
-    let sdk = home.join(".volt/sdk/framework");
-    if sdk.exists() { return sdk; }
-    dev // fallback
-}
-
-fn run_esp_build(app: &AppHandle, project_path: &str, chip: &str) -> bool {
-    let idf_path = if chip.contains("8266") {
-        dirs::home_dir().unwrap().join(".volt/toolchains/esp8266-rtos-sdk")
-    } else {
-        let home = dirs::home_dir().unwrap();
-        if home.join("esp/esp-idf").exists() {
-            home.join("esp/esp-idf")
-        } else {
-            home.join(".volt/toolchains/esp-idf")
-        }
-    };
-
-    let fw_dir = get_framework_dir();
-    if !fw_dir.exists() {
-        emit(app, "error", &format!("Framework not found at {}", fw_dir.display()), 0);
-        return false;
-    }
-
-    // Copy generated main.c into the framework build location
-    let src = format!("{}/build/main.c", project_path);
-    let dst = fw_dir.join("main/main.c");
-    if let Err(e) = std::fs::copy(&src, &dst) {
-        emit(app, "error", &format!("Cannot copy main.c to framework: {}", e), 0);
-        return false;
-    }
-
-    let mut cmd = Command::new("bash");
-    cmd.arg("-c")
-       .arg(format!("source {}/export.sh 2>/dev/null && idf.py build", idf_path.display()))
-       .current_dir(&fw_dir);
+fn run_build(app: &AppHandle, project_path: &str, chip: &str) -> bool {
+    let mut cmd = Command::new("volt");
+    cmd.arg("build")
+       .current_dir(project_path);
 
     stream_command(app, cmd, "Build")
 }
 
-fn run_esp_flash(app: &AppHandle, _project_path: &str, port: &str, chip: &str) -> bool {
-    let idf_path = if chip.contains("8266") {
-        dirs::home_dir().unwrap().join(".volt/toolchains/esp8266-rtos-sdk")
-    } else {
-        let home = dirs::home_dir().unwrap();
-        if home.join("esp/esp-idf").exists() {
-            home.join("esp/esp-idf")
-        } else {
-            home.join(".volt/toolchains/esp-idf")
-        }
-    };
-
-    let fw_dir = get_framework_dir();
-
-    let mut cmd = Command::new("bash");
-    cmd.arg("-c")
-       .arg(format!("source {}/export.sh 2>/dev/null && idf.py -p {} flash", idf_path.display(), port))
-       .current_dir(&fw_dir);
+fn run_flash(app: &AppHandle, project_path: &str, port: &str) -> bool {
+    let mut cmd = Command::new("volt");
+    cmd.args(["flash", "--port", port])
+       .current_dir(project_path);
 
     stream_command(app, cmd, "Flash")
-}
-
-fn run_pico_build(app: &AppHandle, project_path: &str) -> bool {
-    let sdk = dirs::home_dir().unwrap().join(".volt/toolchains/pico-sdk");
-
-    let build_dir = format!("{}/build", project_path);
-    std::fs::create_dir_all(&build_dir).ok();
-
-    let mut cmd = Command::new("bash");
-    cmd.arg("-c")
-       .arg(format!("PICO_SDK_PATH={} cmake .. && make -j$(nproc)", sdk.display()))
-       .current_dir(&build_dir);
-
-    stream_command(app, cmd, "Build")
-}
-
-fn run_pico_flash(app: &AppHandle, project_path: &str, port: &str) -> bool {
-    // Send reboot command then copy UF2
-    // For now just emit that it needs BOOTSEL
-    emit(app, "flash", "Flashing Pico...", 80);
-
-    // Try to send reset command to enter BOOTSEL
-    if let Ok(mut serial) = serialport::new(port, 115200)
-        .timeout(std::time::Duration::from_millis(500))
-        .open()
-    {
-        use std::io::Write;
-        let _ = serial.write(&[0x07]); // BEL = reboot to BOOTSEL
-        drop(serial);
-        std::thread::sleep(std::time::Duration::from_secs(2));
-    }
-
-    // Look for UF2 mount
-    let home = dirs::home_dir().unwrap();
-    let user = std::env::var("USER").unwrap_or_default();
-    let mount = format!("/media/{}/RPI-RP2", user);
-
-    if std::path::Path::new(&mount).exists() {
-        let uf2 = format!("{}/build/*.uf2", project_path);
-        let result = Command::new("bash")
-            .arg("-c")
-            .arg(format!("cp {}  {}/", uf2, mount))
-            .output();
-
-        match result {
-            Ok(o) if o.status.success() => {
-                emit(app, "flash", "UF2 copied — Pico rebooting", 95);
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                true
-            }
-            _ => {
-                emit(app, "error", "Failed to copy UF2 to Pico", 0);
-                false
-            }
-        }
-    } else {
-        emit(app, "error", "Pico not in BOOTSEL mode — hold BOOTSEL and replug", 0);
-        false
-    }
 }
 
 /// Read the chip declaration from a .volt source file
