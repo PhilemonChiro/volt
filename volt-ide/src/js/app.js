@@ -191,33 +191,88 @@ async function scanDevices() {
     }
 }
 
+let selectedDeviceIndex = 0;
+
 function updateDeviceUI(devices) {
     const label = document.getElementById("deviceLabel");
     const dot = document.getElementById("deviceDot");
     const statusChip = document.getElementById("statusChip");
-    const statusDot = document.getElementById("statusDot");
     const statusPort = document.getElementById("statusPort");
+    const dropdownList = document.getElementById("dropdownList");
+    const dropdownEmpty = document.getElementById("dropdownEmpty");
 
     if (devices.length === 0) {
         label.textContent = "No device";
         dot.className = "device-dot";
-        statusChip.innerHTML = '<span class="status-dot" id="statusDot"></span> No device';
+        statusChip.innerHTML = '<span class="status-dot"></span> No device';
         statusPort.textContent = "";
+        dropdownEmpty.style.display = "block";
+        dropdownList.innerHTML = "";
     } else {
-        const d = devices[0];
-        label.textContent = `${d.chip}`;
+        if (selectedDeviceIndex >= devices.length) selectedDeviceIndex = 0;
+        const d = devices[selectedDeviceIndex];
+        label.textContent = d.chip;
         dot.className = "device-dot connected";
-        statusChip.innerHTML = `<span class="status-dot on" id="statusDot"></span> ${d.chip}`;
+        statusChip.innerHTML = `<span class="status-dot on"></span> ${d.chip}`;
         statusPort.textContent = d.port;
+        dropdownEmpty.style.display = "none";
+
+        dropdownList.innerHTML = devices.map((dev, i) => `
+            <div class="dropdown-item ${i === selectedDeviceIndex ? 'selected' : ''}" data-index="${i}">
+                <span class="device-dot ${dev.chip !== 'unknown' ? 'connected' : ''}"></span>
+                <div>
+                    <div class="dropdown-chip">${dev.chip}</div>
+                    <div class="dropdown-desc">${dev.desc}</div>
+                </div>
+                <span class="dropdown-port">${dev.port}</span>
+            </div>
+        `).join("");
+
+        // Click to select device
+        dropdownList.querySelectorAll(".dropdown-item").forEach(item => {
+            item.addEventListener("click", (e) => {
+                selectedDeviceIndex = parseInt(item.dataset.index);
+                updateDeviceUI(currentDevices);
+                closeDropdown();
+            });
+        });
     }
 }
+
+// Dropdown open/close
+const dropdown = document.getElementById("deviceDropdown");
+
+function toggleDropdown() {
+    dropdown.classList.toggle("open");
+    if (dropdown.classList.contains("open")) {
+        scanDevices(); // refresh on open
+    }
+}
+
+function closeDropdown() {
+    dropdown.classList.remove("open");
+}
+
+document.getElementById("deviceSelector")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleDropdown();
+});
+
+// Close dropdown when clicking anywhere else
+document.addEventListener("click", (e) => {
+    if (!e.target.closest(".device-selector-wrap")) {
+        closeDropdown();
+    }
+});
+
+// Close on Escape
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeDropdown();
+});
 
 // Scan on launch, then every 3 seconds
 scanDevices();
 setInterval(scanDevices, 3000);
-
-// Manual scan button
-document.getElementById("deviceSelector")?.addEventListener("click", scanDevices);
 
 // ---- Focus editor on load ----
 editor.focus();

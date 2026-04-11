@@ -45,10 +45,16 @@
 
         <div class="toolbar-right">
             <!-- Device selector -->
-            <div class="device-selector" id="deviceSelector">
-                <span class="device-dot" id="deviceDot"></span>
-                <span class="device-label" id="deviceLabel">No device</span>
-                <svg class="toolbar-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            <div class="device-selector-wrap">
+                <button class="device-selector" id="deviceSelector">
+                    <span class="device-dot" id="deviceDot"></span>
+                    <span class="device-label" id="deviceLabel">No device</span>
+                    <svg class="toolbar-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="device-dropdown" id="deviceDropdown">
+                    <div class="dropdown-empty" id="dropdownEmpty">No devices detected</div>
+                    <div id="dropdownList"></div>
+                </div>
             </div>
 
             <div class="toolbar-divider"></div>
