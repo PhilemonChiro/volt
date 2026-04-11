@@ -170,11 +170,20 @@ fn stream_command(app: &AppHandle, mut cmd: Command, stage: &str) -> bool {
     }
 }
 
+fn get_framework_dir() -> std::path::PathBuf {
+    let home = dirs::home_dir().unwrap();
+    // Try dev location first, then installed SDK
+    let dev = home.join("dev/volt/framework");
+    if dev.exists() { return dev; }
+    let sdk = home.join(".volt/sdk/framework");
+    if sdk.exists() { return sdk; }
+    dev // fallback
+}
+
 fn run_esp_build(app: &AppHandle, project_path: &str, chip: &str) -> bool {
-    let idf_path = if chip == "esp8266" || chip == "ESP8266" {
+    let idf_path = if chip.contains("8266") {
         dirs::home_dir().unwrap().join(".volt/toolchains/esp8266-rtos-sdk")
     } else {
-        // Try common ESP-IDF locations
         let home = dirs::home_dir().unwrap();
         if home.join("esp/esp-idf").exists() {
             home.join("esp/esp-idf")
@@ -182,17 +191,31 @@ fn run_esp_build(app: &AppHandle, project_path: &str, chip: &str) -> bool {
             home.join(".volt/toolchains/esp-idf")
         }
     };
+
+    let fw_dir = get_framework_dir();
+    if !fw_dir.exists() {
+        emit(app, "error", &format!("Framework not found at {}", fw_dir.display()), 0);
+        return false;
+    }
+
+    // Copy generated main.c into the framework build location
+    let src = format!("{}/build/main.c", project_path);
+    let dst = fw_dir.join("main/main.c");
+    if let Err(e) = std::fs::copy(&src, &dst) {
+        emit(app, "error", &format!("Cannot copy main.c to framework: {}", e), 0);
+        return false;
+    }
 
     let mut cmd = Command::new("bash");
     cmd.arg("-c")
        .arg(format!("source {}/export.sh 2>/dev/null && idf.py build", idf_path.display()))
-       .current_dir(project_path);
+       .current_dir(&fw_dir);
 
     stream_command(app, cmd, "Build")
 }
 
-fn run_esp_flash(app: &AppHandle, project_path: &str, port: &str, chip: &str) -> bool {
-    let idf_path = if chip == "esp8266" || chip == "ESP8266" {
+fn run_esp_flash(app: &AppHandle, _project_path: &str, port: &str, chip: &str) -> bool {
+    let idf_path = if chip.contains("8266") {
         dirs::home_dir().unwrap().join(".volt/toolchains/esp8266-rtos-sdk")
     } else {
         let home = dirs::home_dir().unwrap();
@@ -203,10 +226,12 @@ fn run_esp_flash(app: &AppHandle, project_path: &str, port: &str, chip: &str) ->
         }
     };
 
+    let fw_dir = get_framework_dir();
+
     let mut cmd = Command::new("bash");
     cmd.arg("-c")
        .arg(format!("source {}/export.sh 2>/dev/null && idf.py -p {} flash", idf_path.display(), port))
-       .current_dir(project_path);
+       .current_dir(&fw_dir);
 
     stream_command(app, cmd, "Flash")
 }
