@@ -123,12 +123,12 @@ body {
 }
 
 /* ---- Build = primary ---- */
-#buildBtn {
+#runBtn {
     background: var(--volt);
     color: white;
     font-weight: 600;
 }
-#buildBtn:hover { background: var(--volt-hover); color: white; }
+#runBtn:hover { background: var(--volt-hover); color: white; }
 
 /* ---- Icon buttons ---- */
 .toolbar-btn-icon {

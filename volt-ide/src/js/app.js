@@ -117,28 +117,27 @@ const editor = new EditorView({
     parent: container,
 });
 
-// ---- Sidebar buttons (Phase 1: visual only) ----
-document.getElementById("buildBtn").addEventListener("click", () => {
-    document.getElementById("statusBuild").textContent = "Building...";
-    // Phase 3: will call Tauri backend
+// ---- Toolbar buttons (Phase 1: visual feedback) ----
+document.getElementById("runBtn").addEventListener("click", () => {
+    const status = document.getElementById("statusBuild");
+    const btn = document.getElementById("runBtn");
+    btn.textContent = ""; // will add spinner later
+    btn.innerHTML = '<svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Running...';
+    status.textContent = "Building...";
+    // Phase 3: will call volt build → flash → monitor
     setTimeout(() => {
-        document.getElementById("statusBuild").textContent = "✓ Built";
-    }, 500);
-});
-
-document.getElementById("flashBtn").addEventListener("click", () => {
-    document.getElementById("statusBuild").textContent = "Flashing...";
+        status.textContent = "Flashing...";
+    }, 800);
+    setTimeout(() => {
+        status.textContent = "✓ Running";
+        btn.innerHTML = '<svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run';
+    }, 1500);
 });
 
 document.getElementById("monitorBtn").addEventListener("click", () => {
-    const dot = document.getElementById("monitorDot");
-    const status = document.getElementById("monitorStatus");
-    if (dot.classList.contains("dot-on")) {
-        dot.className = "dot dot-off";
-        status.textContent = "Disconnected";
-    } else {
-        dot.className = "dot dot-on";
-        status.textContent = "Connected";
+    const dot = document.querySelector("#monitorDot") || document.querySelector(".panel-dot");
+    if (dot) {
+        dot.classList.toggle("live");
     }
 });
 
