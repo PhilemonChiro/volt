@@ -646,24 +646,22 @@ class VoltSidebarProvider {
         gap: 6px;
         font-size: 12px;
     }
+    .device-chip {
+        font-weight: 600;
+        font-size: 12px;
+        color: #4ec9b0;
+    }
     .device-port {
         font-family: var(--vscode-editor-font-family);
-        font-weight: 600;
+        font-size: 10px;
+        opacity: 0.5;
+        margin-left: auto;
     }
     .device-desc {
         font-size: 10px;
         color: var(--vscode-descriptionForeground);
         padding: 2px 0 0 14px;
         line-height: 1.3;
-    }
-    .device-chip {
-        display: inline-block;
-        font-size: 9px;
-        padding: 1px 6px;
-        border-radius: 3px;
-        background: rgba(78,201,176,0.15);
-        color: #4ec9b0;
-        margin-left: auto;
     }
 
     /* File list */
@@ -967,8 +965,8 @@ class VoltSidebarProvider {
                     html += '<div class="device-card">' +
                         '<div class="device-header">' +
                             '<span class="dot ' + dotClass + '"></span>' +
-                            '<span class="device-port">' + d.port + '</span>' +
                             '<span class="device-chip">' + chip + '</span>' +
+                            '<span class="device-port">' + d.port + '</span>' +
                         '</div>' +
                         '<div class="device-desc">' + d.desc + '</div>' +
                     '</div>';

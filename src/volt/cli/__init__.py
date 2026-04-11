@@ -63,21 +63,79 @@ def find_volt_source() -> Path:
     return volts[0]
 
 
-def find_port() -> str:
+def find_port(target_chip: str = None) -> str:
+    """Find the right serial port for the target chip.
+    If target_chip is specified, only returns a port matching that chip.
+    If multiple devices are found, shows them all."""
     from volt.paths import find_serial_ports
     devices = find_serial_ports()
-    if devices:
+
+    if not devices:
+        console.print("[red]No device found. Is a microcontroller connected?[/red]")
+        raise SystemExit(1)
+
+    if target_chip:
+        # Match project chip to connected device
+        target = target_chip.lower()
+        matching = [d for d in devices if d.get("chip") and d["chip"].lower() == target]
+
+        if matching:
+            d = matching[0]
+            console.print(f"[dim]Detected {d['chip'].upper()} on {d['port']}[/dim]")
+            return d["port"]
+
+        # No match — show what's connected vs what's needed
+        console.print(f"\n[red]No {target_chip.upper()} device found.[/red]")
+        console.print(f"  Your project uses: [cyan]chip {target_chip}[/cyan]\n")
+        console.print(f"  Connected devices:")
+        for d in devices:
+            chip = (d.get("chip") or "unknown").upper()
+            console.print(f"    {d['port']}  {chip}  {d.get('desc', '')}")
+        console.print()
+        raise SystemExit(1)
+
+    # No target chip specified — show what we found
+    if len(devices) == 1:
         d = devices[0]
         chip = d.get("chip") or "unknown"
         console.print(f"[dim]Detected {chip.upper()} on {d['port']}[/dim]")
         return d["port"]
-    console.print("[red]No device found. Is a microcontroller connected?[/red]")
-    raise SystemExit(1)
+
+    # Multiple devices — list them and use the first
+    console.print(f"\n  [cyan]Multiple devices found:[/cyan]")
+    for i, d in enumerate(devices):
+        chip = (d.get("chip") or "unknown").upper()
+        marker = "[green]→[/green]" if i == 0 else " "
+        console.print(f"  {marker} {d['port']}  {chip}  {d.get('desc', '')}")
+    console.print(f"  [dim]Using first device. Use --port to specify.[/dim]\n")
+    return devices[0]["port"]
 
 
 def get_idf_env() -> dict:
     from volt.paths import get_idf_env as _get_env
     return _get_env()
+
+
+def get_project_chip() -> str | None:
+    """Read the target chip from the project's volt.toml or .volt file."""
+    # Try volt.toml first
+    toml_path = Path("volt.toml")
+    if toml_path.exists():
+        for line in toml_path.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("chip") and "=" in line:
+                chip = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if chip:
+                    return chip
+
+    # Try .volt source files
+    for volt_file in sorted(Path(".").glob("*.volt")):
+        for line in volt_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("chip "):
+                return line.split()[1].strip()
+
+    return None
 
 
 def fmt_time(seconds: float) -> str:
@@ -504,11 +562,12 @@ def build(show):
 @cli.command()
 @click.option("--port", default=None, help="Serial port")
 def flash(port):
-    """Flash the compiled binary to ESP32."""
+    """Flash the compiled binary to the target device."""
     from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
 
     if port is None:
-        port = find_port()
+        chip = get_project_chip()
+        port = find_port(target_chip=chip)
 
     console.print(f"\n[bold cyan]→[/bold cyan] Flashing to [bold]{port}[/bold]")
 
