@@ -70,8 +70,18 @@ METHOD_MAP = {
     # HTTP
     ("HTTP", "get"):  "http_get({args}, NULL, 0, NULL)",
     ("HTTP", "post"): "http_post({args}, NULL, NULL, 0, NULL)",
+    # Storage
+    ("Storage", "save"):       "storage_save_int({args})",
+    ("Storage", "load"):       "storage_load_int({args}, 0)",
+    ("Storage", "push"):       "storage_push({args})",
+    ("Storage", "drain"):      "storage_drain({args})",
+    ("Storage", "list_count"): "storage_list_count({args})",
+    ("Storage", "list_clear"): "storage_list_clear({args})",
     # System
-    ("System", "restart"): "esp_restart()",
+    ("System", "restart"):     "esp_restart()",
+    ("System", "free_heap"):   "esp_get_free_heap_size()",
+    ("System", "uptime"):      "(uint32_t)(esp_timer_get_time() / 1000000)",
+    ("System", "id"):          "0",
     # OTA
     ("OTA", "enable"): "ota_enable()",
 }
