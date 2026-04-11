@@ -119,6 +119,12 @@
     <!-- EDITOR (hidden until a file is opened) -->
     <main id="editorContainer" style="display:none"></main>
 
+    <!-- HOVER INFO BAR -->
+    <div id="hoverBar">
+        <span id="hoverIcon"></span>
+        <span id="hoverText">Hover a keyword for documentation</span>
+    </div>
+
     <!-- BOTTOM PANEL: Serial Monitor -->
     <section id="bottomPanel">
         <div id="panelHeader">
@@ -161,7 +167,6 @@
         </div>
         <div class="status-center">
             <span class="status-item" id="statusBuild"></span>
-            <span class="status-item status-hover" id="statusHover"></span>
         </div>
         <div class="status-right">
             <span class="status-item status-dim" id="statusSize"></span>

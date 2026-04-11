@@ -12,37 +12,64 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
 import { voltAutocompletion } from "./volt-completions.js";
-// ---- Hover info in status bar ----
-const HOVER_DOCS = {
-    chip: "Declare the target chip — esp32, esp8266, rp2040, stm32f103",
-    hardware: "Pin assignments — validated against chip datasheet at compile time",
-    task: "Concurrent task — auto-classified: background (12B) / priority (4KB) / critical (ISR)",
-    func: "Function declaration with parameters and return type",
-    machine: "State machine — compiler verifies reachability, dead states, determinism",
-    struct: "Custom data type with named fields",
-    main: "Program entry point — WiFi/MQTT setup and run() go here",
-    every: "Periodic execution — 100ms, 500ms, 1seconds, etc.",
-    strict: "Critical ISR (hardware timer) — no WiFi/MQTT/log allowed",
-    state: "State with enter/exit actions and transitions",
-    initial: "Starting state of the machine",
-    enter: "Runs when entering this state", exit: "Runs when leaving this state",
-    var: "Mutable variable", let: "Immutable variable",
-    Output: "Digital output — on(), off(), toggle(), write()",
-    Input: "Digital input — read() → 0 or 1",
-    Analog: "ADC input — read() → 0-4095", PWM: "PWM output — set_pwm(0-255)",
-    Touch: "Capacitive touch (ESP32 only)",
-    wifi: "WiFi — connect(ssid, pass), disconnect(), is_connected()",
-    mqtt: "MQTT — connect(url), send_int(topic, val), is_connected()",
-    storage: "Persistent storage — save(), load(), push(), drain()",
-    system: "System — restart(), free_heap(), uptime()",
-    run: "Start all declared tasks", log: "Log message — log(tag, message)",
-    esp32: "ESP32 — Xtensa LX6 dual-core, 520KB RAM, WiFi+BT",
-    esp8266: "ESP8266 — Xtensa LX106, 80KB RAM, WiFi",
-    rp2040: "RP2040 — ARM Cortex-M0+ dual-core, 264KB RAM",
-    stm32f103: "STM32F103 Blue Pill — ARM Cortex-M3, 20KB RAM",
+// ---- Hover info bar (between editor and bottom panel) ----
+const HOVER_INFO = {
+    // [text, category, icon]
+    chip:     ["Declare the target chip — esp32, esp8266, rp2040, stm32f103", "keyword", "⚙"],
+    hardware: ["Pin assignments — validated against chip datasheet at compile time", "keyword", "⚙"],
+    task:     ["Concurrent task — auto-classified: background (12B) / priority (4KB) / critical (ISR)", "keyword", "⚙"],
+    func:     ["Function declaration with parameters and return type", "keyword", "⚙"],
+    machine:  ["State machine — compiler verifies reachability, dead states, determinism", "keyword", "⚙"],
+    struct:   ["Custom data type with named fields", "keyword", "⚙"],
+    main:     ["Program entry point — WiFi/MQTT connections and run() go here", "keyword", "⚙"],
+    every:    ["Periodic execution block — 100ms, 500ms, 1seconds, etc.", "control", "↻"],
+    strict:   ["Critical ISR (hardware timer) — no WiFi/MQTT/log allowed inside", "control", "⚡"],
+    state:    ["State declaration with enter/exit actions and transitions", "keyword", "◆"],
+    initial:  ["The starting state of the machine", "keyword", "◆"],
+    enter:    ["Code that runs when entering this state", "keyword", "→"],
+    exit:     ["Code that runs when leaving this state", "keyword", "←"],
+    var:      ["Mutable variable — can be reassigned after declaration", "control", "x"],
+    let:      ["Immutable variable — cannot be reassigned", "control", "x"],
+    if:       ["Conditional branch — if condition { ... } else { ... }", "control", "?"],
+    while:    ["Loop — repeats while condition is true", "control", "↻"],
+    for:      ["Loop — iterates over a range", "control", "↻"],
+    match:    ["Pattern matching — match(expr) { ... }", "control", "≡"],
+    return:   ["Return a value from the current function", "control", "↩"],
+    Output:   ["Digital output pin — on(), off(), toggle(), write(value)", "type", "●"],
+    Input:    ["Digital input pin — read() → 0 or 1", "type", "○"],
+    Analog:   ["Analog input (ADC) — read() → 0-4095 (12-bit)", "type", "~"],
+    PWM:      ["Pulse-width modulation — set_pwm(0-255)", "type", "≈"],
+    Touch:    ["Capacitive touch sensor — ESP32 only", "type", "◎"],
+    int:      ["32-bit signed integer type", "type", "T"],
+    float:    ["32-bit floating point type", "type", "T"],
+    bool:     ["Boolean type — true or false", "type", "T"],
+    string:   ["UTF-8 string type", "type", "T"],
+    wifi:     ["WiFi module — connect(ssid, pass), disconnect(), is_connected()", "builtin", "📶"],
+    mqtt:     ["MQTT module — connect(url), send_int(topic, val), is_connected()", "builtin", "📡"],
+    http:     ["HTTP module — get(url), post(url, body)", "builtin", "🌐"],
+    storage:  ["Persistent storage — save(), load(), push(), drain(), list_count()", "builtin", "💾"],
+    system:   ["System — restart(), free_heap(), uptime()", "builtin", "⚙"],
+    run:      ["Start all declared tasks — called in main block", "builtin", "▶"],
+    log:      ["Print log message — log(tag, message)", "builtin", "📝"],
+    esp32:    ["ESP32 WROOM-32 — Xtensa LX6 dual-core, 520KB RAM, 4MB flash, WiFi + BT", "chip", "⚡"],
+    esp8266:  ["ESP8266 — Xtensa LX106 single-core, 80KB RAM, WiFi, no BT", "chip", "⚡"],
+    rp2040:   ["RP2040 Raspberry Pi Pico — ARM Cortex-M0+ dual-core, 264KB RAM, no WiFi", "chip", "⚡"],
+    stm32f103:["STM32F103 Blue Pill — ARM Cortex-M3, 20KB RAM, 64KB flash, no WiFi", "chip", "⚡"],
+    on:       ["Event transition — on event_name -> target_state", "keyword", "→"],
+    after:    ["Timed transition — after 5seconds -> target_state", "keyword", "⏱"],
+    true:     ["Boolean literal — true", "type", "✓"],
+    false:    ["Boolean literal — false", "type", "✗"],
 };
 
-const statusHover = document.getElementById("statusHover");
+const hoverBar = document.getElementById("hoverBar");
+const hoverIcon = document.getElementById("hoverIcon");
+const hoverText = document.getElementById("hoverText");
+
+function resetHoverBar() {
+    hoverBar.className = "";
+    hoverIcon.textContent = "";
+    hoverText.textContent = "Hover a keyword for documentation";
+}
 
 setTimeout(() => {
     const editorEl = document.querySelector(".cm-editor");
@@ -50,7 +77,7 @@ setTimeout(() => {
 
     editorEl.addEventListener("mousemove", (e) => {
         const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
-        if (pos === null) { statusHover.textContent = ""; statusHover.classList.remove("active"); return; }
+        if (pos === null) { resetHoverBar(); return; }
 
         const line = editor.state.doc.lineAt(pos);
         const lineText = line.text;
@@ -59,20 +86,18 @@ setTimeout(() => {
         while (end < lineText.length && /\w/.test(lineText[end])) end++;
         const word = lineText.slice(s, end);
 
-        const doc = word && HOVER_DOCS[word];
-        if (doc) {
-            statusHover.textContent = doc;
-            statusHover.classList.add("active");
+        const info = word && HOVER_INFO[word];
+        if (info) {
+            const [text, category, icon] = info;
+            hoverBar.className = `active type-${category}`;
+            hoverIcon.textContent = icon;
+            hoverText.textContent = `${word}  —  ${text}`;
         } else {
-            statusHover.textContent = "";
-            statusHover.classList.remove("active");
+            resetHoverBar();
         }
     });
 
-    editorEl.addEventListener("mouseleave", () => {
-        statusHover.textContent = "";
-        statusHover.classList.remove("active");
-    });
+    editorEl.addEventListener("mouseleave", resetHoverBar);
 }, 500);
 import { voltLinter } from "./volt-diagnostics.js";
 
