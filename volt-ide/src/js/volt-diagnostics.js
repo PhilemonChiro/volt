@@ -15,23 +15,37 @@ export const voltLinter = linter(async (view) => {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke("check_code", { source: code });
 
-        // result is array of { line, col, message, severity, hint }
+        if (!result || !Array.isArray(result)) return [];
+
+        // Update problems count badge
+        const errorCount = result.filter(e => e.severity === "error").length;
+        const badge = document.getElementById("problemCount");
+        if (badge) {
+            if (errorCount > 0) {
+                badge.textContent = errorCount;
+                badge.style.display = "inline";
+            } else {
+                badge.style.display = "none";
+            }
+        }
+
         return result.map(err => {
-            const line = view.state.doc.line(Math.min(err.line, view.state.doc.lines));
-            const from = line.from + Math.max(0, (err.col || 1) - 1);
-            const to = Math.min(from + 20, line.to); // underline ~20 chars
+            const lineNum = Math.min(Math.max(err.line, 1), view.state.doc.lines);
+            const line = view.state.doc.line(lineNum);
+            const col = Math.max(0, (err.col || 1) - 1);
+            const from = line.from + Math.min(col, line.length);
+            const to = Math.min(from + 20, line.to);
 
             return {
                 from,
-                to,
+                to: Math.max(from + 1, to),
                 severity: err.severity === "error" ? "error" : "warning",
                 message: err.message + (err.hint ? "\n→ " + err.hint : ""),
             };
         });
     } catch (e) {
-        // Not in Tauri or check failed
         return [];
     }
 }, {
-    delay: 800, // debounce 800ms after typing stops
+    delay: 1000,
 });

@@ -49,9 +49,32 @@ print(json.dumps(result))
 
     match output {
         Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+
+            if !stderr.is_empty() || stdout.is_empty() {
+                // Python error — return it as a diagnostic on line 1
+                if !stderr.is_empty() {
+                    let msg = stderr.lines().last().unwrap_or("Check failed");
+                    return vec![DiagnosticItem {
+                        line: 1, col: 1,
+                        message: format!("Checker: {}", msg),
+                        severity: "warning".to_string(),
+                        hint: "".to_string(),
+                    }];
+                }
+                return Vec::new();
+            }
+
             serde_json::from_str(&stdout).unwrap_or_default()
         }
-        Err(_) => Vec::new(),
+        Err(e) => {
+            vec![DiagnosticItem {
+                line: 1, col: 1,
+                message: format!("Cannot run checker: {}", e),
+                severity: "warning".to_string(),
+                hint: "".to_string(),
+            }]
+        }
     }
 }
