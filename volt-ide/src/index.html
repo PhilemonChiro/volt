@@ -24,18 +24,18 @@
 
         <!-- BUILD & DEPLOY -->
         <div class="sidebar-section">
-            <div class="section-title">BUILD & DEPLOY</div>
+            <div class="section-title">Build & Deploy</div>
             <div class="section-content">
-                <button class="action-btn" id="buildBtn">
-                    <span class="btn-icon">▶</span> Build
+                <button class="action-btn action-btn-primary" id="buildBtn">
+                    <span class="btn-icon">&#9654;</span> Build
                     <span class="shortcut">Ctrl+B</span>
                 </button>
-                <button class="action-btn" id="flashBtn">
-                    <span class="btn-icon">⚡</span> Flash
+                <button class="action-btn action-btn-secondary" id="flashBtn">
+                    <span class="btn-icon">&#9889;</span> Flash
                     <span class="shortcut">Ctrl+Shift+F</span>
                 </button>
-                <button class="action-btn" id="monitorBtn">
-                    <span class="btn-icon">📡</span> Monitor
+                <button class="action-btn action-btn-secondary" id="monitorBtn">
+                    <span class="btn-icon">&#8226;</span> Monitor
                     <span class="shortcut">Ctrl+M</span>
                 </button>
             </div>
@@ -43,16 +43,16 @@
 
         <!-- PROJECT -->
         <div class="sidebar-section">
-            <div class="section-title">PROJECT</div>
+            <div class="section-title">Project</div>
             <div id="projectInfo" class="section-content">
                 <div class="empty-hint">No project open</div>
             </div>
             <div class="section-content">
-                <button class="action-btn action-btn-secondary" id="newProjectBtn">
+                <button class="action-btn action-btn-ghost" id="newProjectBtn">
                     <span class="btn-icon">+</span> New Project
                 </button>
-                <button class="action-btn action-btn-secondary" id="openProjectBtn">
-                    <span class="btn-icon">📁</span> Open Project
+                <button class="action-btn action-btn-ghost" id="openProjectBtn">
+                    <span class="btn-icon">&#8599;</span> Open Project
                 </button>
             </div>
         </div>
@@ -80,7 +80,7 @@
 
     <!-- STATUS BAR -->
     <footer id="statusBar">
-        <span id="statusChip">No device</span>
+        <span class="status-chip" id="statusChip">No device</span>
         <span id="statusPort"></span>
         <span id="statusBuild"></span>
         <span id="statusSize"></span>

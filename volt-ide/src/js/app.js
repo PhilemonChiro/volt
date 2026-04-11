@@ -15,41 +15,43 @@ import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.j
 // ---- Dark theme for the editor chrome ----
 const voltTheme = EditorView.theme({
     "&": {
-        backgroundColor: "#1e1e1e",
-        color: "#d4d4d4",
+        backgroundColor: "hsl(230, 10%, 13%)",
+        color: "hsl(220, 15%, 88%)",
     },
     ".cm-content": {
-        caretColor: "#aeafad",
+        caretColor: "#e0c070",
         fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
         fontSize: "14px",
-        lineHeight: "1.6",
+        lineHeight: "1.65",
+        padding: "8px 0",
     },
     ".cm-cursor": {
-        borderLeftColor: "#aeafad",
+        borderLeftColor: "#e0c070",
         borderLeftWidth: "2px",
     },
-    ".cm-activeLine": { backgroundColor: "#2a2d2e" },
-    ".cm-activeLineGutter": { backgroundColor: "#2a2d2e" },
+    ".cm-activeLine": { backgroundColor: "hsla(230, 8%, 20%, 0.5)" },
+    ".cm-activeLineGutter": { backgroundColor: "hsla(230, 8%, 20%, 0.5)" },
     ".cm-gutters": {
-        backgroundColor: "#1e1e1e",
-        color: "#858585",
+        backgroundColor: "hsl(230, 10%, 13%)",
+        color: "hsl(220, 6%, 35%)",
         border: "none",
-        paddingRight: "8px",
+        paddingRight: "12px",
     },
     ".cm-lineNumbers .cm-gutterElement": {
         minWidth: "3em",
         textAlign: "right",
+        padding: "0 4px",
     },
-    ".cm-foldGutter": { width: "12px" },
-    ".cm-selectionBackground": { backgroundColor: "#264f78 !important" },
-    "&.cm-focused .cm-selectionBackground": { backgroundColor: "#264f78 !important" },
+    ".cm-foldGutter": { width: "14px" },
+    ".cm-selectionBackground": { backgroundColor: "hsla(45, 60%, 40%, 0.2) !important" },
+    "&.cm-focused .cm-selectionBackground": { backgroundColor: "hsla(45, 60%, 40%, 0.25) !important" },
     ".cm-matchingBracket": {
-        backgroundColor: "#3a3a3a",
-        outline: "1px solid #888",
+        backgroundColor: "hsla(45, 60%, 50%, 0.15)",
+        outline: "1px solid hsla(45, 60%, 50%, 0.3)",
     },
-    ".cm-searchMatch": { backgroundColor: "#515c6a" },
-    ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "#575231" },
-    ".cm-selectionMatch": { backgroundColor: "#2a4a3a" },
+    ".cm-searchMatch": { backgroundColor: "hsla(45, 60%, 50%, 0.2)" },
+    ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "hsla(45, 80%, 50%, 0.3)" },
+    ".cm-selectionMatch": { backgroundColor: "hsla(152, 60%, 40%, 0.15)" },
 }, { dark: true });
 
 // ---- Default Volt code ----
