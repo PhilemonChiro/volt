@@ -11,6 +11,9 @@ import { bracketMatching, foldGutter, indentOnInput } from "@codemirror/language
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
+import { voltAutocompletion } from "./volt-completions.js";
+import { voltHover } from "./volt-hover.js";
+import { voltLinter } from "./volt-diagnostics.js";
 
 // ---- Dark theme for the editor chrome ----
 const voltTheme = EditorView.theme({
@@ -84,6 +87,9 @@ const state = EditorState.create({
         voltLanguage,
         syntaxHighlighting(voltHighlight),
         voltTheme,
+        voltAutocompletion,
+        voltHover,
+        voltLinter,
         // Update cursor position in status bar
         EditorView.updateListener.of(update => {
             if (update.selectionSet) {

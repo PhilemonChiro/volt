@@ -719,3 +719,82 @@ button { outline: none; }
 button:focus-visible {
     box-shadow: 0 0 0 2px var(--volt-ring);
 }
+
+/* ---- Volt tooltip ---- */
+.volt-tooltip {
+    background: var(--bg-3);
+    color: var(--t1);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    max-width: 400px;
+    white-space: pre-wrap;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ---- CodeMirror autocomplete ---- */
+.cm-tooltip-autocomplete {
+    background: var(--bg-3) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+}
+.cm-tooltip-autocomplete > ul {
+    font-family: var(--sans) !important;
+    font-size: 12px !important;
+}
+.cm-tooltip-autocomplete > ul > li {
+    padding: 4px 8px !important;
+    border-radius: 4px;
+    margin: 1px 2px;
+}
+.cm-tooltip-autocomplete > ul > li[aria-selected] {
+    background: var(--volt-dim) !important;
+    color: var(--t1) !important;
+}
+.cm-completionLabel {
+    color: var(--t1) !important;
+}
+.cm-completionDetail {
+    color: var(--t3) !important;
+    font-style: normal !important;
+}
+.cm-completionMatchedText {
+    color: var(--volt) !important;
+    text-decoration: none !important;
+    font-weight: 600;
+}
+
+/* ---- CodeMirror lint ---- */
+.cm-diagnostic {
+    font-family: var(--sans) !important;
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+    border-radius: 6px !important;
+    background: var(--bg-3) !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+}
+.cm-diagnostic-error {
+    border-left: 3px solid var(--err) !important;
+}
+.cm-diagnostic-warning {
+    border-left: 3px solid var(--warn) !important;
+}
+.cm-lintRange-error {
+    background: none !important;
+    border-bottom: 2px wavy var(--err) !important;
+}
+.cm-lintRange-warning {
+    background: none !important;
+    border-bottom: 2px wavy var(--warn) !important;
+}
+
+/* ---- CodeMirror tooltip (hover) ---- */
+.cm-tooltip-hover {
+    background: var(--bg-3) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+}

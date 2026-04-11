@@ -247,7 +247,7 @@ fn read_chip_from_source(volt_file: &str) -> Option<String> {
     None
 }
 
-fn get_volt_src_path() -> String {
+pub fn get_volt_src_path() -> String {
     // Try to find the volt source
     let home = dirs::home_dir().unwrap();
     let candidates = [

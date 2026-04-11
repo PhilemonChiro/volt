@@ -2,9 +2,11 @@ mod devices;
 mod serial;
 mod runner;
 mod projects;
+mod checker;
 
 use devices::Device;
 use projects::{ProjectInfo, BrowseResult};
+use checker::DiagnosticItem;
 
 #[tauri::command]
 fn scan_devices() -> Vec<Device> {
@@ -56,6 +58,11 @@ fn list_projects() -> Vec<ProjectInfo> {
     projects::list_projects()
 }
 
+#[tauri::command]
+fn check_code(source: String) -> Vec<DiagnosticItem> {
+    checker::check_code(&source)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -70,6 +77,7 @@ pub fn run() {
             create_project,
             browse_volt_file,
             list_projects,
+            check_code,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,0 +1,57 @@
+use serde::Serialize;
+use std::process::Command;
+
+#[derive(Serialize, serde::Deserialize)]
+pub struct DiagnosticItem {
+    pub line: u32,
+    pub col: u32,
+    pub message: String,
+    pub severity: String,
+    pub hint: String,
+}
+
+/// Run the Volt compiler in check-only mode and return diagnostics
+pub fn check_code(source: &str) -> Vec<DiagnosticItem> {
+    let volt_src = crate::runner::get_volt_src_path();
+
+    // Write source to a temp file
+    let tmp = std::env::temp_dir().join("_volt_check.volt");
+    std::fs::write(&tmp, source).ok();
+
+    let script = format!(
+r#"import sys, json
+sys.path.insert(0, '{}')
+from volt.compiler.voltc import compile_volt
+
+source = open('{}').read()
+_, errors = compile_volt(source, 'check.volt')
+result = []
+for e in errors.errors:
+    result.append({{
+        'line': e.region.start_line if e.region else 1,
+        'col': e.region.start_col if e.region else 1,
+        'message': e.message,
+        'severity': e.severity,
+        'hint': e.hint or ''
+    }})
+print(json.dumps(result))
+"#,
+        volt_src.replace("\\", "/"),
+        tmp.to_string_lossy().replace("\\", "/"),
+    );
+
+    let script_path = std::env::temp_dir().join("_volt_check.py");
+    std::fs::write(&script_path, &script).ok();
+
+    let output = Command::new("python3")
+        .arg(&script_path)
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            serde_json::from_str(&stdout).unwrap_or_default()
+        }
+        Err(_) => Vec::new(),
+    }
+}
