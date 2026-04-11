@@ -12,7 +12,106 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
 import { voltAutocompletion } from "./volt-completions.js";
-// voltHover disabled temporarily — causes editor focus issues
+// ---- Custom hover tooltip (no CodeMirror API, no focus issues) ----
+const hoverTip = document.getElementById("hoverTip");
+let hoverTimer = null;
+
+// Docs for hover
+const HOVER_DOCS = {
+    chip: "Declare the target microcontroller.\nSupported: esp32, esp8266, rp2040, stm32f103",
+    hardware: "Define pin assignments and hardware peripherals.\nPins are validated against the chip's datasheet.",
+    task: "Declare a concurrent task.\nAuto-classified: background (12 bytes),\npriority (FreeRTOS 4KB), or critical (ISR).",
+    func: "Declare a function with parameters and return type.",
+    machine: "Declare a state machine.\nCompiler verifies: reachability, dead states,\ndeterministic transitions.",
+    struct: "Declare a custom data type with named fields.",
+    main: "Program entry point.\nWiFi/MQTT setup and run() go here.",
+    every: "Execute a block periodically.\nDuration: 100ms, 500ms, 1seconds, etc.",
+    strict: "Hardware timer ISR — exact timing.\nCannot call WiFi, MQTT, log, or blocking functions.",
+    state: "Declare a state with enter/exit actions and transitions.",
+    initial: "Mark as the starting state of the machine.",
+    enter: "Code executed when entering this state.",
+    exit: "Code executed when leaving this state.",
+    var: "Mutable variable — can be reassigned.",
+    let: "Immutable variable — cannot be reassigned.",
+    Output: "Digital output pin.\nMethods: on(), off(), toggle(), write()",
+    Input: "Digital input pin.\nMethods: read() → 0 or 1",
+    Analog: "Analog input (ADC).\nMethods: read() → 0-4095",
+    PWM: "Pulse-width modulation output.\nMethods: set_pwm(0-255)",
+    Touch: "Capacitive touch sensor. ESP32 only.",
+    wifi: "WiFi module.\nconnect(ssid, pass), disconnect(), is_connected()",
+    mqtt: "MQTT module.\nconnect(url), send_int(topic, val), is_connected()",
+    storage: "Persistent storage (survives reboots).\nsave(), load(), push(), drain()",
+    system: "System functions.\nrestart(), free_heap(), uptime()",
+    run: "Start all declared tasks.",
+    log: "Print a log message.\nUsage: log(tag, message)",
+    esp32: "ESP32 WROOM-32 — Xtensa LX6 dual-core\n520KB RAM, 4MB flash, WiFi + BT",
+    esp8266: "ESP8266 — Xtensa LX106 single-core\n80KB RAM, WiFi, no BT",
+    rp2040: "RP2040 — ARM Cortex-M0+ dual-core\n264KB RAM, 2MB flash, no WiFi",
+    stm32f103: "STM32F103 Blue Pill — ARM Cortex-M3\n20KB RAM, 64KB flash, no WiFi",
+};
+
+function editorMouseMove(e) {
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => showHover(e), 400);
+}
+
+function editorMouseLeave() {
+    clearTimeout(hoverTimer);
+    hoverTip.classList.remove("visible");
+}
+
+function showHover(e) {
+    const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
+    if (pos === null) { hoverTip.classList.remove("visible"); return; }
+
+    const line = editor.state.doc.lineAt(pos);
+    const lineText = line.text;
+    let start = pos - line.from;
+    let end = pos - line.from;
+
+    while (start > 0 && /\w/.test(lineText[start - 1])) start--;
+    while (end < lineText.length && /\w/.test(lineText[end])) end++;
+
+    const word = lineText.slice(start, end);
+    if (!word || word.length < 2) { hoverTip.classList.remove("visible"); return; }
+
+    const doc = HOVER_DOCS[word];
+    if (!doc) { hoverTip.classList.remove("visible"); return; }
+
+    hoverTip.textContent = doc;
+
+    // Position: below and to the right of cursor, clamped to viewport
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = e.clientX + 12;
+    let y = e.clientY + 16;
+
+    // Measure tooltip
+    hoverTip.classList.add("visible");
+    const rect = hoverTip.getBoundingClientRect();
+
+    // Clamp right
+    if (x + rect.width > vw - pad) x = vw - rect.width - pad;
+    // Clamp left
+    if (x < pad) x = pad;
+    // Clamp bottom — show above cursor if no room below
+    if (y + rect.height > vh - pad) y = e.clientY - rect.height - 8;
+    // Clamp top
+    if (y < pad) y = pad;
+
+    hoverTip.style.left = x + "px";
+    hoverTip.style.top = y + "px";
+}
+
+// Attach to editor container (after editor is created)
+setTimeout(() => {
+    const editorEl = document.querySelector(".cm-editor");
+    if (editorEl) {
+        editorEl.addEventListener("mousemove", editorMouseMove);
+        editorEl.addEventListener("mouseleave", editorMouseLeave);
+    }
+}, 500);
 import { voltLinter } from "./volt-diagnostics.js";
 
 // ---- Dark theme for the editor chrome ----

@@ -720,19 +720,25 @@ button:focus-visible {
     box-shadow: 0 0 0 2px var(--volt-ring);
 }
 
-/* ---- Volt tooltip ---- */
-.volt-tooltip {
+/* ---- Custom hover tooltip ---- */
+.hover-tip {
+    display: none;
+    position: fixed;
+    z-index: 999;
     background: var(--bg-3);
     color: var(--t1);
-    padding: 6px 10px;
+    padding: 8px 12px;
     border-radius: 6px;
     font-size: 12px;
+    font-family: var(--sans);
     line-height: 1.5;
-    max-width: 400px;
+    max-width: 360px;
     white-space: pre-wrap;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     border: 1px solid rgba(255,255,255,0.08);
+    pointer-events: none;
 }
+.hover-tip.visible { display: block; }
 
 /* ---- CodeMirror autocomplete ---- */
 .cm-tooltip-autocomplete {
