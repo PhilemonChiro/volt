@@ -322,7 +322,15 @@ class VoltSidebarProvider {
                 case 'clear': break; // handled in webview
                 case 'newProject':
                     vscode.window.showInputBox({ prompt: 'Project name' }).then(name => {
-                        if (name) runCommand(`new ${name}`);
+                        if (!name) return;
+                        const cwd = getCwd();
+                        const projectPath = path.join(cwd, name);
+                        runCommand(`new ${name}`);
+                        // Open the new project folder in VS Code after creation
+                        setTimeout(() => {
+                            const uri = vscode.Uri.file(projectPath);
+                            vscode.commands.executeCommand('vscode.openFolder', uri, false);
+                        }, 1500);
                     });
                     break;
                 case 'openFile':
