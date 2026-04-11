@@ -33,29 +33,34 @@ pub fn run_pipeline(app: AppHandle, project_path: String, volt_file: String, por
         // Ensure build dir exists
         std::fs::create_dir_all(format!("{}/build", project_path)).ok();
 
-        // Write a temp Python script (avoids shell escaping issues with -c)
-        let script_path = format!("{}/build/_volt_compile.py", project_path);
-        let script = format!(
-r#"import sys
-sys.path.insert(0, "{src}")
-from volt.compiler.voltc import compile_volt
-from pathlib import Path
+        // Write compile script to build dir
+        let volt_src = get_volt_src_path();
+        let out_path = format!("{}/build/main.c", project_path);
+        let script_path = format!("{}/build/_compile.py", project_path);
 
-source = Path("{volt_file}").read_text()
-c_code, errors = compile_volt(source, "{name}")
-errs = [e for e in errors.errors if e.severity == "error"]
+        let script = format!(
+"import sys, os
+# Add the parent of 'volt' package to path
+sys.path.insert(0, '{}')
+from volt.compiler.voltc import compile_volt
+
+source = open('{}').read()
+c, e = compile_volt(source, '{}')
+errs = [x for x in e.errors if x.severity == 'error']
 if errs:
-    print("ERROR:" + errs[0].message)
-elif c_code:
-    Path("{out}").write_text(c_code)
-    print("OK")
+    print('ERROR:' + errs[0].message)
+elif c:
+    os.makedirs(os.path.dirname('{}'), exist_ok=True)
+    open('{}', 'w').write(c)
+    print('OK')
 else:
-    print("ERROR:compilation produced no output")
-"#,
-            src = get_volt_src_path(),
-            volt_file = volt_file,
-            name = file_name,
-            out = format!("{}/build/main.c", project_path),
+    print('ERROR:no output')
+",
+            volt_src.replace("\\", "/"),
+            volt_file.replace("\\", "/"),
+            file_name,
+            out_path.replace("\\", "/"),
+            out_path.replace("\\", "/"),
         );
         std::fs::write(&script_path, &script).ok();
 
