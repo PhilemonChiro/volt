@@ -257,7 +257,7 @@ class CCodeGen:
         self._out("// Forward declarations")
         for task in program.tasks:
             if task.tier == "background":
-                self._out(f"static void {task.name}_run(volt_task_t *t);")
+                self._out(f"static void {task.name}_run(volt_task_t *_vt);")
             elif task.tier == "priority":
                 self._out(f"static void {task.name}_run(void *arg);")
             elif task.tier == "critical":
@@ -269,7 +269,7 @@ class CCodeGen:
                                    for p in func.params)
                 self._out(f"static {ret} {_c_name(func.name)}({params or 'void'});")
         for machine in program.machines:
-            self._out(f"static void {machine.name}_run(volt_task_t *t);")
+            self._out(f"static void {machine.name}_run(volt_task_t *_vt);")
         self._out("")
 
     def _emit_context_structs(self, program: Program):
@@ -355,17 +355,17 @@ class CCodeGen:
         ctx_type = f"{task.name}_ctx_t"
 
         self._out(f"// Background task: {task.name} (protothread)")
-        self._out(f"static void {task.name}_run(volt_task_t *t)")
+        self._out(f"static void {task.name}_run(volt_task_t *_vt)")
         self._out("{")
         self.indent += 1
 
         if has_ctx:
             self._out(f"{ctx_type} *ctx = &_{task.name}_ctx;")
 
-        self._out("VOLT_TASK_BEGIN(t);")
+        self._out("VOLT_TASK_BEGIN(_vt);")
         self._emit_stmts(task.body, ctx_prefix="ctx->" if has_ctx else None,
                           crossing_vars=task.crossing_vars or [])
-        self._out("VOLT_TASK_END(t);")
+        self._out("VOLT_TASK_END(_vt);")
 
         self.indent -= 1
         self._out("}")
@@ -407,6 +407,18 @@ class CCodeGen:
         name = machine.name
         states = machine.states
         initial = next((s for s in states if s.is_initial), states[0])
+
+        # Collect all event names from transitions
+        events = set()
+        for s in states:
+            for trans in s.transitions:
+                if isinstance(trans.event, VarRef):
+                    events.add(trans.event.name)
+        if events:
+            self._out(f"// Event flags for {name} (set by external code, cleared after handling)")
+            for ev in sorted(events):
+                self._out(f"static volatile bool {ev} = false;")
+            self._out("")
 
         # State enum
         self._out(f"// State machine: {name}")
@@ -490,11 +502,11 @@ class CCodeGen:
 
         # Main run function (protothread task)
         self._out(f"// State machine task: {name} (runs as protothread)")
-        self._out(f"static void {name}_run(volt_task_t *t)")
+        self._out(f"static void {name}_run(volt_task_t *_vt)")
         self._out("{")
         self.indent += 1
         self._out(f"{name}_ctx_t *ctx = &_{name}_ctx;")
-        self._out(f"VOLT_TASK_BEGIN(t);")
+        self._out(f"VOLT_TASK_BEGIN(_vt);")
         self._out("")
 
         # Enter initial state
@@ -546,6 +558,9 @@ class CCodeGen:
                     guard = f" && ({guard_str})"
                 self._out(f"if ({event_str}{guard}) {{")
                 self.indent += 1
+                # Clear the event flag so it doesn't fire again
+                if isinstance(trans.event, VarRef):
+                    self._out(f"{trans.event.name} = false;")
                 if trans.action:
                     self._emit_stmts(trans.action, "ctx->", machine_vars)
                 self._out(f"{name}_transition(ctx, {name.upper()}_{trans.target_state.upper()});")
@@ -565,11 +580,11 @@ class CCodeGen:
         self._out("}")  # switch
         self._out("")
 
-        self._out(f"VOLT_YIELD_LABEL(t, 1, 10); // poll every 10ms")
+        self._out(f"VOLT_YIELD_LABEL(_vt, 1, 10); // poll every 10ms")
 
         self.indent -= 1
         self._out("}")  # for
-        self._out(f"VOLT_TASK_END(t);")
+        self._out(f"VOLT_TASK_END(_vt);")
 
         self.indent -= 1
         self._out("}")
@@ -694,7 +709,7 @@ class CCodeGen:
             if isinstance(stmt.expr, FuncCall) and stmt.expr.name == "sleep":
                 label = getattr(stmt, '_yield_label', 0)
                 ms = self._emit_expr_str(stmt.expr.args[0], ctx_prefix, cv) if stmt.expr.args else "0"
-                self._out(f"VOLT_YIELD_LABEL(t, {label}, {ms});")
+                self._out(f"VOLT_YIELD_LABEL(_vt, {label}, {ms});")
             else:
                 self._out(f"{expr_str};")
 
@@ -760,7 +775,7 @@ class CCodeGen:
                 self._out(f"vTaskDelay(pdMS_TO_TICKS({ms}));")
             else:
                 label = stmt.yield_label  # set by transformer Pass 6
-                self._out(f"VOLT_YIELD_LABEL(t, {label}, {ms});")
+                self._out(f"VOLT_YIELD_LABEL(_vt, {label}, {ms});")
             self.indent -= 1
             self._out("}")
 
@@ -770,7 +785,7 @@ class CCodeGen:
             self._out(f"VOLT_WAIT_LABEL(t, {stmt.yield_label}, {event_str});")
             if stmt.debounce:
                 deb_ms = stmt.debounce.milliseconds if isinstance(stmt.debounce, DurationLiteral) else 50
-                self._out(f"VOLT_YIELD_LABEL(t, {stmt.debounce_label}, {deb_ms}); // debounce")
+                self._out(f"VOLT_YIELD_LABEL(_vt, {stmt.debounce_label}, {deb_ms}); // debounce")
             self._emit_stmts(stmt.body, ctx_prefix, cv)
 
     # ============================================================

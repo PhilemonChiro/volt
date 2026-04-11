@@ -99,11 +99,11 @@ main {
     run(blink)
 }
 """)
-c_contains(c, "static void blink_run(volt_task_t *t)", "protothread function")
-c_contains(c, "VOLT_TASK_BEGIN(t)", "task begin")
-c_contains(c, "VOLT_TASK_END(t)", "task end")
+c_contains(c, "static void blink_run(volt_task_t *_vt)", "protothread function")
+c_contains(c, "VOLT_TASK_BEGIN(_vt)", "task begin")
+c_contains(c, "VOLT_TASK_END(_vt)", "task end")
 c_contains(c, "pin_toggle(2)", "led.toggle() → pin_toggle(2)")
-c_contains(c, "VOLT_YIELD_LABEL(t,", "yield with counter label")
+c_contains(c, "VOLT_YIELD_LABEL(_vt,", "yield with counter label")
 c_contains(c, "500", "500ms interval")
 c_contains(c, "pin_set_output(2)", "pin init in app_main")
 c_contains(c, "volt_run(_tasks,", "task scheduler")
@@ -142,7 +142,7 @@ main {
 }
 """)
 # Background tier
-c_contains(c, "static void blink_run(volt_task_t *t)", "blink is protothread")
+c_contains(c, "static void blink_run(volt_task_t *_vt)", "blink is protothread")
 c_contains(c, "VOLT_YIELD_LABEL", "protothread yield")
 
 # Critical tier
@@ -567,7 +567,7 @@ main {
 }
 """)
 # Verify all three tiers
-c_contains(c, "blink_run(volt_task_t *t)", "blink = background")
+c_contains(c, "blink_run(volt_task_t *_vt)", "blink = background")
 c_contains(c, "IRAM_ATTR motor_control_isr", "motor = critical")
 c_contains(c, "monitor_run(void *arg)", "monitor = priority")
 # monitor is Priority tier (uses mqtt) — FreeRTOS task, no protothread context struct
