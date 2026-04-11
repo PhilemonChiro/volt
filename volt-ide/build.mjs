@@ -1,12 +1,5 @@
-import * as esbuild from "esbuild";
-
-await esbuild.build({
-    entryPoints: ["src/js/app.js"],
-    bundle: true,
-    format: "esm",
-    outfile: "src/dist/app.js",
-    minify: true,
-    loader: { ".ttf": "dataurl" },
-});
-
+// Simple copy — Monaco is loaded via AMD, not bundled
+import { copyFileSync, mkdirSync } from "fs";
+mkdirSync("src/dist", { recursive: true });
+copyFileSync("src/js/app.js", "src/dist/app.js");
 console.log("Build complete");

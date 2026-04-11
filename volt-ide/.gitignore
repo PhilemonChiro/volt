@@ -2,3 +2,4 @@ src/dist/
 src-tauri/target/
 node_modules/
 dist-frontend/
+src/lib/
