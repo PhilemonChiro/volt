@@ -227,8 +227,12 @@ volt_error_t storage_init(void)
     esp_timer_create(&timer_args, &s_flush_timer);
     esp_timer_start_periodic(s_flush_timer, FLUSH_INTERVAL_MS * 1000);
 
-    // Register shutdown handler — flushes dirty data before reboot/OTA/brownout
+    // Register shutdown handler — flushes dirty data before reboot/OTA/brownout.
+    // esp_register_shutdown_handler() is not available on ESP8266 RTOS SDK;
+    // on that platform the flush timer and explicit storage_flush() calls suffice.
+#ifndef CONFIG_IDF_TARGET_ESP8266
     esp_register_shutdown_handler(shutdown_flush_handler);
+#endif
 
     s_initialized = true;
 
@@ -449,16 +453,34 @@ bool storage_exists(const char *key)
     }
     STORAGE_UNLOCK();
 
-    // Check NVS using nvs_find_key (ESP-IDF v5.3+)
-    // This checks existence without reading the value or knowing the type.
     nvs_handle_t handle;
     if (nvs_open_handle(&handle, NVS_READONLY) != ESP_OK) return false;
 
+#ifdef CONFIG_IDF_TARGET_ESP8266
+    // nvs_find_key() is ESP-IDF v5.3+ only and absent from ESP8266 RTOS SDK.
+    // Probe existence by attempting to read as each supported type in turn.
+    // Any return code other than ESP_ERR_NVS_NOT_FOUND means the key exists.
+    int32_t probe_i;
+    esp_err_t err = nvs_get_i32(handle, key, &probe_i);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        // Not an i32 — try string
+        size_t probe_len = 0;
+        err = nvs_get_str(handle, key, NULL, &probe_len);
+    }
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        // Not a string — try blob (used for floats)
+        size_t probe_len = 0;
+        err = nvs_get_blob(handle, key, NULL, &probe_len);
+    }
+    nvs_close(handle);
+    return (err != ESP_ERR_NVS_NOT_FOUND);
+#else
+    // nvs_find_key() checks existence without knowing the type (ESP-IDF v5.3+).
     nvs_type_t type;
     esp_err_t err = nvs_find_key(handle, key, &type);
     nvs_close(handle);
-
     return (err == ESP_OK);
+#endif
 }
 
 volt_error_t storage_flush(void)

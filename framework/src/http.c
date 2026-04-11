@@ -3,7 +3,11 @@
 
 #include <string.h>
 #include "esp_http_client.h"
+// esp_crt_bundle.h is only available on ESP-IDF v4+ (ESP32/ESP32-S2/etc.)
+// ESP8266 RTOS SDK does not include it — skip TLS certificate bundle there.
+#ifndef CONFIG_IDF_TARGET_ESP8266
 #include "esp_crt_bundle.h"
+#endif
 
 // Shared state for the response handler callback
 typedef struct {
@@ -48,9 +52,12 @@ volt_error_t http_get(const char *url, char *buf, size_t buf_size, int *status_c
         .event_handler = http_event_handler,
         .user_data = &resp,
         .timeout_ms = 10000,
-        // TLS certificate validation via ESP-IDF's built-in certificate bundle.
-        // This validates server certificates for HTTPS, preventing MITM attacks.
+// TLS certificate validation via ESP-IDF's built-in certificate bundle.
+// This validates server certificates for HTTPS, preventing MITM attacks.
+// Not available on ESP8266 RTOS SDK — HTTPS works but without bundle validation.
+#ifndef CONFIG_IDF_TARGET_ESP8266
         .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -93,7 +100,9 @@ volt_error_t http_post(const char *url, const char *body, const char *content_ty
         .user_data = &resp,
         .timeout_ms = 10000,
         .method = HTTP_METHOD_POST,
+#ifndef CONFIG_IDF_TARGET_ESP8266
         .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);

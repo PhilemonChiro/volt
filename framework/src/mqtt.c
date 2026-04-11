@@ -4,7 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 #include "mqtt_client.h"
+// esp_mac.h is ESP-IDF v5+ only. On ESP8266 RTOS SDK, esp_read_mac() is
+// declared in esp_wifi.h which is pulled in transitively — no extra header needed.
+#ifndef CONFIG_IDF_TARGET_ESP8266
 #include "esp_mac.h"
+#endif
 
 // Internal state — volatile because written from event task, read from main task
 static esp_mqtt_client_handle_t s_client = NULL;
@@ -138,10 +142,18 @@ volt_error_t mqtt_connect(const char *broker_url)
 
     generate_client_id();
 
+#ifdef CONFIG_IDF_TARGET_ESP8266
+    // ESP8266 RTOS SDK (ESP-IDF v3.x) uses flat config struct
+    esp_mqtt_client_config_t cfg = {
+        .uri = broker_url,
+        .client_id = s_client_id,
+    };
+#else
     esp_mqtt_client_config_t cfg = {
         .broker.address.uri = broker_url,
         .credentials.client_id = s_client_id,
     };
+#endif
 
     log_info("mqtt", "connecting to %s (id: %s)", broker_url, s_client_id);
     return _mqtt_start(&cfg);
@@ -154,12 +166,21 @@ volt_error_t mqtt_connect_auth(const char *broker_url, const char *username,
 
     generate_client_id();
 
+#ifdef CONFIG_IDF_TARGET_ESP8266
+    esp_mqtt_client_config_t cfg = {
+        .uri = broker_url,
+        .client_id = s_client_id,
+        .username = username,
+        .password = password,
+    };
+#else
     esp_mqtt_client_config_t cfg = {
         .broker.address.uri = broker_url,
         .credentials.client_id = s_client_id,
         .credentials.username = username,
         .credentials.authentication.password = password,
     };
+#endif
 
     log_info("mqtt", "connecting to %s with auth (user: %s, id: %s)",
              broker_url, username ? username : "(none)", s_client_id);

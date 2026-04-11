@@ -4,12 +4,18 @@
 
 #include <string.h>
 #include "esp_wifi.h"
-#include "esp_netif.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
+// ESP8266 RTOS SDK uses the legacy tcpip_adapter; esp_netif is ESP-IDF v4+.
+#ifdef CONFIG_IDF_TARGET_ESP8266
+#include "tcpip_adapter.h"
+#include "lwip/inet.h"
+#else
+#include "esp_netif.h"
+#endif
 
 // One-shot timer for non-blocking reconnect with backoff
 static esp_timer_handle_t s_reconnect_timer = NULL;
@@ -94,7 +100,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
     } else if (base == IP_EVENT) {
         if (id == IP_EVENT_STA_GOT_IP) {
             ip_event_got_ip_t *event = (ip_event_got_ip_t *)data;
+// esp_ip4addr_ntoa() is ESP-IDF only. ESP8266 RTOS SDK uses lwip's ip4addr_ntoa().
+#ifdef CONFIG_IDF_TARGET_ESP8266
+            strncpy(s_ip_str, ip4addr_ntoa((const ip4_addr_t *)&event->ip_info.ip),
+                    sizeof(s_ip_str) - 1);
+            s_ip_str[sizeof(s_ip_str) - 1] = '\0';
+#else
             esp_ip4addr_ntoa(&event->ip_info.ip, s_ip_str, sizeof(s_ip_str));
+#endif
 
             s_connected = true;
             s_retry_count = 0;
@@ -118,10 +131,19 @@ volt_error_t wifi_connect(const char *ssid, const char *password)
     }
 
     if (!s_initialized) {
-        // NVS is already initialized by storage_init() in app_main
+        // Ensure NVS is initialized — WiFi needs it for calibration data
+        nvs_flash_init();
+
+// ESP8266 RTOS SDK uses tcpip_adapter_init() instead of esp_netif_init(),
+// and has no esp_netif_create_default_wifi_sta() — the adapter is always present.
+#ifdef CONFIG_IDF_TARGET_ESP8266
+        tcpip_adapter_init();
+        esp_event_loop_create_default();
+#else
         esp_netif_init();
         esp_event_loop_create_default();
         esp_netif_create_default_wifi_sta();
+#endif
 
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_err_t err = esp_wifi_init(&cfg);
@@ -130,10 +152,16 @@ volt_error_t wifi_connect(const char *ssid, const char *password)
             return VOLT_ERR_WIFI_INIT_FAILED;
         }
 
+#ifdef CONFIG_IDF_TARGET_ESP8266
+        // ESP8266 RTOS SDK uses the legacy event loop
+        esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler, NULL);
+        esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event_handler, NULL);
+#else
         esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                             wifi_event_handler, NULL, NULL);
         esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                             wifi_event_handler, NULL, NULL);
+#endif
 
         s_initialized = true;
     }

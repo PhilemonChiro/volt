@@ -614,7 +614,13 @@ class CCodeGen:
             elif sv.type_name == "float":
                 default = self._emit_expr_str(sv.default_value)
 
-        # Critical tasks
+        # Main block user code FIRST (wifi.connect, mqtt.connect, etc.)
+        if program.main:
+            self._out("")
+            self._out("// Main block")
+            self._emit_stmts(program.main.body)
+
+        # Critical tasks (after main block — WiFi/MQTT already initialized)
         for task in program.tasks:
             if task.tier == "critical":
                 for stmt in task.body:
@@ -623,16 +629,10 @@ class CCodeGen:
                         us = ms * 1000
                         self._out(f'volt_critical_create("{task.name}", {task.name}_isr, {us}, NULL);')
 
-        # Priority tasks
+        # Priority tasks (after main block — WiFi/MQTT already initialized)
         for task in program.tasks:
             if task.tier == "priority":
                 self._out(f'volt_rt_create("{task.name}", {task.name}_run, 4096, NULL, VOLT_PRIORITY_NORMAL, -1);')
-
-        # Main block user code
-        if program.main:
-            self._out("")
-            self._out("// Main block")
-            self._emit_stmts(program.main.body)
 
         # Background task table (includes state machines as protothread tasks)
         bg_tasks = [t for t in program.tasks if t.tier == "background"]
