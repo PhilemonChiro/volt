@@ -146,15 +146,34 @@ document.getElementById("monitorClearBtn").addEventListener("click", () => {
     document.getElementById("monitorOutput").textContent = "";
 });
 
-// ---- Window controls ----
+// ---- Window controls + drag ----
 try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
+
     document.getElementById("winMinimize")?.addEventListener("click", () => win.minimize());
     document.getElementById("winMaximize")?.addEventListener("click", () => win.toggleMaximize());
     document.getElementById("winClose")?.addEventListener("click", () => win.close());
+
+    // Drag window from toolbar
+    const toolbar = document.getElementById("toolbar");
+    toolbar.addEventListener("mousedown", (e) => {
+        // Only drag from empty toolbar area (not buttons)
+        if (e.target === toolbar || e.target.classList.contains("toolbar-brand") ||
+            e.target.classList.contains("brand-name") || e.target.classList.contains("brand-logo") ||
+            e.target.classList.contains("toolbar-divider")) {
+            win.startDragging();
+        }
+    });
+
+    // Double-click toolbar to maximize
+    toolbar.addEventListener("dblclick", (e) => {
+        if (e.target === toolbar || e.target.classList.contains("brand-name")) {
+            win.toggleMaximize();
+        }
+    });
 } catch (e) {
-    // Not running in Tauri (dev mode in browser)
+    // Not running in Tauri
 }
 
 // ---- Focus editor on load ----
