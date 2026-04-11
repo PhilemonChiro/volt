@@ -12,108 +12,67 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
 import { voltAutocompletion } from "./volt-completions.js";
-// ---- Custom hover tooltip (no CodeMirror API, no focus issues) ----
-const hoverTip = document.getElementById("hoverTip");
-let hoverTimer = null;
-
-// Docs for hover
+// ---- Hover info in status bar ----
 const HOVER_DOCS = {
-    chip: "Declare the target microcontroller.\nSupported: esp32, esp8266, rp2040, stm32f103",
-    hardware: "Define pin assignments and hardware peripherals.\nPins are validated against the chip's datasheet.",
-    task: "Declare a concurrent task.\nAuto-classified: background (12 bytes),\npriority (FreeRTOS 4KB), or critical (ISR).",
-    func: "Declare a function with parameters and return type.",
-    machine: "Declare a state machine.\nCompiler verifies: reachability, dead states,\ndeterministic transitions.",
-    struct: "Declare a custom data type with named fields.",
-    main: "Program entry point.\nWiFi/MQTT setup and run() go here.",
-    every: "Execute a block periodically.\nDuration: 100ms, 500ms, 1seconds, etc.",
-    strict: "Hardware timer ISR — exact timing.\nCannot call WiFi, MQTT, log, or blocking functions.",
-    state: "Declare a state with enter/exit actions and transitions.",
-    initial: "Mark as the starting state of the machine.",
-    enter: "Code executed when entering this state.",
-    exit: "Code executed when leaving this state.",
-    var: "Mutable variable — can be reassigned.",
-    let: "Immutable variable — cannot be reassigned.",
-    Output: "Digital output pin.\nMethods: on(), off(), toggle(), write()",
-    Input: "Digital input pin.\nMethods: read() → 0 or 1",
-    Analog: "Analog input (ADC).\nMethods: read() → 0-4095",
-    PWM: "Pulse-width modulation output.\nMethods: set_pwm(0-255)",
-    Touch: "Capacitive touch sensor. ESP32 only.",
-    wifi: "WiFi module.\nconnect(ssid, pass), disconnect(), is_connected()",
-    mqtt: "MQTT module.\nconnect(url), send_int(topic, val), is_connected()",
-    storage: "Persistent storage (survives reboots).\nsave(), load(), push(), drain()",
-    system: "System functions.\nrestart(), free_heap(), uptime()",
-    run: "Start all declared tasks.",
-    log: "Print a log message.\nUsage: log(tag, message)",
-    esp32: "ESP32 WROOM-32 — Xtensa LX6 dual-core\n520KB RAM, 4MB flash, WiFi + BT",
-    esp8266: "ESP8266 — Xtensa LX106 single-core\n80KB RAM, WiFi, no BT",
-    rp2040: "RP2040 — ARM Cortex-M0+ dual-core\n264KB RAM, 2MB flash, no WiFi",
-    stm32f103: "STM32F103 Blue Pill — ARM Cortex-M3\n20KB RAM, 64KB flash, no WiFi",
+    chip: "Declare the target chip — esp32, esp8266, rp2040, stm32f103",
+    hardware: "Pin assignments — validated against chip datasheet at compile time",
+    task: "Concurrent task — auto-classified: background (12B) / priority (4KB) / critical (ISR)",
+    func: "Function declaration with parameters and return type",
+    machine: "State machine — compiler verifies reachability, dead states, determinism",
+    struct: "Custom data type with named fields",
+    main: "Program entry point — WiFi/MQTT setup and run() go here",
+    every: "Periodic execution — 100ms, 500ms, 1seconds, etc.",
+    strict: "Critical ISR (hardware timer) — no WiFi/MQTT/log allowed",
+    state: "State with enter/exit actions and transitions",
+    initial: "Starting state of the machine",
+    enter: "Runs when entering this state", exit: "Runs when leaving this state",
+    var: "Mutable variable", let: "Immutable variable",
+    Output: "Digital output — on(), off(), toggle(), write()",
+    Input: "Digital input — read() → 0 or 1",
+    Analog: "ADC input — read() → 0-4095", PWM: "PWM output — set_pwm(0-255)",
+    Touch: "Capacitive touch (ESP32 only)",
+    wifi: "WiFi — connect(ssid, pass), disconnect(), is_connected()",
+    mqtt: "MQTT — connect(url), send_int(topic, val), is_connected()",
+    storage: "Persistent storage — save(), load(), push(), drain()",
+    system: "System — restart(), free_heap(), uptime()",
+    run: "Start all declared tasks", log: "Log message — log(tag, message)",
+    esp32: "ESP32 — Xtensa LX6 dual-core, 520KB RAM, WiFi+BT",
+    esp8266: "ESP8266 — Xtensa LX106, 80KB RAM, WiFi",
+    rp2040: "RP2040 — ARM Cortex-M0+ dual-core, 264KB RAM",
+    stm32f103: "STM32F103 Blue Pill — ARM Cortex-M3, 20KB RAM",
 };
 
-function editorMouseMove(e) {
-    clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => showHover(e), 400);
-}
+const statusHover = document.getElementById("statusHover");
 
-function editorMouseLeave() {
-    clearTimeout(hoverTimer);
-    hoverTip.classList.remove("visible");
-}
-
-function showHover(e) {
-    const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
-    if (pos === null) { hoverTip.classList.remove("visible"); return; }
-
-    const line = editor.state.doc.lineAt(pos);
-    const lineText = line.text;
-    let start = pos - line.from;
-    let end = pos - line.from;
-
-    while (start > 0 && /\w/.test(lineText[start - 1])) start--;
-    while (end < lineText.length && /\w/.test(lineText[end])) end++;
-
-    const word = lineText.slice(start, end);
-    if (!word || word.length < 2) { hoverTip.classList.remove("visible"); return; }
-
-    const doc = HOVER_DOCS[word];
-    if (!doc) { hoverTip.classList.remove("visible"); return; }
-
-    hoverTip.textContent = doc;
-
-    // Position tooltip near cursor, always inside viewport
-    const pad = 8;
-    const toolbarBottom = 52;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    // Measure first
-    hoverTip.style.left = "0px";
-    hoverTip.style.top = "0px";
-    hoverTip.classList.add("visible");
-    const tw = hoverTip.offsetWidth;
-    const th = hoverTip.offsetHeight;
-
-    // X: to the right of cursor, clamp to edges
-    let x = e.clientX + 12;
-    if (x + tw > vw - pad) x = vw - tw - pad;
-    if (x < pad) x = pad;
-
-    // Y: always below cursor. If that goes off-screen, still below but clamped.
-    let y = e.clientY + 20;
-    if (y + th > vh - pad) y = vh - th - pad;
-    if (y < toolbarBottom) y = toolbarBottom;
-
-    hoverTip.style.left = x + "px";
-    hoverTip.style.top = y + "px";
-}
-
-// Attach to editor container (after editor is created)
 setTimeout(() => {
     const editorEl = document.querySelector(".cm-editor");
-    if (editorEl) {
-        editorEl.addEventListener("mousemove", editorMouseMove);
-        editorEl.addEventListener("mouseleave", editorMouseLeave);
-    }
+    if (!editorEl) return;
+
+    editorEl.addEventListener("mousemove", (e) => {
+        const pos = editor.posAtCoords({ x: e.clientX, y: e.clientY });
+        if (pos === null) { statusHover.textContent = ""; statusHover.classList.remove("active"); return; }
+
+        const line = editor.state.doc.lineAt(pos);
+        const lineText = line.text;
+        let s = pos - line.from, end = pos - line.from;
+        while (s > 0 && /\w/.test(lineText[s - 1])) s--;
+        while (end < lineText.length && /\w/.test(lineText[end])) end++;
+        const word = lineText.slice(s, end);
+
+        const doc = word && HOVER_DOCS[word];
+        if (doc) {
+            statusHover.textContent = doc;
+            statusHover.classList.add("active");
+        } else {
+            statusHover.textContent = "";
+            statusHover.classList.remove("active");
+        }
+    });
+
+    editorEl.addEventListener("mouseleave", () => {
+        statusHover.textContent = "";
+        statusHover.classList.remove("active");
+    });
 }, 500);
 import { voltLinter } from "./volt-diagnostics.js";
 

@@ -720,25 +720,19 @@ button:focus-visible {
     box-shadow: 0 0 0 2px var(--volt-ring);
 }
 
-/* ---- Custom hover tooltip ---- */
-.hover-tip {
-    display: none;
-    position: fixed;
-    z-index: 999;
-    background: var(--bg-3);
-    color: var(--t1);
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-family: var(--sans);
-    line-height: 1.5;
-    max-width: 360px;
-    white-space: pre-wrap;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    border: 1px solid rgba(255,255,255,0.08);
-    pointer-events: none;
+/* ---- Status bar hover info ---- */
+.status-hover {
+    color: var(--t3);
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 500px;
+    transition: color 150ms;
 }
-.hover-tip.visible { display: block; }
+.status-hover.active {
+    color: var(--t2);
+}
 
 /* ---- CodeMirror autocomplete ---- */
 .cm-tooltip-autocomplete {
