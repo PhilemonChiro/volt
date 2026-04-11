@@ -176,27 +176,38 @@ try:
 except ImportError:
     print('[]'); sys.exit(0)
 
+# Known MCU vendor IDs
+MCU_VIDS = {0x10C4, 0x1A86, 0x0403, 0x2E8A, 0x0483, 0x303A, 0x2341, 0x239A, 0x1D50}
+
+def detect_from_usb(vid, pid):
+    if vid == 0x2E8A: return 'rp2040'
+    if vid == 0x0483: return 'stm32'
+    if vid == 0x303A: return 'esp32s3'
+    return None
+
 devices = []
 for p in serial.tools.list_ports.comports():
     desc = (p.description or '').lower()
     vid = p.vid or 0
-    is_mcu = any(c in desc for c in ['cp210', 'ch340', 'ch910', 'ftdi'])
-    is_mcu = is_mcu or vid in (0x10C4, 0x1A86, 0x0403)
+    is_mcu = vid in MCU_VIDS
+    is_mcu = is_mcu or any(c in desc for c in ['cp210', 'ch340', 'ch910', 'ftdi'])
+    is_mcu = is_mcu or 'ttyACM' in p.device
     if is_mcu:
-        chip = None
-        try:
-            r = subprocess.run([sys.executable, '-m', 'esptool', '--port', p.device, 'chip-id'],
-                               capture_output=True, text=True, timeout=8)
-            out = r.stdout + r.stderr
-            for line in out.splitlines():
-                low = line.lower()
-                if 'detecting chip type' in low or 'chip type:' in low:
-                    for c in ['esp32s3','esp32s2','esp32c3','esp32c6','esp32h2','esp32','esp8266']:
-                        if c in low.replace('-','').replace(' ',''):
-                            chip = c
-                            break
-                if chip: break
-        except: pass
+        chip = detect_from_usb(vid, p.pid or 0)
+        if not chip:
+            try:
+                r = subprocess.run([sys.executable, '-m', 'esptool', '--port', p.device, 'chip-id'],
+                                   capture_output=True, text=True, timeout=8)
+                out = r.stdout + r.stderr
+                for line in out.splitlines():
+                    low = line.lower()
+                    if 'detecting chip type' in low or 'chip type:' in low:
+                        for c in ['esp32s3','esp32s2','esp32c3','esp32c6','esp32h2','esp32','esp8266']:
+                            if c in low.replace('-','').replace(' ',''):
+                                chip = c
+                                break
+                    if chip: break
+            except: pass
         devices.append({'port': p.device, 'desc': p.description or '', 'chip': chip or 'unknown'})
 print(json.dumps(devices))
 "`;

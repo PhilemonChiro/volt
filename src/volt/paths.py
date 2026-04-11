@@ -259,16 +259,68 @@ def run_idf_command(args: list, cwd: str = None, env: dict = None,
     )
 
 
+# Known USB vendor IDs for microcontrollers
+_MCU_VIDS = {
+    0x10C4: "espressif",     # Silicon Labs CP2102 (ESP32)
+    0x1A86: "espressif",     # WCH CH340 (ESP32/ESP8266)
+    0x0403: "generic",       # FTDI (various boards)
+    0x2E8A: "rp2040",        # Raspberry Pi (Pico)
+    0x0483: "stm32",         # STMicroelectronics (STM32)
+    0x1D50: "generic",       # OpenMoko (Black Magic Probe, etc.)
+    0x2341: "generic",       # Arduino
+    0x239A: "generic",       # Adafruit
+    0x303A: "espressif",     # Espressif native USB (ESP32-S2/S3)
+}
+
+
+def detect_chip_from_usb(vid: int, pid: int, desc: str) -> str | None:
+    """Detect chip type from USB vendor/product ID and description.
+    Instant — no serial communication needed."""
+    if vid == 0x2E8A:
+        # Raspberry Pi — RP2040 or RP2350
+        if pid == 0x0005:
+            return "rp2040"       # MicroPython / CDC mode
+        if pid == 0x000A:
+            return "rp2040"       # Pico SDK CDC
+        if pid == 0x0003 or pid == 0x0004:
+            return "rp2040"       # BOOTSEL mode
+        return "rp2040"           # any Raspberry Pi VID = RP2040 family
+
+    if vid == 0x0483:
+        return "stm32"           # STMicroelectronics
+
+    if vid == 0x303A:
+        # Espressif native USB (ESP32-S2, S3, C3, C6)
+        return "esp32s3"         # most common, refine with esptool if needed
+
+    # For CH340/CP2102/FTDI — could be ESP32 or ESP8266, need esptool
+    return None
+
+
 def detect_chip(port: str) -> str | None:
-    """Detect the chip type on a serial port using esptool.
-    Returns: 'esp32', 'esp8266', 'esp32s2', 'esp32s3', 'esp32c3', etc. or None."""
+    """Detect the chip type on a serial port.
+    First tries USB VID/PID (instant), then falls back to esptool (slower)."""
+    # Try USB VID/PID first (from pyserial port info)
+    try:
+        import serial.tools.list_ports
+        for p in serial.tools.list_ports.comports():
+            if p.device == port:
+                vid = p.vid or 0
+                pid = p.pid or 0
+                chip = detect_chip_from_usb(vid, pid, p.description or "")
+                if chip:
+                    return chip
+                break
+    except ImportError:
+        pass
+
+    # Fall back to esptool for Espressif chips (CH340/CP2102)
     try:
         result = subprocess.run(
             [sys.executable, "-m", "esptool", "--port", port, "chip-id"],
             capture_output=True, text=True, timeout=10,
         )
         output = result.stdout + result.stderr
-        # esptool prints "Detecting chip type... ESP8266" or "ESP32" etc.
         for line in output.splitlines():
             low = line.lower()
             if "detecting chip type" in low or "chip type:" in low:
@@ -291,9 +343,14 @@ def find_serial_ports() -> list[dict]:
             vid = port.vid or 0
 
             is_mcu = False
+            # Check known MCU vendor IDs
+            if vid in _MCU_VIDS:
+                is_mcu = True
+            # Check known USB-serial chip names in description
             if any(chip in desc for chip in ["cp210", "ch340", "ch910", "ftdi"]):
                 is_mcu = True
-            if vid in (0x10C4, 0x1A86, 0x0403):  # Silicon Labs, WCH, FTDI
+            # ACM ports (Pico, STM32 native USB) are always MCUs
+            if "ttyACM" in port.device or "ACM" in (port.description or ""):
                 is_mcu = True
 
             if is_mcu:
