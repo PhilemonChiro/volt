@@ -525,6 +525,45 @@ document.addEventListener("keydown", (e) => {
 scanDevices();
 setInterval(scanDevices, 3000);
 
+// ---- Tooltip viewport containment ----
+// Watch for CodeMirror tooltips and nudge them inside the window
+const tooltipObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+        for (const node of m.addedNodes) {
+            if (node.nodeType === 1 && node.classList?.contains("cm-tooltip")) {
+                requestAnimationFrame(() => constrainToViewport(node));
+            }
+        }
+    }
+});
+tooltipObserver.observe(document.body, { childList: true, subtree: true });
+
+function constrainToViewport(el) {
+    const rect = el.getBoundingClientRect();
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Right edge overflow
+    if (rect.right > vw - pad) {
+        const shift = rect.right - (vw - pad);
+        el.style.left = (parseFloat(el.style.left || 0) - shift) + "px";
+    }
+    // Left edge overflow
+    if (rect.left < pad) {
+        el.style.left = pad + "px";
+    }
+    // Bottom edge overflow — move above the target
+    if (rect.bottom > vh - pad) {
+        const shift = rect.bottom - (vh - pad);
+        el.style.top = (parseFloat(el.style.top || 0) - shift) + "px";
+    }
+    // Top edge overflow (behind toolbar)
+    if (rect.top < 52) {
+        el.style.top = "52px";
+    }
+}
+
 // ---- Welcome screen ----
 function showWelcome() {
     document.getElementById("welcomeScreen").style.display = "flex";
