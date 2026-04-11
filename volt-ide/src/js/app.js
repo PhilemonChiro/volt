@@ -54,23 +54,8 @@ const voltTheme = EditorView.theme({
     ".cm-selectionMatch": { backgroundColor: "hsla(152, 60%, 40%, 0.12)" },
 }, { dark: true });
 
-// ---- Default Volt code ----
-const DEFAULT_CODE = `chip esp32
-
-hardware {
-    pin led: Output = 2
-}
-
-task blink() {
-    every 500ms {
-        led.toggle()
-    }
-}
-
-main {
-    run(blink)
-}
-`;
+// ---- No default code — welcome screen shows instead ----
+const DEFAULT_CODE = ``;
 
 // ---- Create editor ----
 const container = document.getElementById("editorContainer");
@@ -348,8 +333,13 @@ document.getElementById("newProjectBtn").addEventListener("click", async () => {
 
     try {
         const { invoke } = await import("@tauri-apps/api/core");
-        const chip = currentDevices.length > 0 ? currentDevices[selectedDeviceIndex].chip : "esp32";
-        const path = await invoke("create_project", { name, chip: chip.toLowerCase() });
+        // Read chip from connected device, or default to esp32
+        let chip = "esp32";
+        if (currentDevices.length > 0) {
+            chip = currentDevices[selectedDeviceIndex].chip.toLowerCase();
+            if (chip === "esp" || chip === "espressif") chip = "esp32";
+        }
+        const path = await invoke("create_project", { name, chip });
         if (path) {
             await loadProject(path);
             appendMonitor("Created project: " + path, "info");
@@ -376,6 +366,9 @@ async function loadProjectFile(folder, filePath, fileName) {
 
         currentProjectPath = folder;
         currentVoltFile = filePath;
+
+        // Switch to editor view
+        showEditor();
 
         editor.dispatch({
             changes: { from: 0, to: editor.state.doc.length, insert: content }
@@ -526,5 +519,50 @@ document.addEventListener("keydown", (e) => {
 scanDevices();
 setInterval(scanDevices, 3000);
 
-// ---- Focus editor on load ----
-editor.focus();
+// ---- Welcome screen ----
+function showWelcome() {
+    document.getElementById("welcomeScreen").style.display = "flex";
+    document.getElementById("editorContainer").style.display = "none";
+}
+
+function showEditor() {
+    document.getElementById("welcomeScreen").style.display = "none";
+    document.getElementById("editorContainer").style.display = "block";
+    editor.focus();
+}
+
+// Wire welcome buttons to same actions as toolbar
+document.getElementById("welcomeNewBtn")?.addEventListener("click", () => {
+    document.getElementById("newProjectBtn")?.click();
+});
+document.getElementById("welcomeOpenBtn")?.addEventListener("click", () => {
+    document.getElementById("openProjectBtn")?.click();
+});
+
+// Load recent projects into welcome screen
+async function loadWelcomeRecent() {
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const projects = await invoke("list_projects");
+        const container = document.getElementById("welcomeRecent");
+        if (projects.length === 0) {
+            container.innerHTML = "";
+            return;
+        }
+        container.innerHTML = '<div class="welcome-recent-title">Recent Projects</div>' +
+            projects.slice(0, 5).map(p =>
+                `<div class="welcome-recent-item" data-path="${p.path}">
+                    ${p.name}
+                    <span class="welcome-recent-chip">${p.chip.toUpperCase()}</span>
+                </div>`
+            ).join("");
+
+        container.querySelectorAll(".welcome-recent-item").forEach(item => {
+            item.addEventListener("click", () => loadProject(item.dataset.path));
+        });
+    } catch (e) {}
+}
+loadWelcomeRecent();
+
+// Show welcome on launch
+showWelcome();
