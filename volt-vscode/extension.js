@@ -664,17 +664,6 @@ class VoltSidebarProvider {
         line-height: 1.3;
     }
 
-    /* File list */
-    .file-item {
-        display: flex;
-        align-items: center;
-        padding: 3px 12px 3px 20px;
-        cursor: pointer;
-        font-size: 12px;
-    }
-    .file-item:hover { background: var(--vscode-list-hoverBackground); }
-    .file-icon { margin-right: 6px; font-size: 11px; opacity: 0.6; }
-
     .dot {
         width: 6px; height: 6px; border-radius: 50%;
         display: inline-block; margin-right: 3px;
@@ -755,16 +744,6 @@ class VoltSidebarProvider {
                 <div style="opacity:0.3;font-size:11px">No device connected</div>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- FILES -->
-<div class="section">
-    <div class="section-header" onclick="toggle(this)">
-        <span class="chevron">▾</span> Files
-    </div>
-    <div class="section-body" id="fileListBody">
-        <div id="fileList"></div>
     </div>
 </div>
 
@@ -983,20 +962,7 @@ class VoltSidebarProvider {
             document.getElementById('monLabel').textContent = s.monitoring ? 'Live' : 'Off';
         }
 
-        if (msg.type === 'fileList') {
-            const list = document.getElementById('fileList');
-            list.innerHTML = '';
-            msg.files.forEach(f => {
-                const div = document.createElement('div');
-                div.className = 'file-item';
-                div.innerHTML = '<img src="' + LOGO + '" width="14" height="14" style="margin-right:6px;vertical-align:middle;opacity:0.8" />' + f.name;
-                div.onclick = () => vscode.postMessage({ command: 'openFile', path: f.path });
-                list.appendChild(div);
-            });
-            if (!msg.files.length) {
-                list.innerHTML = '<div style="padding:8px 20px;opacity:0.5">No .volt files</div>';
-            }
-        }
+        // File list removed — VS Code explorer handles this
     });
 </script>
 </body>
