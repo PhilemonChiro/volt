@@ -724,7 +724,7 @@ button:focus-visible {
    HOVER INFO BAR (between editor and bottom panel)
    ================================================================ */
 #hoverBar {
-    height: 26px;
+    height: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -733,11 +733,11 @@ button:focus-visible {
     font-size: 11px;
     color: var(--t3);
     flex-shrink: 0;
-    transition: color 100ms, background 100ms;
-    border-top: 1px solid var(--border-subtle);
+    transition: height 100ms, color 100ms, background 100ms, padding 100ms;
     overflow: hidden;
 }
 #hoverBar.active {
+    height: 26px;
     color: var(--t1);
     background: var(--bg-3);
 }

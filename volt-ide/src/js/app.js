@@ -68,7 +68,7 @@ const hoverText = document.getElementById("hoverText");
 function resetHoverBar() {
     hoverBar.className = "";
     hoverIcon.textContent = "";
-    hoverText.textContent = "Hover a keyword for documentation";
+    hoverText.textContent = "";
 }
 
 setTimeout(() => {
