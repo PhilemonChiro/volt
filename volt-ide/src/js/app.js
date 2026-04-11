@@ -4,8 +4,7 @@
  */
 
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         highlightActiveLineGutter, drawSelection, rectangularSelection,
-         tooltips } from "@codemirror/view";
+         highlightActiveLineGutter, drawSelection, rectangularSelection } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { bracketMatching, foldGutter, indentOnInput } from "@codemirror/language";
@@ -13,7 +12,7 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { voltLanguage, voltHighlight, syntaxHighlighting } from "./volt-syntax.js";
 import { voltAutocompletion } from "./volt-completions.js";
-import { voltHover } from "./volt-hover.js";
+// voltHover disabled temporarily — causes editor focus issues
 import { voltLinter } from "./volt-diagnostics.js";
 
 // ---- Dark theme for the editor chrome ----
@@ -89,10 +88,7 @@ const state = EditorState.create({
         syntaxHighlighting(voltHighlight),
         voltTheme,
         voltAutocompletion,
-        voltHover,
         voltLinter,
-        // Render tooltips in document.body — full viewport positioning
-        tooltips({ parent: document.body }),
         // Update cursor position in status bar
         EditorView.updateListener.of(update => {
             if (update.selectionSet) {
