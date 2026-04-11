@@ -827,22 +827,16 @@ button:focus-visible {
     border-bottom: 2px wavy var(--warn) !important;
 }
 
-/* ---- CodeMirror lint (squiggly underlines via SVG background) ---- */
+/* ---- CodeMirror lint — highlight entire line ---- */
 .cm-lintRange-error {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 3 L2 0 L4 3 L6 0' stroke='%23e55' fill='none' stroke-width='1'/%3E%3C/svg%3E") !important;
-    background-repeat: repeat-x !important;
-    background-position: bottom !important;
-    background-size: 6px 3px !important;
-    background-color: rgba(238, 85, 85, 0.08) !important;
-    padding-bottom: 2px !important;
+    background: rgba(238, 85, 85, 0.12) !important;
+    outline: none !important;
+    border-bottom: none !important;
 }
 .cm-lintRange-warning {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 3 L2 0 L4 3 L6 0' stroke='%23cc7a00' fill='none' stroke-width='1'/%3E%3C/svg%3E") !important;
-    background-repeat: repeat-x !important;
-    background-position: bottom !important;
-    background-size: 6px 3px !important;
-    background-color: rgba(204, 122, 0, 0.08) !important;
-    padding-bottom: 2px !important;
+    background: rgba(204, 122, 0, 0.10) !important;
+    outline: none !important;
+    border-bottom: none !important;
 }
 .cm-diagnostic {
     font-family: var(--sans) !important;
@@ -862,18 +856,20 @@ button:focus-visible {
 .cm-lint-marker-error, .cm-lint-marker-warning {
     content: none !important;
 }
-/* Gutter dot for errors */
+/* Gutter markers for errors */
 .cm-lint-marker {
-    width: 6px !important;
-    height: 6px !important;
+    width: 8px !important;
+    height: 8px !important;
     border-radius: 50% !important;
     margin: 4px 2px;
 }
 .cm-lint-marker-error {
     background: #e55 !important;
+    box-shadow: 0 0 0 2px rgba(238, 85, 85, 0.2);
 }
 .cm-lint-marker-warning {
     background: #cc7a00 !important;
+    box-shadow: 0 0 0 2px rgba(204, 122, 0, 0.2);
 }
 
 /* ---- CodeMirror tooltips — spatial awareness ---- */

@@ -32,9 +32,11 @@ export const voltLinter = linter(async (view) => {
         return result.map(err => {
             const lineNum = Math.min(Math.max(err.line, 1), view.state.doc.lines);
             const line = view.state.doc.line(lineNum);
-            const col = Math.max(0, (err.col || 1) - 1);
-            const from = line.from + Math.min(col, line.length);
-            const to = Math.min(from + 20, line.to);
+
+            // Highlight the entire line content (skip leading whitespace)
+            const trimStart = line.text.search(/\S/);
+            const from = line.from + (trimStart >= 0 ? trimStart : 0);
+            const to = line.to;
 
             return {
                 from,
