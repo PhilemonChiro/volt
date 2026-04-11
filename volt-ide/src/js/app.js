@@ -2,18 +2,15 @@
  * Volt IDE — Main Application (Monaco Editor)
  */
 
-import * as monaco from "monaco-editor";
-import { registerVoltLanguage, defineVoltTheme, VOLT_LANGUAGE_ID } from "./volt-monaco.js";
-
-// ---- Setup Monaco ----
-// Configure workers (inline for Tauri — no separate worker files)
+// Worker setup MUST be before monaco import
 self.MonacoEnvironment = {
-    getWorker: function () {
-        return new Worker(
-            URL.createObjectURL(new Blob([`self.onmessage = function() {}`], { type: "text/javascript" }))
-        );
+    getWorkerUrl: function (_moduleId, _label) {
+        return "/dist/workers/editor.worker.js";
     },
 };
+
+import * as monaco from "monaco-editor";
+import { registerVoltLanguage, defineVoltTheme, VOLT_LANGUAGE_ID } from "./volt-monaco.js";
 
 registerVoltLanguage(monaco);
 defineVoltTheme(monaco);
@@ -25,13 +22,25 @@ let currentModel = null;
 
 function createEditor(content = "") {
     if (editor) {
-        editor.setValue(content);
+        // Update existing model content
+        const model = editor.getModel();
+        if (model) {
+            model.setValue(content);
+        }
         return;
     }
 
+    // Create model with stable URI
+    const modelUri = monaco.Uri.parse("inmemory://volt/main.volt");
+    let model = monaco.editor.getModel(modelUri);
+    if (model) {
+        model.setValue(content);
+    } else {
+        model = monaco.editor.createModel(content, VOLT_LANGUAGE_ID, modelUri);
+    }
+
     editor = monaco.editor.create(container, {
-        value: content,
-        language: VOLT_LANGUAGE_ID,
+        model,
         theme: "volt-dark",
         fontSize: 14,
         fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
@@ -71,13 +80,15 @@ function createEditor(content = "") {
 }
 
 // ---- Diagnostics ----
+const DIAG_OWNER = "volt";
+
 async function runDiagnostics() {
-    if (!editor || !currentModel) return;
-    // Snapshot the model to avoid race conditions
-    const model = currentModel;
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model || model.isDisposed()) return;
     const code = model.getValue();
     if (code.trim().length < 10) {
-        monaco.editor.setModelMarkers(model, "volt", []);
+        monaco.editor.setModelMarkers(model, DIAG_OWNER, []);
         updateProblemBadge(0);
         return;
     }
@@ -90,7 +101,7 @@ async function runDiagnostics() {
         if (model !== currentModel || model.isDisposed()) return;
 
         if (!result || !Array.isArray(result)) {
-            monaco.editor.setModelMarkers(model, "volt", []);
+            monaco.editor.setModelMarkers(model, DIAG_OWNER, []);
             updateProblemBadge(0);
             return;
         }
@@ -128,11 +139,15 @@ async function runDiagnostics() {
             }
         }
 
-        monaco.editor.setModelMarkers(model, "volt", markers);
+        // Verify model is still valid before applying markers
+        const check = editor.getModel();
+        if (model === check && !model.isDisposed()) {
+            monaco.editor.setModelMarkers(model, DIAG_OWNER, markers);
+        }
         updateProblemBadge(markers.length);
     } catch (e) {
         if (model && !model.isDisposed()) {
-            monaco.editor.setModelMarkers(model, "volt", []);
+            monaco.editor.setModelMarkers(model, DIAG_OWNER, []);
         }
         updateProblemBadge(0);
     }
