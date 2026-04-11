@@ -1,0 +1,251 @@
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
+use tauri::{AppHandle, Emitter};
+
+#[derive(Clone, serde::Serialize)]
+struct RunProgress {
+    stage: String,  // "compile", "build", "flash", "done", "error"
+    message: String,
+    percent: u32,
+}
+
+/// Run the full pipeline: compile .volt → build → flash
+/// Streams progress to the frontend via events
+pub fn run_pipeline(app: AppHandle, project_path: String, port: String, chip: String) {
+    std::thread::spawn(move || {
+        let app = app.clone();
+
+        // Stage 1: Compile .volt → C
+        emit(&app, "compile", "Compiling Volt source...", 10);
+
+        let volt_file = format!("{}/main.volt", project_path);
+        if !std::path::Path::new(&volt_file).exists() {
+            emit(&app, "error", "No main.volt found in project", 0);
+            return;
+        }
+
+        // Find the volt compiler
+        let compile_result = Command::new("python3")
+            .args(["-c", &format!(
+                "import sys; sys.path.insert(0, '{}'); \
+                 from volt.compiler.voltc import compile_volt; \
+                 from pathlib import Path; \
+                 source = Path('{}').read_text(); \
+                 c, e = compile_volt(source, 'main.volt'); \
+                 errs = [x for x in e.errors if x.severity == 'error']; \
+                 if errs: print('ERROR:' + errs[0].message); \
+                 elif c: Path('{}/build/main.c').write_text(c); print('OK')",
+                get_volt_src_path(), volt_file, project_path
+            )])
+            .output();
+
+        match compile_result {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if stdout.contains("ERROR:") {
+                    let msg = stdout.trim_start_matches("ERROR:").trim();
+                    emit(&app, "error", &format!("Compile error: {}", msg), 0);
+                    return;
+                }
+                if !stdout.contains("OK") {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    emit(&app, "error", &format!("Compile failed: {}", stderr.chars().take(200).collect::<String>()), 0);
+                    return;
+                }
+            }
+            Err(e) => {
+                emit(&app, "error", &format!("Cannot run compiler: {}", e), 0);
+                return;
+            }
+        }
+
+        emit(&app, "compile", "Compiled successfully", 25);
+
+        // Stage 2: Build (SDK-specific)
+        emit(&app, "build", "Building firmware...", 30);
+
+        let build_ok = if chip.contains("esp") {
+            run_esp_build(&app, &project_path, &chip)
+        } else if chip.contains("rp2040") || chip.contains("pico") {
+            run_pico_build(&app, &project_path)
+        } else {
+            emit(&app, "error", &format!("Unknown chip: {}", chip), 0);
+            false
+        };
+
+        if !build_ok { return; }
+
+        emit(&app, "build", "Build complete", 60);
+
+        // Stage 3: Flash
+        emit(&app, "flash", "Flashing to device...", 65);
+
+        let flash_ok = if chip.contains("esp") {
+            run_esp_flash(&app, &project_path, &port, &chip)
+        } else if chip.contains("rp2040") || chip.contains("pico") {
+            run_pico_flash(&app, &project_path, &port)
+        } else {
+            false
+        };
+
+        if !flash_ok { return; }
+
+        emit(&app, "done", "Running on device", 100);
+    });
+}
+
+fn emit(app: &AppHandle, stage: &str, message: &str, percent: u32) {
+    let _ = app.emit("run:progress", RunProgress {
+        stage: stage.to_string(),
+        message: message.to_string(),
+        percent,
+    });
+}
+
+fn stream_command(app: &AppHandle, mut cmd: Command, stage: &str) -> bool {
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            emit(app, "error", &format!("Failed to start: {}", e), 0);
+            return false;
+        }
+    };
+
+    // Stream stdout
+    if let Some(stdout) = child.stdout.take() {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().flatten() {
+            let _ = app.emit("run:output", &line);
+        }
+    }
+
+    let status = child.wait();
+    match status {
+        Ok(s) if s.success() => true,
+        Ok(s) => {
+            emit(app, "error", &format!("{} failed (exit code {})", stage, s.code().unwrap_or(-1)), 0);
+            false
+        }
+        Err(e) => {
+            emit(app, "error", &format!("{} error: {}", stage, e), 0);
+            false
+        }
+    }
+}
+
+fn run_esp_build(app: &AppHandle, project_path: &str, chip: &str) -> bool {
+    let idf_path = if chip == "esp8266" || chip == "ESP8266" {
+        dirs::home_dir().unwrap().join(".volt/toolchains/esp8266-rtos-sdk")
+    } else {
+        // Try common ESP-IDF locations
+        let home = dirs::home_dir().unwrap();
+        if home.join("esp/esp-idf").exists() {
+            home.join("esp/esp-idf")
+        } else {
+            home.join(".volt/toolchains/esp-idf")
+        }
+    };
+
+    let mut cmd = Command::new("bash");
+    cmd.arg("-c")
+       .arg(format!("source {}/export.sh 2>/dev/null && idf.py build", idf_path.display()))
+       .current_dir(project_path);
+
+    stream_command(app, cmd, "Build")
+}
+
+fn run_esp_flash(app: &AppHandle, project_path: &str, port: &str, chip: &str) -> bool {
+    let idf_path = if chip == "esp8266" || chip == "ESP8266" {
+        dirs::home_dir().unwrap().join(".volt/toolchains/esp8266-rtos-sdk")
+    } else {
+        let home = dirs::home_dir().unwrap();
+        if home.join("esp/esp-idf").exists() {
+            home.join("esp/esp-idf")
+        } else {
+            home.join(".volt/toolchains/esp-idf")
+        }
+    };
+
+    let mut cmd = Command::new("bash");
+    cmd.arg("-c")
+       .arg(format!("source {}/export.sh 2>/dev/null && idf.py -p {} flash", idf_path.display(), port))
+       .current_dir(project_path);
+
+    stream_command(app, cmd, "Flash")
+}
+
+fn run_pico_build(app: &AppHandle, project_path: &str) -> bool {
+    let sdk = dirs::home_dir().unwrap().join(".volt/toolchains/pico-sdk");
+
+    let build_dir = format!("{}/build", project_path);
+    std::fs::create_dir_all(&build_dir).ok();
+
+    let mut cmd = Command::new("bash");
+    cmd.arg("-c")
+       .arg(format!("PICO_SDK_PATH={} cmake .. && make -j$(nproc)", sdk.display()))
+       .current_dir(&build_dir);
+
+    stream_command(app, cmd, "Build")
+}
+
+fn run_pico_flash(app: &AppHandle, project_path: &str, port: &str) -> bool {
+    // Send reboot command then copy UF2
+    // For now just emit that it needs BOOTSEL
+    emit(app, "flash", "Flashing Pico...", 80);
+
+    // Try to send reset command to enter BOOTSEL
+    if let Ok(mut serial) = serialport::new(port, 115200)
+        .timeout(std::time::Duration::from_millis(500))
+        .open()
+    {
+        use std::io::Write;
+        let _ = serial.write(&[0x07]); // BEL = reboot to BOOTSEL
+        drop(serial);
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+
+    // Look for UF2 mount
+    let home = dirs::home_dir().unwrap();
+    let user = std::env::var("USER").unwrap_or_default();
+    let mount = format!("/media/{}/RPI-RP2", user);
+
+    if std::path::Path::new(&mount).exists() {
+        let uf2 = format!("{}/build/*.uf2", project_path);
+        let result = Command::new("bash")
+            .arg("-c")
+            .arg(format!("cp {}  {}/", uf2, mount))
+            .output();
+
+        match result {
+            Ok(o) if o.status.success() => {
+                emit(app, "flash", "UF2 copied — Pico rebooting", 95);
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                true
+            }
+            _ => {
+                emit(app, "error", "Failed to copy UF2 to Pico", 0);
+                false
+            }
+        }
+    } else {
+        emit(app, "error", "Pico not in BOOTSEL mode — hold BOOTSEL and replug", 0);
+        false
+    }
+}
+
+fn get_volt_src_path() -> String {
+    // Try to find the volt source
+    let home = dirs::home_dir().unwrap();
+    let candidates = [
+        home.join("dev/volt/src"),
+        home.join(".volt/sdk/src"),
+    ];
+    for c in &candidates {
+        if c.exists() {
+            return c.to_string_lossy().to_string();
+        }
+    }
+    "src".to_string()
+}

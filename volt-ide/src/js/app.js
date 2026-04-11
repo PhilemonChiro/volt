@@ -117,29 +117,133 @@ const editor = new EditorView({
     parent: container,
 });
 
-// ---- Toolbar buttons (Phase 1: visual feedback) ----
-document.getElementById("runBtn").addEventListener("click", () => {
-    const status = document.getElementById("statusBuild");
-    const btn = document.getElementById("runBtn");
-    btn.textContent = ""; // will add spinner later
-    btn.innerHTML = '<svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Running...';
-    status.textContent = "Building...";
-    // Phase 3: will call volt build → flash → monitor
-    setTimeout(() => {
-        status.textContent = "Flashing...";
-    }, 800);
-    setTimeout(() => {
-        status.textContent = "✓ Running";
-        btn.innerHTML = '<svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run';
-    }, 1500);
-});
+// ---- Run button — real build + flash + monitor ----
+document.getElementById("runBtn").addEventListener("click", async () => {
+    if (currentDevices.length === 0) {
+        appendMonitor("No device connected — plug in a board", "error");
+        return;
+    }
 
-document.getElementById("monitorBtn").addEventListener("click", () => {
-    const dot = document.querySelector("#monitorDot") || document.querySelector(".panel-dot");
-    if (dot) {
-        dot.classList.toggle("live");
+    const device = currentDevices[selectedDeviceIndex];
+    const statusBuild = document.getElementById("statusBuild");
+
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+
+        // Use current working directory or ~/Volt as project path
+        // For now, this is a placeholder — will use actual project path
+        statusBuild.textContent = "Running...";
+
+        await invoke("run_project", {
+            projectPath: ".",   // TODO: use actual project path
+            port: device.port,
+            chip: device.chip,
+        });
+    } catch (e) {
+        appendMonitor("Run failed: " + e, "error");
+        statusBuild.textContent = "✗ Failed";
     }
 });
+
+// ---- Monitor button — toggle serial monitor ----
+document.getElementById("monitorBtn").addEventListener("click", async () => {
+    if (currentDevices.length === 0) {
+        appendMonitor("No device connected", "error");
+        return;
+    }
+
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const monitoring = await invoke("is_monitoring");
+
+        if (monitoring) {
+            await invoke("stop_monitor");
+            document.querySelector(".panel-dot")?.classList.remove("live");
+        } else {
+            const device = currentDevices[selectedDeviceIndex];
+            // Auto-detect baud: ESP8266=74880, others=115200
+            const baud = device.chip.includes("8266") ? 74880 : 115200;
+            await invoke("start_monitor", { port: device.port, baud });
+            document.querySelector(".panel-dot")?.classList.add("live");
+        }
+    } catch (e) {
+        appendMonitor("Monitor error: " + e, "error");
+    }
+});
+
+// ---- Listen for serial data + run progress ----
+async function setupListeners() {
+    try {
+        const { listen } = await import("@tauri-apps/api/event");
+
+        await listen("serial:data", (event) => {
+            appendMonitor(event.payload.line, "info");
+        });
+
+        await listen("serial:connected", (event) => {
+            appendMonitor("Connected to " + event.payload, "info");
+            document.querySelector(".panel-dot")?.classList.add("live");
+        });
+
+        await listen("serial:disconnected", (event) => {
+            appendMonitor("Disconnected from " + event.payload, "warn");
+            document.querySelector(".panel-dot")?.classList.remove("live");
+        });
+
+        await listen("serial:error", (event) => {
+            appendMonitor(event.payload, "error");
+        });
+
+        await listen("run:progress", (event) => {
+            const { stage, message, percent } = event.payload;
+            const statusBuild = document.getElementById("statusBuild");
+
+            if (stage === "error") {
+                statusBuild.textContent = "✗ " + message.substring(0, 50);
+                appendMonitor(message, "error");
+            } else if (stage === "done") {
+                statusBuild.textContent = "✓ " + message;
+                appendMonitor(message, "info");
+            } else {
+                statusBuild.textContent = message;
+                appendMonitor(message, "debug");
+            }
+        });
+
+        await listen("run:output", (event) => {
+            appendMonitor(event.payload, "debug");
+        });
+    } catch (e) {
+        // Not in Tauri
+    }
+}
+setupListeners();
+
+// ---- Monitor output helpers ----
+function appendMonitor(text, level) {
+    const output = document.getElementById("monitorOutput");
+    const line = document.createElement("div");
+    line.className = "log-" + (level || "info");
+
+    // Timestamp
+    const now = new Date();
+    const ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
+        .map(n => String(n).padStart(2, '0')).join(':');
+
+    // Strip ANSI codes
+    const clean = text.replace(/\x1b\[[0-9;]*m/g, '');
+
+    line.textContent = `[${ts}] ${clean}`;
+    output.appendChild(line);
+
+    // Auto-scroll
+    output.scrollTop = output.scrollHeight;
+
+    // Limit lines
+    while (output.children.length > 5000) {
+        output.removeChild(output.firstChild);
+    }
+}
 
 document.getElementById("monitorClearBtn").addEventListener("click", () => {
     document.getElementById("monitorOutput").textContent = "";
