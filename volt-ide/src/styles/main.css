@@ -791,10 +791,22 @@ button:focus-visible {
     border-bottom: 2px wavy var(--warn) !important;
 }
 
-/* ---- CodeMirror tooltip (hover) ---- */
+/* ---- CodeMirror tooltips — keep inside viewport ---- */
+.cm-tooltip {
+    z-index: 200 !important;
+}
 .cm-tooltip-hover {
     background: var(--bg-3) !important;
     border: 1px solid rgba(255,255,255,0.08) !important;
     border-radius: 6px !important;
     box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+}
+/* Force tooltips below text when near top of editor */
+.cm-tooltip-above {
+    /* If tooltip would overlap toolbar, flip to below */
+}
+/* Ensure tooltips don't go off-screen */
+.cm-tooltip, .cm-tooltip-autocomplete, .cm-tooltip-hover {
+    max-height: 300px !important;
+    overflow-y: auto !important;
 }

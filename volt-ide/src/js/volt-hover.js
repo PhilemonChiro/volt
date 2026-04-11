@@ -25,7 +25,7 @@ export const voltHover = hoverTooltip((view, pos) => {
         return {
             pos: from + start,
             end: from + end,
-            above: true,
+            above: false,
             create() {
                 const dom = document.createElement("div");
                 dom.className = "volt-tooltip";
@@ -46,7 +46,7 @@ export const voltHover = hoverTooltip((view, pos) => {
                 return {
                     pos: from + start,
                     end: from + end,
-                    above: true,
+                    above: false,
                     create() {
                         const dom = document.createElement("div");
                         dom.className = "volt-tooltip";
@@ -65,7 +65,7 @@ export const voltHover = hoverTooltip((view, pos) => {
         return {
             pos: from + start,
             end: from + end,
-            above: true,
+            above: false,
             create() {
                 const dom = document.createElement("div");
                 dom.className = "volt-tooltip";
@@ -85,7 +85,7 @@ export const voltHover = hoverTooltip((view, pos) => {
         return {
             pos: from + start,
             end: from + start + durMatch[0].length,
-            above: true,
+            above: false,
             create() {
                 const dom = document.createElement("div");
                 dom.className = "volt-tooltip";
