@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "esbuild src/js/app.js --bundle --outfile=src/dist/app.js --format=esm --minify",
+    "build": "esbuild src/js/app.js --bundle --outfile=src/dist/app.js --format=esm --minify --loader:.ttf=file",
     "package": "npm run build && rm -rf dist-frontend && mkdir -p dist-frontend/dist dist-frontend/styles dist-frontend/assets && cp src/index.html dist-frontend/ && cp src/dist/app.js dist-frontend/dist/ && cp src/styles/main.css dist-frontend/styles/ && cp -r src/assets/* dist-frontend/assets/ 2>/dev/null; true",
     "dev": "esbuild src/js/app.js --bundle --outfile=src/dist/app.js --format=esm --watch",
     "tauri": "tauri"
@@ -25,7 +25,8 @@
     "@lezer/lr": "^1.4.8",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/cli": "^2.10.1",
-    "codemirror": "^6.0.2"
+    "codemirror": "^6.0.2",
+    "monaco-editor": "^0.55.1"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"
