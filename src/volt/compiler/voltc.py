@@ -21,6 +21,7 @@ from .analyzer import analyze
 from .transformer import transform
 from .codegen import generate
 from .errors import CompilerErrors
+from .ast_nodes import Region
 
 
 import re as _re
@@ -79,7 +80,7 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
         program = parse(source)
     except Exception as e:
         errors.error(
-            __import__('ast_nodes').Region(1, 1, 1, 1),
+            Region(1, 1, 1, 1),
             "SYNTAX ERROR",
             str(e).split('\n')[0],
         )

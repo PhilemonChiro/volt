@@ -661,14 +661,15 @@ class CCodeGen:
                     self._out(f"pin_set_output({pin.gpio}); // PWM")
             self._out("")
 
-        # Storage variable loading
+        # Storage variable loading — restore from flash with defaults
         for sv in program.storage_vars:
-            c_type = TYPE_MAP.get(sv.type_name, "int32_t")
-            if sv.type_name == "int":
-                default = self._emit_expr_str(sv.default_value)
-                self._out(f"// load storage: {sv.name}")
-            elif sv.type_name == "float":
-                default = self._emit_expr_str(sv.default_value)
+            default = self._emit_expr_str(sv.default_value) if sv.default_value else "0"
+            if sv.type_name == "float":
+                self._out(f"{_c_name(sv.name)} = storage_load_float(\"{sv.name}\", {default});")
+            elif sv.type_name == "string":
+                self._out(f"storage_load_str(\"{sv.name}\", {_c_name(sv.name)}, sizeof({_c_name(sv.name)}), {default});")
+            else:
+                self._out(f"{_c_name(sv.name)} = storage_load_int(\"{sv.name}\", {default});")
 
         # Setup block — runs once before tasks start
         if program.setup:

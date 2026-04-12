@@ -290,14 +290,22 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                     f"Variable `{stmt.name}` declared as `{stmt.type_name}` "
                     f"but assigned `{val_type}`.",
                 )
-            stmt.type_name = stmt.type_name
         else:
             # Infer type from value
-            stmt.type_name = val_type
+            if val_type == ERROR_TYPE and not stmt.value:
+                errors.error(
+                    stmt.region, "TYPE ERROR",
+                    f"Variable `{stmt.name}` has no type annotation and no initial value.",
+                    hint="Add a type: `var {}: int = 0` or provide a value.".format(stmt.name),
+                )
+                stmt.type_name = "unknown"
+            else:
+                stmt.type_name = val_type
 
         # Register in scope with resolved type
+        resolved_type = _normalize_type(stmt.type_name) if stmt.type_name else "unknown"
         scope.declare(Symbol(
-            stmt.name, "var", stmt.type_name or "unknown", stmt.region,
+            stmt.name, "var", resolved_type, stmt.region,
             mutable=stmt.mutable,
         ))
 
