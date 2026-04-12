@@ -78,9 +78,8 @@ METHOD_MAP = {
     # HTTP
     ("HTTP", "get"):  "http_get({args}, NULL, 0, NULL)",
     ("HTTP", "post"): "http_post({args}, NULL, NULL, 0, NULL)",
-    # Storage
-    ("Storage", "save"):       "storage_save_int({args})",
-    ("Storage", "load"):       "storage_load_int({args}, 0)",
+    # Storage — save/load dispatch handled in _emit_method_call
+    ("Storage", "push"):       "storage_push({args})",
     ("Storage", "push"):       "storage_push({args})",
     ("Storage", "drain"):      "storage_drain({args})",
     ("Storage", "list_count"): "storage_list_count({args})",
@@ -253,6 +252,7 @@ class CCodeGen:
         self._out(f"// Source: {self.source_file}")
         self._out("")
         self._out("#include <stdint.h>")
+        self._out("#include <stdatomic.h>")
 
         # Chip-specific top-level include
         if chip == "rp2040":
@@ -274,7 +274,7 @@ class CCodeGen:
             self._out('#include "volt/storage.h"')
         self._out("")
         # String interpolation buffers (used by string + int concat)
-        self._out("static char _volt_strbuf[4][128];")
+        self._out("static char _volt_strbuf[16][128];")
         self._out("")
 
     def _emit_forward_decls(self, program: Program):
@@ -441,7 +441,7 @@ class CCodeGen:
         if events:
             self._out(f"// Event flags for {name} (set by external code, cleared after handling)")
             for ev in sorted(events):
-                self._out(f"static volatile bool {ev} = false;")
+                self._out(f"static _Atomic bool {ev} = false;")
             self._out("")
 
         # State enum
@@ -582,9 +582,9 @@ class CCodeGen:
                     guard = f" && ({guard_str})"
                 self._out(f"if ({event_str}{guard}) {{")
                 self.indent += 1
-                # Clear the event flag so it doesn't fire again
+                # Clear the event flag atomically
                 if isinstance(trans.event, VarRef):
-                    self._out(f"{trans.event.name} = false;")
+                    self._out(f"__atomic_store_n(&{trans.event.name}, false, __ATOMIC_SEQ_CST);")
                 if trans.action:
                     self._emit_stmts(trans.action, "ctx->", machine_vars)
                 self._out(f"{name}_transition(ctx, {name.upper()}_{trans.target_state.upper()});")
@@ -673,8 +673,7 @@ class CCodeGen:
             if task.tier == "critical":
                 for stmt in task.body:
                     if isinstance(stmt, EveryBlock) and stmt.strict:
-                        ms = stmt.interval.milliseconds if isinstance(stmt.interval, DurationLiteral) else stmt.interval.value if isinstance(stmt.interval, IntLiteral) else 1
-                        us = ms * 1000
+                        us = stmt.interval.microseconds if isinstance(stmt.interval, DurationLiteral) else (stmt.interval.value * 1000 if isinstance(stmt.interval, IntLiteral) else 1000)
                         self._out(f'volt_critical_create("{task.name}", {task.name}_isr, {us}, NULL);')
 
         # Priority tasks (after main block — WiFi/MQTT already initialized)
@@ -926,6 +925,19 @@ class CCodeGen:
             # Builtin object methods (wifi, mqtt, etc.)
             if obj_name and obj_name in self.builtin_types:
                 type_name = self.builtin_types[obj_name]
+
+                # Storage.save/load — dispatch by value type
+                if type_name == "Storage" and expr.method == "save" and len(expr.args) == 2:
+                    val = expr.args[1]
+                    if isinstance(val, FloatLiteral) or (isinstance(val, VarRef) and self._var_type(val.name) == "float"):
+                        return f"storage_save_float({args_str})"
+                    elif isinstance(val, StringLiteral) or (isinstance(val, VarRef) and self._var_type(val.name) == "string"):
+                        return f"storage_save_str({args_str})"
+                    else:
+                        return f"storage_save_int({args_str})"
+                if type_name == "Storage" and expr.method == "load" and len(expr.args) >= 1:
+                    return f"storage_load_int({args_str}, 0)"
+
                 key = (type_name, expr.method)
                 if key in METHOD_MAP:
                     return METHOD_MAP[key].format(args=args_str)
@@ -952,6 +964,16 @@ class CCodeGen:
             # Escape quotes in filename to prevent malformed #line directives
             safe_file = self.source_file.replace('\\', '\\\\').replace('"', '\\"')
             self.lines.append(f'#line {node.region.start_line} "{safe_file}"')
+
+    def _var_type(self, name: str) -> str:
+        """Look up variable type from declarations seen so far."""
+        # Check storage vars, global vars from the program
+        for line in self.lines:
+            if f"float {name}" in line or f"float _{name}" in line:
+                return "float"
+            if f"const char* {name}" in line or f"const char *{name}" in line:
+                return "string"
+        return "int"
 
     def _all_stmts(self, prog):
         """Collect all statements from tasks + setup + loop."""
@@ -1037,7 +1059,7 @@ class CCodeGen:
         # Use a static buffer (volt_sprintf_buf) — declared in volt.h or generated
         self._needs_sprintf_buf = True
         buf_idx = getattr(self, '_sprintf_buf_idx', 0)
-        self._sprintf_buf_idx = (buf_idx + 1) % 4
+        self._sprintf_buf_idx = (buf_idx + 1) % 16
         fmt = "".join(fmt_parts)
         args_str = ", ".join(args)
         return f'(snprintf(_volt_strbuf[{buf_idx}], sizeof(_volt_strbuf[{buf_idx}]), "{fmt}", {args_str}), _volt_strbuf[{buf_idx}])'

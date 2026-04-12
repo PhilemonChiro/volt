@@ -229,7 +229,17 @@ def check_types(program: Program, scope: Scope, errors: CompilerErrors):
         machine_scope = scope.child(f"machine:{machine.name}")
         for state in machine.states:
             _check_stmts(state.enter_body, machine_scope, errors, None)
+            _check_stmts(state.exit_body, machine_scope, errors, None)
             _check_stmts(state.body, machine_scope, errors, None)
+            # Check transition guards and actions
+            for trans in state.transitions:
+                if trans.guard:
+                    _infer(trans.guard, machine_scope, errors)
+                _check_stmts(trans.action, machine_scope, errors, None)
+            for timed in state.timed_transitions:
+                if timed.guard:
+                    _infer(timed.guard, machine_scope, errors)
+                _check_stmts(timed.action, machine_scope, errors, None)
 
     # Check setup
     if program.setup:
@@ -273,7 +283,8 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
 
         if stmt.type_name:
             # Explicit type: check value matches
-            if val_type != ERROR_TYPE and val_type != stmt.type_name:
+            normalized = _normalize_type(stmt.type_name)
+            if val_type != ERROR_TYPE and val_type != normalized:
                 errors.error(
                     stmt.region, "TYPE MISMATCH",
                     f"Variable `{stmt.name}` declared as `{stmt.type_name}` "
@@ -410,6 +421,12 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
 # Expression type inference
 # ============================================================
 
+_INT_ALIASES = {"u8", "u16", "u32", "i8", "i16", "i32"}
+
+def _normalize_type(t: str) -> str:
+    """Normalize sized integer aliases to INT for type checking."""
+    return INT if t in _INT_ALIASES else t
+
 def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
     """Infer the type of an expression. Returns type name string or ERROR_TYPE."""
     if expr is None:
@@ -437,7 +454,7 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
         sym = scope.lookup(expr.name)
         if sym is None:
             return ERROR_TYPE  # resolver already reported the error
-        return sym.type_name
+        return _normalize_type(sym.type_name)
 
     # Binary expression
     if isinstance(expr, BinaryExpr):

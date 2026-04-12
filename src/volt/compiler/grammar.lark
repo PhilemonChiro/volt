@@ -255,8 +255,12 @@ match_arm: match_pattern "->" match_body _NL
 // Comparison
 ?comparison: bitwise_or
     | comparison COMP_OP bitwise_or -> comp_op
+    | comparison LESSTHAN bitwise_or -> comp_lt
+    | comparison GREATERTHAN bitwise_or -> comp_gt
 
 COMP_OP: "==" | "!=" | "<=" | ">="
+LESSTHAN: "<"
+GREATERTHAN: ">"
 
 // Bitwise OR
 ?bitwise_or: bitwise_xor
@@ -276,17 +280,13 @@ CIRCUMFLEX: "^"
 
 AMPERSAND: "&"
 
-// Bit shift and comparison (< > handled here to avoid << >> ambiguity)
+// Bit shift
 ?shift: addition
     | shift SHL addition -> shl_op
     | shift SHR addition -> shr_op
-    | shift LESSTHAN addition -> comp_lt
-    | shift GREATERTHAN addition -> comp_gt
 
-SHL: "<<"
-SHR: ">>"
-LESSTHAN: "<"
-GREATERTHAN: ">"
+SHL.2: "<<"
+SHR.2: ">>"
 
 // Addition / subtraction
 ?addition: multiplication
