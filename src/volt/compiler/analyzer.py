@@ -503,6 +503,9 @@ def _walk_exprs(stmts: list):
             yield stmt  # the assign itself
             yield from _walk_expr_tree(stmt.target)
             yield from _walk_expr_tree(stmt.value)
+        elif isinstance(stmt, CompoundAssign):
+            yield from _walk_expr_tree(stmt.target)
+            yield from _walk_expr_tree(stmt.value)
         elif isinstance(stmt, ExprStmt):
             yield from _walk_expr_tree(stmt.expr)
         elif isinstance(stmt, ReturnStmt) and stmt.value:
