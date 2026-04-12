@@ -4,6 +4,6 @@ hardware {
     pin led: Output = PC13
 }
 
-main {
+setup {
     wifi.connect("test", "pass")
 }

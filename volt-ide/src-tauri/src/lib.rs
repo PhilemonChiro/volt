@@ -3,6 +3,7 @@ mod serial;
 mod runner;
 mod projects;
 mod checker;
+mod toolchain;
 
 use devices::Device;
 use projects::{ProjectInfo, BrowseResult};
@@ -40,7 +41,14 @@ fn read_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn save_file(path: String, content: String) -> Result<(), String> {
-    projects::save_file(&path, &content)
+    let result = projects::save_file(&path, &content);
+    // Sync volt.toml if saving a .volt file
+    if path.ends_with(".volt") {
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            projects::sync_project_toml(&parent.to_string_lossy());
+        }
+    }
+    result
 }
 
 #[tauri::command]

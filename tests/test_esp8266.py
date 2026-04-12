@@ -43,13 +43,13 @@ hardware {
     pin led: Output = 2
 }
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
 
-main {
+setup {
     run(blink)
 }
 """)
@@ -66,7 +66,7 @@ chip esp8266
 hardware {
     pin sensor: Input = 4
 }
-main {}
+setup {}
 """)
 
 c, errors = compile_ok("gpio 16 valid output", """
@@ -74,7 +74,7 @@ chip esp8266
 hardware {
     pin wake: Output = 16
 }
-main {}
+setup {}
 """)
 
 # Invalid pin: GPIO 17+ doesn't exist
@@ -83,7 +83,7 @@ chip esp8266
 hardware {
     pin led: Output = 17
 }
-main {}
+setup {}
 """)
 errs = [e for e in errors.errors if e.severity == "error"]
 check("error mentions ESP8266", any("ESP8266" in e.message or "esp8266" in e.message for e in errs))
@@ -94,7 +94,7 @@ chip esp8266
 hardware {
     pin led: Output = 23
 }
-main {}
+setup {}
 """)
 
 # Flash pins: GPIO 6-11 blocked
@@ -103,7 +103,7 @@ chip esp8266
 hardware {
     pin x: Output = 6
 }
-main {}
+setup {}
 """)
 errs = [e for e in errors.errors if e.severity == "error"]
 check("flash pin error mentions SPI", any("flash" in e.message.lower() or "SPI" in e.message for e in errs))
@@ -113,7 +113,7 @@ chip esp8266
 hardware {
     pin x: Output = 9
 }
-main {}
+setup {}
 """)
 
 
@@ -127,7 +127,7 @@ chip esp8266
 hardware {
     pin boot_btn: Input = 0
 }
-main {}
+setup {}
 """)
 warns = [e for e in errors.errors if e.severity == "warning"]
 check("strapping warning on GPIO 0", any("boot" in e.message.lower() or "strapping" in e.message.lower() for e in warns))
@@ -137,7 +137,7 @@ chip esp8266
 hardware {
     pin x: Output = 15
 }
-main {}
+setup {}
 """)
 warns = [e for e in errors.errors if e.severity == "warning"]
 check("strapping warning on GPIO 15", any("boot" in e.message.lower() or "strapping" in e.message.lower() for e in warns))
@@ -153,7 +153,7 @@ chip esp8266
 hardware {
     pin sensor: Analog = 4
 }
-main {}
+setup {}
 """)
 errs = [e for e in errors.errors if e.severity == "error"]
 check("error mentions A0 or TOUT", any("A0" in e.message or "TOUT" in e.message or "one" in e.message.lower() for e in errs))
@@ -168,7 +168,7 @@ chip esp8266
 hardware {
     pin t: Touch = 4
 }
-main {}
+setup {}
 """)
 errs = [e for e in errors.errors if e.severity == "error"]
 check("error mentions touch not available", any("touch" in e.message.lower() for e in errs))
@@ -184,7 +184,7 @@ chip esp8266
 hardware {
     pin motor: PWM = 16
 }
-main {}
+setup {}
 """)
 errs = [e for e in errors.errors if e.severity == "error"]
 check("gpio 16 pwm error", any("PWM" in e.message or "pwm" in e.message.lower() for e in errs))
@@ -199,7 +199,7 @@ chip esp8266
 hardware {
     pin led: Output = 2
 }
-main {
+setup {
     wifi.connect("test", "pass")
 }
 """)
@@ -215,7 +215,7 @@ hardware {
     pin a: Output = 4
     pin b: Output = 4
 }
-main {}
+setup {}
 """)
 errs = [e for e in errors.errors if e.severity == "error"]
 check("duplicate pin error", any("already used" in e.message for e in errs))
@@ -230,7 +230,7 @@ chip esp8266
 hardware {
     pin x: Output = 1
 }
-main {}
+setup {}
 """)
 warns = [e for e in errors.errors if e.severity == "warning"]
 check("uart warning on GPIO 1", any("UART" in e.message or "serial" in e.message.lower() for e in warns))

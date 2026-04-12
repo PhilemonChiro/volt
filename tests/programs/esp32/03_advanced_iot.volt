@@ -12,7 +12,7 @@ var motor_isr_count: int = 0
 var telemetry_count: int = 0
 var cloud_count: int = 0
 
-task heartbeat() {
+task heartbeat {
     every 1seconds {
         led.toggle()
         heartbeat_count = heartbeat_count + 1
@@ -20,14 +20,14 @@ task heartbeat() {
     }
 }
 
-task motor_control() {
+task motor_control {
     every 1ms strict {
         motor.set_pwm(0)
         motor_isr_count = motor_isr_count + 1
     }
 }
 
-task telemetry() {
+task telemetry {
     every 30seconds {
         let bat = battery.read()
         let t = temp.read()
@@ -39,7 +39,7 @@ task telemetry() {
     }
 }
 
-task cloud_report() {
+task cloud_report {
     every 60seconds {
         cloud_count = cloud_count + 1
         log("cloud", "#" + cloud_count + " posting to API")
@@ -48,14 +48,14 @@ task cloud_report() {
     }
 }
 
-task stats() {
+task stats {
     every 10seconds {
         log("stats", "heartbeat=" + heartbeat_count + " isr=" + motor_isr_count + " telemetry=" + telemetry_count + " cloud=" + cloud_count)
         log("stats", "wifi=" + wifi.is_connected() + " heap=" + system.free_heap())
     }
 }
 
-main {
+setup {
     log("system", "=== ESP32 Advanced IoT Test ===")
     log("system", "tiers: heartbeat=background, motor=critical(1ms), telemetry=priority(mqtt), cloud=priority(http)")
     log("system", "connecting wifi...")

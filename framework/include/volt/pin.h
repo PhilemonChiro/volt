@@ -43,4 +43,12 @@ volt_error_t pin_on_change(uint8_t pin, pin_callback_t callback, void *arg);
 // Release a pin back to unused state. Removes any callbacks.
 volt_error_t pin_release(uint8_t pin);
 
+// Blink an output pin: toggle, wait interval_ms, toggle back.
+// Non-blocking in protothread context (used with yield macros).
+// For simple use in main or one-shot code.
+void pin_blink(uint8_t pin, uint32_t interval_ms);
+
+// Turn on for duration_ms, then turn off.
+void pin_blink_once(uint8_t pin, uint32_t duration_ms);
+
 #endif // VOLT_PIN_H

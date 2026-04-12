@@ -8,6 +8,7 @@
 #include "volt/log.h"
 #include "volt/pin.h"
 #include "volt/task.h"
+#include "volt/system.h"
 
 // Initialize the Volt framework. Call once at the start of app_main().
 // Currently a no-op — individual modules init themselves when first used.

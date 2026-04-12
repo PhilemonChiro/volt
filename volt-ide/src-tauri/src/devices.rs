@@ -94,5 +94,19 @@ pub fn scan_devices() -> Vec<Device> {
         }
     }
 
+    // Also detect RP2040 in BOOTSEL mode (USB mass storage, no serial port)
+    if !devices.iter().any(|d| d.chip.contains("RP2040")) {
+        if let Ok(output) = std::process::Command::new("lsusb").output() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if text.contains("2e8a:0003") || text.contains("RP2 Boot") {
+                devices.push(Device {
+                    port: "BOOTSEL".to_string(),
+                    chip: "RP2040".to_string(),
+                    desc: "Pico (BOOTSEL mode)".to_string(),
+                });
+            }
+        }
+    }
+
     devices
 }

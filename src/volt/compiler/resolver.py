@@ -178,10 +178,15 @@ def _resolve_bodies(program: Program, global_scope: Scope, errors: CompilerError
                     _resolve_expr(timed.guard, machine_scope, errors)
                 _resolve_stmts(timed.action, machine_scope, errors)
 
-    # Main block
-    if program.main:
-        main_scope = global_scope.child("main")
-        _resolve_stmts(program.main.body, main_scope, errors)
+    # Setup block
+    if program.setup:
+        setup_scope = global_scope.child("setup")
+        _resolve_stmts(program.setup.body, setup_scope, errors)
+
+    # Loop block
+    if program.loop:
+        loop_scope = global_scope.child("loop")
+        _resolve_stmts(program.loop.body, loop_scope, errors)
 
 
 def _resolve_stmts(stmts: list, scope: Scope, errors: CompilerErrors):

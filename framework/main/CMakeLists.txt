@@ -11,5 +11,6 @@ idf_component_register(
          "../src/mqtt.c"
          "../src/storage.c"
          "../src/http.c"
+         "../src/system.c"
     INCLUDE_DIRS "../include"
 )

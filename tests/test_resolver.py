@@ -44,13 +44,13 @@ func add(a: int, b: int) -> int {
     return a + b
 }
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
 
-main {
+setup {
     let x = 42
     let y = add(x, 1)
     wifi.connect("net", "pass")
@@ -74,7 +74,7 @@ print("\n=== Unknown Name ===\n")
 # ============================================================
 
 _, errors = resolve_program("""
-main {
+setup {
     let x = unknown_var
 }
 """)
@@ -91,7 +91,7 @@ _, errors = resolve_program("""
 hardware {
     pin led: Output = 2
 }
-main {
+setup {
     lde.toggle()
 }
 """)
@@ -132,7 +132,7 @@ print("\n=== Scope: Local Variables ===\n")
 # ============================================================
 
 _, errors = resolve_program("""
-task monitor() {
+task monitor {
     let count = 0
     every 1second {
         count = count + 1
@@ -147,7 +147,7 @@ print("\n=== Scope: For Loop Variable ===\n")
 # ============================================================
 
 _, errors = resolve_program("""
-main {
+setup {
     for i in 0..10 {
         log(i)
     }
@@ -161,7 +161,7 @@ print("\n=== Forward Reference (function called before declared) ===\n")
 # ============================================================
 
 _, errors = resolve_program("""
-task startup() {
+task startup {
     init_stuff()
 }
 
@@ -177,7 +177,7 @@ print("\n=== Unknown Function ===\n")
 # ============================================================
 
 _, errors = resolve_program("""
-main {
+setup {
     nonexistent_func(42)
 }
 """)
@@ -192,7 +192,7 @@ print("\n=== Storage Variable ===\n")
 _, errors = resolve_program("""
 storage boot_count: int = 0
 
-main {
+setup {
     boot_count = boot_count + 1
 }
 """)
@@ -229,7 +229,7 @@ print("\n=== Multiple Errors (doesn't stop at first) ===\n")
 # ============================================================
 
 _, errors = resolve_program("""
-main {
+setup {
     let x = unknown1
     let y = unknown2
     let z = unknown3
@@ -243,7 +243,7 @@ print("\n=== Error Formatting ===\n")
 # ============================================================
 
 _, errors = resolve_program("""
-main {
+setup {
     let x = oops
 }
 """)

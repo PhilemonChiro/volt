@@ -111,7 +111,7 @@ c_has(c, "pin_write(2, LOW)", "led.off() in entry")
 c_has(c, "pin_write(2, HIGH)", "led.on() in entry")
 # Exit actions
 c_has(c, "// Exit current state", "has exit section")
-c_has(c, 'log_info("volt", "leaving on state")', "exit action generated")
+c_has(c, 'log_info("leaving on state")', "exit action generated")
 
 
 # ============================================================
@@ -270,12 +270,12 @@ machine DevState {
         on deactivate() -> idle
     }
 }
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
-main {
+setup {
     run(blink)
 }
 """)
@@ -467,12 +467,12 @@ chip esp32
 hardware {
     pin led: Output = 2
 }
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
-main {
+setup {
     run(blink)
 }
 """)

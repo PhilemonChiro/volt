@@ -4,4 +4,4 @@ hardware {
     pin sensor: Analog = 34
 }
 
-main {}
+setup {}

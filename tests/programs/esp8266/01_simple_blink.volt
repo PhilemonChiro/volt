@@ -6,7 +6,7 @@ hardware {
 
 var count: int = 0
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
         count = count + 1
@@ -14,7 +14,7 @@ task blink() {
     }
 }
 
-main {
+setup {
     log("system", "=== ESP8266 Simple Blink Test ===")
     log("system", "GPIO 2 = onboard LED (active LOW on most modules)")
     log("system", "expected: toggle every 500ms")

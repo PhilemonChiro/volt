@@ -12,14 +12,14 @@ var blink_count: int = 0
 var button_presses: int = 0
 var last_button: int = 1
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
         blink_count = blink_count + 1
     }
 }
 
-task read_button() {
+task read_button {
     every 50ms {
         let pressed = button.read()
         if pressed == 0 {
@@ -34,12 +34,12 @@ task read_button() {
     }
 }
 
-task adc_read() {
+task adc_read {
     every 2seconds {
         let val = sensor.read()
     }
 }
 
-main {
+setup {
     run(blink, read_button, adc_read)
 }

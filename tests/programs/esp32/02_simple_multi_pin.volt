@@ -13,7 +13,7 @@ var green_count: int = 0
 var button_presses: int = 0
 var last_button: int = 1
 
-task blink_red() {
+task blink_red {
     every 100ms {
         red.toggle()
         red_count = red_count + 1
@@ -23,7 +23,7 @@ task blink_red() {
     }
 }
 
-task blink_green() {
+task blink_green {
     every 400ms {
         green.toggle()
         green_count = green_count + 1
@@ -31,7 +31,7 @@ task blink_green() {
     }
 }
 
-task read_button() {
+task read_button {
     every 50ms {
         let state = button.read()
         if state == 0 {
@@ -47,14 +47,14 @@ task read_button() {
     }
 }
 
-task adc_monitor() {
+task adc_monitor {
     every 2seconds {
         let val = sensor.read()
         log("adc", "GPIO36 ADC1_CH0 raw=" + val)
     }
 }
 
-main {
+setup {
     log("system", "=== ESP32 Multi-Pin Test ===")
     log("system", "pins: red=23, green=22, yellow=21, button=4(pullup), adc=36")
     log("system", "expected: red@100ms, green@400ms, button@50ms poll, adc@2s")

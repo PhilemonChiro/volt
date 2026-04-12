@@ -238,3 +238,17 @@ volt_error_t pin_release(uint8_t pin)
     log_debug("pin", "GPIO %d released", pin);
     return VOLT_OK;
 }
+
+void pin_blink(uint8_t pin, uint32_t interval_ms)
+{
+    pin_toggle(pin);
+    vTaskDelay(interval_ms / portTICK_PERIOD_MS);
+    pin_toggle(pin);
+}
+
+void pin_blink_once(uint8_t pin, uint32_t duration_ms)
+{
+    pin_write(pin, HIGH);
+    vTaskDelay(duration_ms / portTICK_PERIOD_MS);
+    pin_write(pin, LOW);
+}

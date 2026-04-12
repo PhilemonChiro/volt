@@ -58,20 +58,23 @@ def _region_span(items) -> Region:
 # Duration parsing
 # ============================================================
 
-_DURATION_TO_MS = {
-    "us": 0.001, "ms": 1,
-    "second": 1000, "seconds": 1000,
-    "minute": 60000, "minutes": 60000,
-    "hour": 3600000, "hours": 3600000,
+_DURATION_TO_US = {
+    "us": 1,
+    "ms": 1000,
+    "s": 1000000, "sec": 1000000,
+    "second": 1000000, "seconds": 1000000,
+    "min": 60000000, "minute": 60000000, "minutes": 60000000,
+    "hr": 3600000000, "hour": 3600000000, "hours": 3600000000,
 }
 
 def _parse_duration(raw: str) -> tuple[int, str]:
-    """Parse '500ms' into (500, '500ms'). Returns (milliseconds, original)."""
-    for unit in sorted(_DURATION_TO_MS.keys(), key=len, reverse=True):
+    """Parse '500ms' into (microseconds, original_string)."""
+    for unit in sorted(_DURATION_TO_US.keys(), key=len, reverse=True):
         if raw.endswith(unit):
-            number = int(raw[:-len(unit)])
-            ms = int(number * _DURATION_TO_MS[unit])
-            return ms, raw
+            num_str = raw[:-len(unit)]
+            number = float(num_str) if '.' in num_str else int(num_str)
+            us = int(number * _DURATION_TO_US[unit])
+            return us, raw
     return 0, raw
 
 
@@ -105,12 +108,16 @@ class ASTBuilder(Transformer):
                 prog.machines.append(child)
             elif isinstance(child, StorageDecl):
                 prog.storage_vars.append(child)
-            elif isinstance(child, MainBlock):
-                prog.main = child
+            elif isinstance(child, SetupBlock):
+                prog.setup = child
+            elif isinstance(child, LoopBlock):
+                prog.loop = child
             elif isinstance(child, RawBlock):
                 prog.raw_blocks.append(child)
             elif isinstance(child, VarDecl):
                 prog.global_vars.append(child)
+            elif isinstance(child, str) and child.endswith('.volt'):
+                prog.includes.append(child)
         return prog
 
     # --- Chip ---
@@ -368,11 +375,23 @@ class ASTBuilder(Transformer):
             region=_region(children[0]),
         )
 
-    # --- Main ---
+    # --- Setup (v2) ---
 
-    def main_block(self, children):
+    def setup_block(self, children):
         body = children[0] if children and isinstance(children[0], list) else []
-        return MainBlock(body=body)
+        return SetupBlock(body=body)
+
+    # --- Loop (v2) ---
+
+    def loop_block(self, children):
+        body = children[0] if children and isinstance(children[0], list) else []
+        return LoopBlock(body=body)
+
+    # --- Include ---
+
+    def include_decl(self, children):
+        path = str(children[0]).strip('"')
+        return path
 
     # --- Raw ---
 
@@ -449,11 +468,40 @@ class ASTBuilder(Transformer):
         var_name = str(children[0])
         start = children[1]
         end = children[2]
-        body = children[3] if len(children) > 3 and isinstance(children[3], list) else []
+        step = None
+        body = []
+        for child in children[3:]:
+            if isinstance(child, list):
+                body = child
+            elif isinstance(child, Node):
+                step = child  # step clause expression
         return ForStmt(
             var_name=var_name, start=start, end=end, body=body,
             region=_region(children[0]),
         )
+
+    def step_clause(self, children):
+        return children[0]
+
+    def loop_stmt(self, children):
+        body = children[0] if children and isinstance(children[0], list) else []
+        return WhileStmt(
+            condition=BoolLiteral(value=True),
+            body=body,
+            region=_region_span(children) if children else Region(),
+        )
+
+    def break_stmt(self, children):
+        return BreakStmt(region=_region(children[0]) if children else Region())
+
+    def continue_stmt(self, children):
+        return ContinueStmt(region=_region(children[0]) if children else Region())
+
+    def assign_stmt(self, children):
+        target = children[0]
+        op = str(children[1])
+        value = children[2]
+        return CompoundAssign(target=target, op=op, value=value, region=_region(children[0]))
 
     def every_block(self, children):
         interval = children[0]
@@ -506,9 +554,21 @@ class ASTBuilder(Transformer):
         return MatchStmt(expr=expr, arms=arms, region=_region(children[0]))
 
     def match_arm(self, children):
-        pattern = str(children[0])
+        pattern = children[0]
         body = children[1] if len(children) > 1 else None
-        return MatchArm(pattern=pattern, body=body, region=_region(children[0]))
+        return MatchArm(pattern=pattern, body=body, region=_region(children[0]) if not isinstance(children[0], str) else Region())
+
+    def match_name(self, children):
+        return str(children[0])
+
+    def match_int(self, children):
+        return str(children[0])
+
+    def match_range(self, children):
+        return f"{children[0]}..{children[1]}"
+
+    def match_wildcard(self, children):
+        return "_"
 
     # --- Expressions ---
 
@@ -536,11 +596,36 @@ class ASTBuilder(Transformer):
     def mod_op(self, children):
         return BinaryExpr(left=children[0], op="%", right=children[1], region=_region(children[0]))
 
+    # Bitwise operators
+    def bitor_op(self, children):
+        return BinaryExpr(left=children[0], op="|", right=children[2], region=_region(children[0]))
+
+    def bitxor_op(self, children):
+        return BinaryExpr(left=children[0], op="^", right=children[2], region=_region(children[0]))
+
+    def bitand_op(self, children):
+        return BinaryExpr(left=children[0], op="&", right=children[2], region=_region(children[0]))
+
+    def shl_op(self, children):
+        return BinaryExpr(left=children[0], op="<<", right=children[2], region=_region(children[0]))
+
+    def shr_op(self, children):
+        return BinaryExpr(left=children[0], op=">>", right=children[2], region=_region(children[0]))
+
+    def comp_lt(self, children):
+        return BinaryExpr(left=children[0], op="<", right=children[2], region=_region(children[0]))
+
+    def comp_gt(self, children):
+        return BinaryExpr(left=children[0], op=">", right=children[2], region=_region(children[0]))
+
     def not_expr(self, children):
         return UnaryExpr(op="!", operand=children[0], region=_region(children[0]))
 
     def neg_expr(self, children):
         return UnaryExpr(op="-", operand=children[0], region=_region(children[0]))
+
+    def bitnot_expr(self, children):
+        return UnaryExpr(op="~", operand=children[0], region=_region(children[0]))
 
     def dot_access(self, children):
         obj = children[0]
@@ -608,8 +693,16 @@ class ASTBuilder(Transformer):
 
     def duration_lit(self, tokens):
         token = tokens[0]
-        ms, original = _parse_duration(str(token))
-        return DurationLiteral(milliseconds=ms, original=original, region=_region(token))
+        us, original = _parse_duration(str(token))
+        return DurationLiteral(microseconds=us, original=original, region=_region(token))
+
+    def hex_lit(self, tokens):
+        token = tokens[0]
+        return IntLiteral(value=int(str(token), 16), region=_region(token))
+
+    def bin_lit(self, tokens):
+        token = tokens[0]
+        return IntLiteral(value=int(str(token).replace('_', ''), 2), region=_region(token))
 
     def array_literal(self, children):
         return ArrayLiteral(elements=list(children), region=_region_span(children) if children else Region())

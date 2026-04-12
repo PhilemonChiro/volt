@@ -76,7 +76,7 @@ print("\n=== Test 4: Task with every ===\n")
 # ============================================================
 
 prog = parse("""
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
@@ -101,7 +101,7 @@ print("\n=== Test 5: Variables and expressions ===\n")
 # ============================================================
 
 prog = parse("""
-main {
+setup {
     let x = 42
     let pi: float = 3.14
     var count = 0
@@ -110,8 +110,8 @@ main {
     let neg = -5
 }
 """)
-check("main exists", prog.main is not None)
-stmts = prog.main.body
+check("main exists", prog.setup is not None)
+stmts = prog.setup.body
 check("6 statements", len(stmts) == 6, f"got {len(stmts)}")
 
 # let x = 42
@@ -143,7 +143,7 @@ print("\n=== Test 6: Control flow ===\n")
 # ============================================================
 
 prog = parse("""
-main {
+setup {
     if x > 0 {
         log("positive")
     } else {
@@ -157,7 +157,7 @@ main {
     }
 }
 """)
-stmts = prog.main.body
+stmts = prog.setup.body
 check("3 statements", len(stmts) == 3, f"got {len(stmts)}")
 check("if stmt", isinstance(stmts[0], IfStmt))
 check("if has else", stmts[0].else_body is not None)
@@ -171,7 +171,7 @@ print("\n=== Test 7: Durations ===\n")
 # ============================================================
 
 prog = parse("""
-main {
+setup {
     let a = 100us
     let b = 500ms
     let c = 1second
@@ -182,7 +182,7 @@ main {
     let h = 24hours
 }
 """)
-durations = [s.value for s in prog.main.body]
+durations = [s.value for s in prog.setup.body]
 expected = [0, 500, 1000, 5000, 60000, 600000, 3600000, 86400000]
 for i, (dur, exp) in enumerate(zip(durations, expected)):
     check(f"duration {dur.original} = {exp}ms",
@@ -195,14 +195,14 @@ print("\n=== Test 8: Method calls and chaining ===\n")
 # ============================================================
 
 prog = parse("""
-main {
+setup {
     led.toggle()
     wifi.connect("net", "pass")
     a.b.c()
     log(42)
 }
 """)
-stmts = prog.main.body
+stmts = prog.setup.body
 
 # led.toggle()
 call0 = stmts[0].expr
@@ -310,13 +310,13 @@ func clamp(val: int, lo: int, hi: int) -> int {
     return val
 }
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
 
-task monitor() {
+task monitor {
     var count = 0
     every 5seconds {
         count = count + 1
@@ -325,7 +325,7 @@ task monitor() {
     }
 }
 
-main {
+setup {
     wifi.connect("MyNet", "MyPass")
     mqtt.connect("mqtt://broker.local")
     run(blink, monitor)
@@ -338,8 +338,8 @@ check("1 storage", len(prog.storage_vars) == 1)
 check("1 struct", len(prog.structs) == 1)
 check("1 function", len(prog.functions) == 1)
 check("2 tasks", len(prog.tasks) == 2)
-check("main exists", prog.main is not None)
-check("main has 3 stmts", len(prog.main.body) == 3)
+check("main exists", prog.setup is not None)
+check("main has 3 stmts", len(prog.setup.body) == 3)
 
 
 # ============================================================

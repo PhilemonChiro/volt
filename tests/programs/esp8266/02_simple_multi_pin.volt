@@ -12,7 +12,7 @@ var blink_count: int = 0
 var button_presses: int = 0
 var last_button: int = 1
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
         blink_count = blink_count + 1
@@ -22,7 +22,7 @@ task blink() {
     }
 }
 
-task read_button() {
+task read_button {
     every 50ms {
         let pressed = button.read()
         if pressed == 0 {
@@ -40,13 +40,13 @@ task read_button() {
     }
 }
 
-task health() {
+task health {
     every 5seconds {
         log("health", "blinks=" + blink_count + " presses=" + button_presses + " heap=" + system.free_heap())
     }
 }
 
-main {
+setup {
     log("system", "=== ESP8266 Multi-Pin Test ===")
     log("system", "pins: led=2, relay=4, button=5(pullup), status=12, buzzer=14")
     log("system", "expected: blink@500ms, button@50ms poll")

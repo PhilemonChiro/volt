@@ -42,13 +42,22 @@ def transform(program: Program) -> Program:
     # Build function lookup for inlining
     func_map = {f.name: f for f in program.functions}
 
+    # Extract every/on blocks from setup into anonymous tasks
+    extra_tasks, new_setup_body = _extract_setup_blocks(program)
+
+    all_program_tasks = list(program.tasks) + extra_tasks
+
+    # --- Fix 1+2: Split tasks with multiple every/on blocks ---
+    expanded_tasks = []
+    for task in all_program_tasks:
+        expanded_tasks.extend(_split_multi_every(task))
+
     # Transform each task
     new_tasks = []
-    context_structs = []  # generated context struct definitions
+    context_structs = []
 
-    for task in program.tasks:
+    for task in expanded_tasks:
         if task.tier == "background" and task.crossing_vars:
-            # Build context struct for this task
             ctx_struct = _build_context_struct(task)
             context_structs.append(ctx_struct)
 
@@ -65,9 +74,14 @@ def transform(program: Program) -> Program:
     new_tasks = [replace(t, body=_desugar_match_stmts(t.body)) for t in new_tasks]
     new_funcs = [replace(f, body=_desugar_match_stmts(f.body)) for f in program.functions]
 
-    new_main = None
-    if program.main:
-        new_main = replace(program.main, body=_desugar_match_stmts(program.main.body))
+    new_setup = None
+    if program.setup:
+        setup_body = new_setup_body if new_setup_body is not None else program.setup.body
+        new_setup = replace(program.setup, body=_desugar_match_stmts(setup_body))
+
+    new_loop = None
+    if program.loop:
+        new_loop = replace(program.loop, body=_desugar_match_stmts(program.loop.body))
 
     # Add context structs to program's struct list
     all_structs = list(program.structs) + context_structs
@@ -76,7 +90,99 @@ def transform(program: Program) -> Program:
                    tasks=new_tasks,
                    functions=new_funcs,
                    structs=all_structs,
-                   main=new_main)
+                   setup=new_setup,
+                   loop=new_loop)
+
+
+# ============================================================
+# 0. Split Multi-Every Tasks
+# ============================================================
+
+def _extract_setup_blocks(program: Program) -> tuple[list[TaskDecl], list]:
+    """Extract every/on blocks from setup into anonymous tasks.
+    Returns (new_tasks, remaining_setup_body).
+    If setup has `every` or `on` blocks, they become auto-generated tasks
+    and a `run()` call is added if missing.
+    """
+    if not program.setup:
+        return [], None
+
+    concurrent = []
+    remaining = []
+    task_idx = 0
+
+    for stmt in program.setup.body:
+        if _is_concurrent_block(stmt):
+            task_idx += 1
+            name = f"_auto_task_{task_idx}"
+            concurrent.append(TaskDecl(
+                name=name,
+                body=[stmt],
+                tier="background",
+                crossing_vars=[],
+                has_strict=False,
+                region=stmt.region if hasattr(stmt, 'region') else None,
+            ))
+        else:
+            remaining.append(stmt)
+
+    if not concurrent:
+        return [], None
+
+    # Check if run() is already called in remaining main body
+    has_run = any(
+        isinstance(s, ExprStmt) and isinstance(s.expr, FuncCall) and s.expr.name == "run"
+        for s in remaining
+    )
+
+    # If no run() call, the auto-tasks need to be added to the existing task list
+    # and a run() call injected. But since run() is handled by the codegen via
+    # the task table (not by an explicit run() call in generated C), we just need
+    # the tasks in program.tasks — they'll be picked up automatically.
+
+    return concurrent, remaining
+
+
+def _is_concurrent_block(stmt) -> bool:
+    """Check if a statement is an every or on block (runs forever)."""
+    if isinstance(stmt, EveryBlock) and not stmt.strict:
+        return True
+    if isinstance(stmt, OnBlock):
+        return True
+    return False
+
+
+def _split_multi_every(task: TaskDecl) -> list[TaskDecl]:
+    """If a task has multiple concurrent blocks (every/on) at the top level,
+    split each into its own internal task so they run concurrently.
+    Non-concurrent statements before the first block go into all sub-tasks.
+    """
+    if task.tier != "background":
+        return [task]
+
+    concurrent_blocks = [s for s in task.body if _is_concurrent_block(s)]
+    if len(concurrent_blocks) <= 1:
+        return [task]
+
+    preamble = []
+    result_tasks = []
+    block_idx = 0
+
+    for stmt in task.body:
+        if _is_concurrent_block(stmt):
+            block_idx += 1
+            sub_name = task.name if block_idx == 1 else f"{task.name}_{block_idx}"
+            sub_body = list(preamble) + [stmt]
+            result_tasks.append(replace(
+                task,
+                name=sub_name,
+                body=sub_body,
+                crossing_vars=[],
+            ))
+        else:
+            preamble.append(stmt)
+
+    return result_tasks
 
 
 # ============================================================

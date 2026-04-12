@@ -115,7 +115,16 @@ pub fn list_projects() -> Vec<ProjectInfo> {
 }
 
 fn read_project_chip(path: &std::path::Path) -> Option<String> {
-    // Try volt.toml
+    // Source file is the truth — read chip from main.volt first
+    if let Ok(src) = fs::read_to_string(path.join("main.volt")) {
+        for line in src.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("chip ") {
+                return Some(trimmed[5..].trim().to_string());
+            }
+        }
+    }
+    // Fallback to volt.toml
     if let Ok(toml) = fs::read_to_string(path.join("volt.toml")) {
         for line in toml.lines() {
             let trimmed = line.trim();
@@ -124,15 +133,6 @@ fn read_project_chip(path: &std::path::Path) -> Option<String> {
                 if !val.is_empty() {
                     return Some(val.to_string());
                 }
-            }
-        }
-    }
-    // Try main.volt
-    if let Ok(src) = fs::read_to_string(path.join("main.volt")) {
-        for line in src.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("chip ") {
-                return Some(trimmed[5..].trim().to_string());
             }
         }
     }
@@ -145,6 +145,34 @@ pub struct ProjectInfo {
     pub path: String,
     pub chip: String,
     pub modified: u64,
+}
+
+/// Sync volt.toml chip field from the source file
+pub fn sync_project_toml(folder: &str) {
+    let path = std::path::Path::new(folder);
+    let chip = read_project_chip(path).unwrap_or_default();
+    if chip.is_empty() { return; }
+
+    let toml_path = path.join("volt.toml");
+    if let Ok(content) = fs::read_to_string(&toml_path) {
+        // Update chip line if it exists, add if it doesn't
+        let mut found = false;
+        let updated: Vec<String> = content.lines().map(|line| {
+            if line.trim().starts_with("chip") && line.contains('=') {
+                found = true;
+                format!("chip = \"{}\"", chip)
+            } else {
+                line.to_string()
+            }
+        }).collect();
+
+        let mut result = updated.join("\n");
+        if !found {
+            // Add under [project] section
+            result = result.replace("[project]", &format!("[project]\nchip = \"{}\"", chip));
+        }
+        fs::write(&toml_path, result).ok();
+    }
 }
 
 /// Open a native file dialog filtered to .volt files.

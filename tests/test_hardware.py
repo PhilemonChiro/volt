@@ -56,7 +56,7 @@ hardware {
     pin button: Input.PullUp = 0
     pin battery: Analog = 36
 }
-main {
+setup {
     led.toggle()
 }
 """)
@@ -146,7 +146,7 @@ errs = validate("""
 hardware {
     pin sensor: Analog = 4
 }
-main {
+setup {
     wifi.connect("net", "pass")
     let val = sensor.read()
 }
@@ -159,7 +159,7 @@ errs = validate("""
 hardware {
     pin sensor: Analog = 36
 }
-main {
+setup {
     wifi.connect("net", "pass")
     let val = sensor.read()
 }
@@ -250,7 +250,7 @@ hardware {
     pin soil: Analog = 39
 }
 
-main {
+setup {
     led.toggle()
     let bat = battery.read()
 }

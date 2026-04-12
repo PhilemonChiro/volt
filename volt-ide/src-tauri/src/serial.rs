@@ -18,18 +18,26 @@ pub fn start_monitor(app: AppHandle, port: String, baud: u32) {
     MONITORING.store(true, Ordering::SeqCst);
 
     std::thread::spawn(move || {
-        let serial = serialport::new(&port, baud)
-            .timeout(Duration::from_millis(500))
-            .open();
-
-        let mut serial = match serial {
-            Ok(s) => s,
-            Err(e) => {
-                let _ = app.emit("serial:error", format!("Failed to open {}: {}", port, e));
-                MONITORING.store(false, Ordering::SeqCst);
-                return;
+        // Retry opening the port — it may need time after flash/reboot
+        let mut serial = None;
+        for attempt in 0..6 {
+            match serialport::new(&port, baud)
+                .timeout(Duration::from_millis(500))
+                .open()
+            {
+                Ok(s) => { serial = Some(s); break; }
+                Err(e) => {
+                    if attempt < 5 {
+                        std::thread::sleep(Duration::from_millis(1000));
+                    } else {
+                        let _ = app.emit("serial:error", format!("Failed to open {}: {}", port, e));
+                        MONITORING.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                }
             }
-        };
+        }
+        let mut serial = serial.unwrap();
 
         let _ = app.emit("serial:connected", &port);
 

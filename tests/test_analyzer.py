@@ -52,25 +52,25 @@ hardware {
     pin motor: PWM = 4
 }
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
 
-task motor_pid() {
+task motor_pid {
     every 1ms strict {
         motor.set_pwm(0)
     }
 }
 
-task net_handler() {
+task net_handler {
     every 5seconds {
         wifi.connect("net", "pass")
     }
 }
 
-main {
+setup {
     run(blink, motor_pid, net_handler)
 }
 """)
@@ -87,7 +87,7 @@ print("\n=== Yield Point Detection ===\n")
 # ============================================================
 
 prog, errs = full_analyze("""
-task monitor() {
+task monitor {
     var count = 0
     every 5seconds {
         count = count + 1
@@ -108,7 +108,7 @@ print("\n=== Variable That Does NOT Cross ===\n")
 # ============================================================
 
 prog, errs = full_analyze("""
-task simple() {
+task simple {
     every 1second {
         let temp = 42
         log("done")
@@ -126,7 +126,7 @@ print("\n=== ISR Safety: log() in critical task ===\n")
 # ============================================================
 
 prog, errs = full_analyze("""
-task pid() {
+task pid {
     every 1ms strict {
         log("tick")
     }
@@ -141,7 +141,7 @@ print("\n=== ISR Safety: wifi in critical task ===\n")
 # ============================================================
 
 prog, errs = full_analyze("""
-task pid() {
+task pid {
     every 1ms strict {
         wifi.connect("a", "b")
     }
@@ -159,7 +159,7 @@ prog, errs = full_analyze("""
 hardware {
     sensor bme: BME280 on bus at 0x76
 }
-task pid() {
+task pid {
     every 1ms strict {
         bme.temperature()
     }
@@ -177,7 +177,7 @@ prog, errs = full_analyze("""
 hardware {
     pin motor: PWM = 4
 }
-task pid() {
+task pid {
     every 1ms strict {
         motor.set_pwm(0)
     }
@@ -220,7 +220,7 @@ print("\n=== Task With No Yield ===\n")
 # ============================================================
 
 prog, errs = full_analyze("""
-task onetime() {
+task onetime {
     log("hello")
 }
 """)
@@ -238,13 +238,13 @@ hardware {
 }
 var shared_val = 0
 
-task reader() {
+task reader {
     every 1second {
         log("val")
     }
 }
 
-task writer() {
+task writer {
     every 1ms strict {
         motor.set_pwm(shared_val)
     }
@@ -271,25 +271,25 @@ hardware {
     pin button: Input.PullUp = 0
 }
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
 
-task motor_control() {
+task motor_control {
     every 1ms strict {
         motor.set_pwm(0)
     }
 }
 
-task telemetry() {
+task telemetry {
     every 1second {
         mqtt.send_int("drone/status", 1)
     }
 }
 
-main {
+setup {
     wifi.connect("ground", "station")
     run(blink, motor_control, telemetry)
 }

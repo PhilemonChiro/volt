@@ -190,6 +190,13 @@ BINARY_OP_TYPES = {
     (BOOL, "&&", BOOL): BOOL,
     (BOOL, "||", BOOL): BOOL,
 
+    # Bitwise
+    (INT, "&", INT): INT,
+    (INT, "|", INT): INT,
+    (INT, "^", INT): INT,
+    (INT, "<<", INT): INT,
+    (INT, ">>", INT): INT,
+
     # Duration comparison
     (DURATION, "==", DURATION): BOOL,
     (DURATION, "!=", DURATION): BOOL,
@@ -224,10 +231,15 @@ def check_types(program: Program, scope: Scope, errors: CompilerErrors):
             _check_stmts(state.enter_body, machine_scope, errors, None)
             _check_stmts(state.body, machine_scope, errors, None)
 
-    # Check main
-    if program.main:
-        main_scope = scope.child("main")
-        _check_stmts(program.main.body, main_scope, errors, None)
+    # Check setup
+    if program.setup:
+        setup_scope = scope.child("setup")
+        _check_stmts(program.setup.body, setup_scope, errors, None)
+
+    # Check loop
+    if program.loop:
+        loop_scope = scope.child("loop")
+        _check_stmts(program.loop.body, loop_scope, errors, None)
 
     # Check storage declarations
     for storage in program.storage_vars:

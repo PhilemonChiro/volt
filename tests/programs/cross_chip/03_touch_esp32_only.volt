@@ -4,4 +4,4 @@ hardware {
     pin t: Touch = 4
 }
 
-main {}
+setup {}

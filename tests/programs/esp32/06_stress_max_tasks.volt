@@ -36,82 +36,82 @@ var isr2_count: int = 0
 var adc_count: int = 0
 var net_count: int = 0
 
-task t1() {
+task t1 {
     every 100ms {
         p1.toggle()
         t1_count = t1_count + 1
     }
 }
-task t2() {
+task t2 {
     every 200ms {
         p2.toggle()
         t2_count = t2_count + 1
     }
 }
-task t3() {
+task t3 {
     every 300ms {
         p3.toggle()
         t3_count = t3_count + 1
     }
 }
-task t4() {
+task t4 {
     every 400ms {
         p4.toggle()
         t4_count = t4_count + 1
     }
 }
-task t5() {
+task t5 {
     every 500ms {
         p5.toggle()
         t5_count = t5_count + 1
     }
 }
-task t6() {
+task t6 {
     every 600ms {
         p6.toggle()
         t6_count = t6_count + 1
     }
 }
-task t7() {
+task t7 {
     every 700ms {
         p7.toggle()
         t7_count = t7_count + 1
     }
 }
-task t8() {
+task t8 {
     every 800ms {
         p8.toggle()
         t8_count = t8_count + 1
     }
 }
-task t9() {
+task t9 {
     every 900ms {
         p9.toggle()
         t9_count = t9_count + 1
     }
 }
-task t10() {
+task t10 {
     every 1seconds {
         p10.toggle()
         t10_count = t10_count + 1
     }
 }
 
-task isr1() {
+task isr1 {
     every 1ms strict {
         p11.toggle()
         isr1_count = isr1_count + 1
     }
 }
 
-task isr2() {
+task isr2 {
     every 500ms strict {
         p12.toggle()
         isr2_count = isr2_count + 1
     }
 }
 
-task adc_poll() {
+task adc_poll {
     every 100ms {
         let v1 = a1.read()
         let v2 = a2.read()
@@ -126,7 +126,7 @@ task adc_poll() {
     }
 }
 
-task net_report() {
+task net_report {
     every 10seconds {
         net_count = net_count + 1
         mqtt.send_int("stress/a1", a1.read())
@@ -136,7 +136,7 @@ task net_report() {
     }
 }
 
-task stress_report() {
+task stress_report {
     every 5seconds {
         log("stress", "=== STRESS REPORT ===")
         log("stress", "  background tasks: t1=" + t1_count + " t2=" + t2_count + " t3=" + t3_count + " t4=" + t4_count + " t5=" + t5_count)
@@ -149,7 +149,7 @@ task stress_report() {
     }
 }
 
-main {
+setup {
     log("system", "=== ESP32 STRESS TEST ===")
     log("system", "18 pins: 12 output + 6 analog")
     log("system", "15 tasks: 10 background + 2 critical ISR + 1 ADC + 1 net + 1 report")

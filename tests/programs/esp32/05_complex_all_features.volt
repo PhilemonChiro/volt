@@ -25,7 +25,7 @@ func check_threshold(value: int, limit: int) -> bool {
     return value > limit
 }
 
-task sensor_poll() {
+task sensor_poll {
     every 2seconds {
         let s = soil.read()
         let t = temp.read()
@@ -53,14 +53,14 @@ task sensor_poll() {
     }
 }
 
-task pid_control() {
+task pid_control {
     every 1ms strict {
         motor.set_pwm(0)
         motor_isr_count = motor_isr_count + 1
     }
 }
 
-task button_monitor() {
+task button_monitor {
     every 50ms {
         let state = button.read()
         if state == 0 {
@@ -73,7 +73,7 @@ task button_monitor() {
     }
 }
 
-task data_logger() {
+task data_logger {
     every 30seconds {
         storage.push("soil", soil.read())
         storage.push("temp", temp.read())
@@ -83,7 +83,7 @@ task data_logger() {
     }
 }
 
-task cloud_sync() {
+task cloud_sync {
     every 60seconds {
         if wifi.is_connected() {
             total_syncs = total_syncs + 1
@@ -99,7 +99,7 @@ task cloud_sync() {
     }
 }
 
-task health_report() {
+task health_report {
     every 10seconds {
         log("health", "=== HEALTH REPORT ===")
         log("health", "  sensor_reads=" + total_sensor_reads)
@@ -163,7 +163,7 @@ machine StatusLED {
     }
 }
 
-main {
+setup {
     log("system", "=== ESP32 Complex All-Features Test ===")
     log("system", "pins: led_r=23, led_g=22, led_b=21, motor=4(PWM), fan=5, button=15, soil=32, temp=33, light=34")
     log("system", "tasks: sensor@2s, pid@1ms(strict), button@50ms, logger@30s, sync@60s, health@10s")

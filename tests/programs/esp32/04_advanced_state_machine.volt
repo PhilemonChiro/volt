@@ -55,7 +55,7 @@ machine Alarm {
     }
 }
 
-main {
+setup {
     log("system", "=== ESP32 State Machine Test ===")
     log("system", "states: idle -> armed -> triggered -> siren -> idle")
     log("system", "verify: enter/exit actions logged at each transition")

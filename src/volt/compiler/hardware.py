@@ -387,8 +387,8 @@ def _collect_all_stmts(program: Program) -> list:
         stmts.extend(_flatten_stmts(func.body))
     for task in program.tasks:
         stmts.extend(_flatten_stmts(task.body))
-    if program.main:
-        stmts.extend(_flatten_stmts(program.main.body))
+    if program.setup:
+        stmts.extend(_flatten_stmts(program.setup.body))
     for machine in program.machines:
         for state in machine.states:
             stmts.extend(_flatten_stmts(state.enter_body))

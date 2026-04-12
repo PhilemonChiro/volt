@@ -2,11 +2,11 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Volt IDE",
   "version": "0.1.0",
-  "identifier": "com.volt.ide.v1775920786",
+  "identifier": "com.volt.ide.v1775983693",
   "build": {
-    "frontendDist": "../dist-frontend",
-    "beforeBuildCommand": "npm run package",
-    "beforeDevCommand": "npm run package"
+    "frontendDist": "../src",
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run build"
   },
   "app": {
     "windows": [
@@ -19,6 +19,7 @@
         "decorations": false
       }
     ],
+    "withGlobalTauri": true,
     "security": {
       "csp": null
     }

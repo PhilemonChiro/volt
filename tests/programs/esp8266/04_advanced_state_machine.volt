@@ -32,7 +32,7 @@ machine DoorController {
     }
 }
 
-task status_blink() {
+task status_blink {
     every 2seconds {
         buzzer.toggle()
         blink_count = blink_count + 1
@@ -40,13 +40,13 @@ task status_blink() {
     }
 }
 
-task health() {
+task health {
     every 10seconds {
         log("health", "lock_toggles=" + lock_toggles + " blinks=" + blink_count + " wifi=" + wifi.is_connected() + " heap=" + system.free_heap())
     }
 }
 
-main {
+setup {
     log("system", "=== ESP8266 State Machine Test ===")
     log("system", "machine: DoorController (locked <-> unlocked)")
     log("system", "auto-lock after 10s in unlocked state")

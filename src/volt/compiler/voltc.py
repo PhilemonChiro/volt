@@ -81,6 +81,43 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
     return c_code, errors
 
 
+def sync_project_toml(volt_file: Path, source: str):
+    """Sync chip from .volt source into volt.toml in the same directory."""
+    chip = None
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("chip "):
+            chip = stripped[5:].strip()
+            break
+    if not chip:
+        return
+
+    toml_path = volt_file.parent / "volt.toml"
+    if not toml_path.exists():
+        return
+
+    try:
+        content = toml_path.read_text()
+        lines = content.splitlines()
+        found = False
+        for i, line in enumerate(lines):
+            if line.strip().startswith("chip") and "=" in line:
+                lines[i] = f'chip = "{chip}"'
+                found = True
+                break
+        if not found:
+            # Add after [project] line
+            for i, line in enumerate(lines):
+                if line.strip() == "[project]":
+                    lines.insert(i + 1, f'chip = "{chip}"')
+                    found = True
+                    break
+        if found:
+            toml_path.write_text("\n".join(lines) + "\n")
+    except Exception:
+        pass
+
+
 def main():
     """CLI entry point."""
     if len(sys.argv) < 2:
@@ -101,6 +138,9 @@ def main():
 
     source = input_file.read_text()
     c_code, errors = compile_volt(source, str(input_file))
+
+    # Sync volt.toml chip field from source
+    sync_project_toml(input_file, source)
 
     # Print warnings even on success
     if errors.count > 0:

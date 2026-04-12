@@ -12,7 +12,7 @@ var mqtt_sends: int = 0
 var push_count: int = 0
 var sync_count: int = 0
 
-task heartbeat() {
+task heartbeat {
     every 1seconds {
         led.toggle()
         heartbeat_count = heartbeat_count + 1
@@ -22,7 +22,7 @@ task heartbeat() {
     }
 }
 
-task sensor_check() {
+task sensor_check {
     every 5seconds {
         let val = sensor_pin.read()
         sensor_reads = sensor_reads + 1
@@ -37,7 +37,7 @@ task sensor_check() {
     }
 }
 
-task mqtt_report() {
+task mqtt_report {
     every 30seconds {
         mqtt_sends = mqtt_sends + 1
         log("mqtt", "#" + mqtt_sends + " sending status + sensor")
@@ -47,7 +47,7 @@ task mqtt_report() {
     }
 }
 
-task data_buffer() {
+task data_buffer {
     every 10seconds {
         push_count = push_count + 1
         storage.push("readings", sensor_pin.read())
@@ -55,7 +55,7 @@ task data_buffer() {
     }
 }
 
-task sync() {
+task sync {
     every 60seconds {
         if wifi.is_connected() {
             sync_count = sync_count + 1
@@ -67,7 +67,7 @@ task sync() {
     }
 }
 
-task health() {
+task health {
     every 15seconds {
         log("health", "=== ESP8266 HEALTH ===")
         log("health", "  heartbeats=" + heartbeat_count)
@@ -81,7 +81,7 @@ task health() {
     }
 }
 
-main {
+setup {
     log("system", "=== ESP8266 Advanced IoT Test ===")
     log("system", "pins: led=2, relay=4, sensor=5")
     log("system", "tasks: heartbeat@1s, sensor@5s, mqtt@30s, buffer@10s, sync@60s, health@15s")

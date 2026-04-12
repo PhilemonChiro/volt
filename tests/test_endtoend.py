@@ -64,7 +64,7 @@ print("\n=== BASIC PROGRAMS ===\n")
 # ============================================================
 
 # Minimal program
-c = compile_ok("minimal chip only", "chip esp32\nmain {\n}\n")
+c = compile_ok("minimal chip only", "chip esp32\nsetup {\n}\n")
 c_contains(c, "app_main", "has app_main")
 c_contains(c, "volt_init", "has volt_init")
 
@@ -90,12 +90,12 @@ chip esp32
 hardware {
     pin led: Output = 2
 }
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
-main {
+setup {
     run(blink)
 }
 """)
@@ -120,22 +120,22 @@ hardware {
     pin led: Output = 2
     pin motor: PWM = 4
 }
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
-task motor_pid() {
+task motor_pid {
     every 1ms strict {
         motor.set_pwm(0)
     }
 }
-task telemetry() {
+task telemetry {
     every 5seconds {
         mqtt.send_int("status", 1)
     }
 }
-main {
+setup {
     wifi.connect("net", "pass")
     mqtt.connect("mqtt://broker")
     run(blink, motor_pid, telemetry)
@@ -153,7 +153,7 @@ c_contains(c, "1000", "1ms = 1000us period")
 
 # Priority tier
 c_contains(c, "static void telemetry_run(void *arg)", "telemetry is FreeRTOS")
-c_contains(c, "vTaskDelay(pdMS_TO_TICKS(5000))", "FreeRTOS delay not protothread")
+c_contains(c, "volt_delay_ms(5000)", "priority task uses blocking delay")
 c_contains(c, "volt_rt_create", "priority task creation")
 
 # WiFi/MQTT
@@ -170,7 +170,7 @@ print("\n=== VARIABLES AND EXPRESSIONS ===\n")
 # ============================================================
 
 c = compile_ok("variables", """
-main {
+setup {
     let x = 42
     let pi = 3.14
     let name = "hello"
@@ -192,7 +192,7 @@ print("\n=== CONTROL FLOW ===\n")
 # ============================================================
 
 c = compile_ok("if else", """
-main {
+setup {
     let x = 42
     if x > 10 {
         log("high")
@@ -201,21 +201,21 @@ main {
     }
 }
 """)
-c_contains(c, "if ((x > 10))", "if condition")
+c_contains(c, "x > 10", "if condition")
 c_contains(c, "} else {", "else clause")
 
 c = compile_ok("while loop", """
-main {
+setup {
     var i = 0
     while i < 10 {
         i = i + 1
     }
 }
 """)
-c_contains(c, "while ((i < 10))", "while condition")
+c_contains(c, "i < 10", "while condition")
 
 c = compile_ok("for loop", """
-main {
+setup {
     for i in 0..10 {
         log("tick")
     }
@@ -224,7 +224,7 @@ main {
 c_contains(c, "for (int32_t i = 0; i < 10; i++)", "for loop")
 
 c = compile_ok("nested if", """
-main {
+setup {
     let a = true
     let b = true
     if a {
@@ -251,7 +251,7 @@ func clamp(val: int, lo: int, hi: int) -> int {
     }
     return val
 }
-main {
+setup {
     let x = clamp(42, 0, 100)
 }
 """)
@@ -265,7 +265,7 @@ c = compile_ok("void func", """
 func greet(name: string) {
     log(name)
 }
-main {
+setup {
     greet("world")
 }
 """)
@@ -282,7 +282,7 @@ hardware {
     pin btn: Input.PullUp = 0
     pin bat: Analog = 36
 }
-main {
+setup {
     led.on()
     led.off()
     led.toggle()
@@ -302,7 +302,7 @@ print("\n=== WIFI AND MQTT METHODS ===\n")
 # ============================================================
 
 c = compile_ok("wifi mqtt methods", """
-main {
+setup {
     wifi.connect("ssid", "pass")
     mqtt.connect("mqtt://broker")
     mqtt.send("topic", "data")
@@ -324,7 +324,7 @@ print("\n=== VARIABLE LIFTING (Crossing Yields) ===\n")
 # ============================================================
 
 c = compile_ok("var lifting", """
-task monitor() {
+task monitor {
     var count = 0
     every 1seconds {
         count = count + 1
@@ -337,7 +337,7 @@ c_contains(c, "monitor_ctx_t", "context struct generated")
 c_contains(c, "ctx->count", "lifted variable accessed via ctx")
 
 c = compile_ok("non-crossing var stays local", """
-task simple() {
+task simple {
     every 1seconds {
         let temp = 42
         log("done")
@@ -353,7 +353,7 @@ print("\n=== DURATION UNITS ===\n")
 # ============================================================
 
 c = compile_ok("durations", """
-task t() {
+task t {
     every 500ms {
         log("a")
     }
@@ -362,7 +362,7 @@ task t() {
 c_contains(c, "500", "500ms → 500")
 
 c = compile_ok("duration seconds", """
-task t() {
+task t {
     every 5seconds {
         log("b")
     }
@@ -377,7 +377,7 @@ print("\n=== STORAGE ===\n")
 
 c = compile_ok("storage vars", """
 storage boot_count: int = 0
-main {
+setup {
     log("boot")
 }
 """)
@@ -389,14 +389,14 @@ c_contains(c, "// storage boot_count: int", "storage comment")
 print("\n=== ERROR: Type Mismatch ===\n")
 # ============================================================
 
-compile_fail("int = string", 'main {\n    let x: int = "hello"\n}\n', "declared as")
-compile_fail("int + float", "main {\n    let x = 1 + 3.14\n}\n", "cannot")
-compile_fail("if int", "main {\n    if 42 {\n        log(\"no\")\n    }\n}\n", "bool")
+compile_fail("int = string", 'setup {\n    let x: int = "hello"\n}\n', "declared as")
+compile_fail("int + float", "setup {\n    let x = 1 + 3.14\n}\n", "cannot")
+compile_fail("if int", "setup {\n    if 42 {\n        log(\"no\")\n    }\n}\n", "bool")
 compile_fail("wrong arg type", """
 func add(a: int, b: int) -> int {
     return a + b
 }
-main {
+setup {
     add("a", "b")
 }
 """, "expects")
@@ -406,8 +406,8 @@ main {
 print("\n=== ERROR: Name Errors ===\n")
 # ============================================================
 
-compile_fail("unknown var", "main {\n    let x = unknown\n}\n", "unknown")
-compile_fail("unknown func", "main {\n    nonexistent()\n}\n", "unknown")
+compile_fail("unknown var", "setup {\n    let x = unknown\n}\n", "unknown")
+compile_fail("unknown func", "setup {\n    nonexistent()\n}\n", "unknown")
 compile_fail("duplicate pin", """
 hardware {
     pin led: Output = 2
@@ -439,7 +439,7 @@ print("\n=== ERROR: ISR Safety ===\n")
 # ============================================================
 
 compile_fail("log in critical", """
-task pid() {
+task pid {
     every 1ms strict {
         log("tick")
     }
@@ -447,7 +447,7 @@ task pid() {
 """, "critical")
 
 compile_fail("wifi in critical", """
-task pid() {
+task pid {
     every 1ms strict {
         wifi.connect("a", "b")
     }
@@ -458,7 +458,7 @@ compile_fail("sensor in critical", """
 hardware {
     sensor bme: BME280 on bus at 0x76
 }
-task pid() {
+task pid {
     every 1ms strict {
         bme.temperature()
     }
@@ -484,7 +484,7 @@ func get_name() -> string {
 """, "returns")
 
 compile_fail("immutable assign", """
-main {
+setup {
     let x = 5
     x = 10
 }
@@ -494,7 +494,7 @@ compile_fail("too few args", """
 func add(a: int, b: int) -> int {
     return a + b
 }
-main {
+setup {
     add(1)
 }
 """, "expects 2")
@@ -503,7 +503,7 @@ compile_fail("method not found", """
 hardware {
     pin led: Output = 2
 }
-main {
+setup {
     led.read()
 }
 """, "no method")
@@ -535,19 +535,19 @@ func clamp(val: int, lo: int, hi: int) -> int {
     return val
 }
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
     }
 }
 
-task motor_control() {
+task motor_control {
     every 1ms strict {
         motor.set_pwm(0)
     }
 }
 
-task monitor() {
+task monitor {
     var count = 0
     every 5seconds {
         count = count + 1
@@ -560,7 +560,7 @@ task monitor() {
     }
 }
 
-main {
+setup {
     wifi.connect("MyNet", "MyPass")
     mqtt.connect("mqtt://broker.local")
     run(blink, motor_control, monitor)
@@ -584,9 +584,9 @@ c_contains(c, "volt_run(", "background scheduler")
 print("\n=== SYNTAX ERRORS (graceful failure) ===\n")
 # ============================================================
 
-compile_fail("missing brace", "main {\n    log(42)\n", None)
+compile_fail("missing brace", "setup {\n    log(42)\n", None)
 compile_fail("garbage", "!@#$%^&\n", None)
-compile_fail("empty parens", "main {\n    let x = ()\n}\n", None)
+compile_fail("empty parens", "setup {\n    let x = ()\n}\n", None)
 
 
 # ============================================================

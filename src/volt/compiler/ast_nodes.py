@@ -53,8 +53,10 @@ class Program(Node):
     machines: list[MachineDecl] = field(default_factory=list)
     storage_vars: list[StorageDecl] = field(default_factory=list)
     global_vars: list[VarDecl] = field(default_factory=list)
-    main: MainBlock | None = None
+    setup: SetupBlock | None = None         # runs once at boot
+    loop: LoopBlock | None = None           # super-loop (alternative to tasks)
     raw_blocks: list[RawBlock] = field(default_factory=list)
+    includes: list[str] = field(default_factory=list)
 
 
 # ============================================================
@@ -150,9 +152,35 @@ class TaskDecl(Node):
 
 
 @dataclass
-class MainBlock(Node):
-    """main { ... }"""
+class SetupBlock(Node):
+    """setup { ... } — runs once at boot before tasks start"""
     body: list[Statement] = field(default_factory=list)
+
+
+@dataclass
+class LoopBlock(Node):
+    """loop { ... } — super-loop, runs forever (alternative to tasks)"""
+    body: list[Statement] = field(default_factory=list)
+
+
+@dataclass
+class BreakStmt(Node):
+    """break — exit a loop or every block"""
+    pass
+
+
+@dataclass
+class ContinueStmt(Node):
+    """continue — skip to next iteration"""
+    pass
+
+
+@dataclass
+class CompoundAssign(Node):
+    """count += 1, mask |= 0x04"""
+    target: Expr = None
+    op: str = ""            # "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
+    value: Expr = None
 
 
 @dataclass
@@ -346,9 +374,13 @@ class StringLiteral(Node):
 
 @dataclass
 class DurationLiteral(Node):
-    """500ms, 5seconds, 10minutes"""
-    milliseconds: int = 0   # everything normalized to ms
-    original: str = ""      # "500ms", "5seconds" — for error messages
+    """500ms, 5s, 10min, 100us"""
+    microseconds: int = 0   # everything normalized to microseconds
+    original: str = ""      # "500ms", "5s" — for error messages
+
+    @property
+    def milliseconds(self) -> int:
+        return self.microseconds // 1000
 
 
 @dataclass
@@ -367,9 +399,10 @@ class VarRef(Node):
 
 @dataclass
 class BinaryExpr(Node):
-    """a + b, x == y, p && q"""
+    """a + b, x == y, p && q, mask & 0xFF, val << 2"""
     left: Expr = None
-    op: str = ""            # "+", "-", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "&&", "||"
+    op: str = ""            # "+", "-", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=",
+                            # "&&", "||", "&", "|", "^", "<<", ">>"
     right: Expr = None
     # Populated by checker (Pass 3):
     result_type: str | None = None

@@ -171,6 +171,9 @@ volt_error_t volt_critical_create(const char *name, volt_crit_func_t func,
 // Shared utilities
 // ============================================================
 
+// Blocking delay for priority tasks. Yields to OS/other tasks.
+void volt_delay_ms(uint32_t ms);
+
 // Millisecond counter since boot. Works from any context.
 uint32_t volt_tick_ms(void);
 

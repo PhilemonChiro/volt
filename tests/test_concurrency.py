@@ -72,20 +72,20 @@ hardware {
 
 var shared_counter = 0
 
-task fast_control() {
+task fast_control {
     every 1ms strict {
         motor.set_pwm(shared_counter)
     }
 }
 
-task slow_monitor() {
+task slow_monitor {
     every 500ms {
         shared_counter = shared_counter + 1
         led.toggle()
     }
 }
 
-main {
+setup {
     run(fast_control, slow_monitor)
 }
 """)
@@ -127,20 +127,20 @@ hardware {
 
 var counter = 0
 
-task task_a() {
+task task_a {
     every 200ms {
         counter = counter + 1
         led.toggle()
     }
 }
 
-task task_b() {
+task task_b {
     every 300ms {
         counter = counter + 2
     }
 }
 
-main {
+setup {
     run(task_a, task_b)
 }
 """)
@@ -175,14 +175,14 @@ hardware {
 
 var sole_var = 42
 
-task solo() {
+task solo {
     every 1second {
         sole_var = sole_var + 1
         led.toggle()
     }
 }
 
-main {
+setup {
     run(solo)
 }
 """)
@@ -212,13 +212,13 @@ hardware {
 
 var pwm_setpoint = 0
 
-task pid_loop() {
+task pid_loop {
     every 1ms strict {
         motor.set_pwm(pwm_setpoint)
     }
 }
 
-main {
+setup {
     run(pid_loop)
 }
 """)
@@ -248,19 +248,19 @@ hardware {
 
 var read_only_cfg = 100
 
-task critical_reader() {
+task critical_reader {
     every 1ms strict {
         motor.set_pwm(read_only_cfg)
     }
 }
 
-task background_reader() {
+task background_reader {
     every 500ms {
         led.toggle()
     }
 }
 
-main {
+setup {
     run(critical_reader, background_reader)
 }
 """)
@@ -297,14 +297,14 @@ var mixed_val = 0
 var private_a = 10
 var private_b = 20
 
-task isr_task() {
+task isr_task {
     every 1ms strict {
         motor.set_pwm(mixed_val)
         private_a = private_a + 1
     }
 }
 
-task bg_task() {
+task bg_task {
     every 500ms {
         mixed_val = mixed_val + 1
         private_b = private_b + 1
@@ -312,7 +312,7 @@ task bg_task() {
     }
 }
 
-main {
+setup {
     run(isr_task, bg_task)
 }
 """)

@@ -6,13 +6,13 @@ hardware {
 
 var count: int = 0
 
-task blink() {
+task blink {
     every 500ms {
         led.toggle()
         count = count + 1
     }
 }
 
-main {
+setup {
     run(blink)
 }

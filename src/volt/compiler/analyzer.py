@@ -143,6 +143,22 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
                     f"It will run once and complete.",
                 )
 
+    # 9. Warn about unreachable code after every/on blocks in tasks (Fix 3)
+    for task in program.tasks:
+        _warn_unreachable_after_loop(task.body, task.name, errors)
+
+    # 10. Warn about code after run() in setup
+    if program.setup:
+        _warn_code_after_run(program.setup.body, errors)
+
+    # 11. Conflict check: loop and tasks cannot coexist
+    if program.loop and program.tasks:
+        errors.error(
+            program.loop.region, "PROGRAM ERROR",
+            "Cannot use `loop` and `task` in the same program. "
+            "Use `loop` for simple programs or `task` for concurrent ones.",
+        )
+
 
 # ============================================================
 # 1. Task Classification
@@ -654,3 +670,68 @@ def _event_key(event) -> str:
     if isinstance(event, VarRef):
         return event.name
     return str(event)
+
+
+# ============================================================
+# 9. Unreachable code after every/on blocks
+# ============================================================
+
+def _warn_unreachable_after_loop(stmts: list, task_name: str, errors: CompilerErrors):
+    """Warn if code follows an every or on block — it will never execute."""
+    found_loop = False
+    for stmt in stmts:
+        if found_loop:
+            errors.warning(
+                getattr(stmt, 'region', None), "UNREACHABLE",
+                f"Code after `every`/`on` block in task `{task_name}` will never execute.",
+                hint="Move this code before the `every` block, or into a separate task.",
+            )
+            return  # one warning is enough
+        if isinstance(stmt, EveryBlock) and not stmt.strict:
+            found_loop = True
+        elif isinstance(stmt, OnBlock):
+            found_loop = True
+
+
+# ============================================================
+# 10. Code after run() in main
+# ============================================================
+
+def _warn_code_after_run(stmts: list, errors: CompilerErrors):
+    """Warn if code follows a run() call — run() blocks forever."""
+    found_run = False
+    for stmt in stmts:
+        if found_run:
+            errors.warning(
+                getattr(stmt, 'region', None), "UNREACHABLE",
+                "Code after `run()` will never execute. `run()` starts the task scheduler and blocks forever.",
+                hint="Move this code before `run()`.",
+            )
+            return
+        if isinstance(stmt, ExprStmt) and isinstance(stmt.expr, FuncCall) and stmt.expr.name == "run":
+            found_run = True
+
+
+# ============================================================
+# 11. Unused tasks warning
+# ============================================================
+
+def _warn_unused_tasks(program: Program, errors: CompilerErrors):
+    """Warn if tasks are declared but never started via run()."""
+    # Find task names referenced in run() calls
+    run_args = set()
+    if program.setup:
+        for stmt in program.setup.body:
+            if isinstance(stmt, ExprStmt) and isinstance(stmt.expr, FuncCall) and stmt.expr.name == "run":
+                for arg in stmt.expr.args:
+                    if isinstance(arg, VarRef):
+                        run_args.add(arg.name)
+
+    # Check each declared task
+    for task in program.tasks:
+        if task.name not in run_args and not task.name.startswith("_auto_"):
+            errors.warning(
+                task.region, "TASK WARNING",
+                f"Task `{task.name}` is declared but never started. Did you forget `run({task.name})`?",
+                hint=f"Add `run({task.name})` in your main block to start this task.",
+            )

@@ -238,6 +238,11 @@ volt_error_t volt_critical_create(const char *name, volt_crit_func_t func,
 // Shared: tick counters
 // ============================================================
 
+void volt_delay_ms(uint32_t ms)
+{
+    vTaskDelay(ms / portTICK_PERIOD_MS);
+}
+
 uint32_t volt_tick_ms(void)
 {
     return xTaskGetTickCount() * portTICK_PERIOD_MS;

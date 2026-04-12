@@ -121,6 +121,11 @@ body {
     background: var(--bg-3);
     color: var(--t2);
 }
+.toolbar-btn.unsaved {
+    color: var(--t1);
+    background: var(--volt-dim);
+    border: 1px solid var(--volt);
+}
 
 /* ---- Build = primary ---- */
 #runBtn {
@@ -406,46 +411,11 @@ body {
 }
 
 /* ================================================================
-   WELCOME OVERLAY
-   ================================================================ */
-#welcomeOverlay {
-    position: absolute;
-    inset: 44px 0 0 0;
-    z-index: 50;
-    background: var(--bg-0);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-#welcomeOverlay.hidden { display: none; }
-
-.welcome-content { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 360px; }
-.welcome-logo { width: 72px; height: 72px; margin-bottom: 8px; opacity: 0.9; }
-.welcome-title { font-size: 28px; font-weight: 700; color: var(--t1); letter-spacing: -0.04em; }
-.welcome-sub { font-size: 13px; color: var(--t3); text-align: center; margin-bottom: 16px; }
-.welcome-actions { display: flex; gap: 8px; width: 100%; }
-.welcome-btn {
-    flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
-    padding: 10px 16px; background: var(--bg-3); border: none; border-radius: 8px;
-    color: var(--t1); font-size: 13px; font-weight: 500; font-family: var(--sans); cursor: pointer;
-}
-.welcome-btn:hover { background: var(--bg-4); }
-.welcome-btn-primary { background: var(--volt); color: white; }
-.welcome-btn-primary:hover { background: var(--volt-hover); }
-.welcome-recent { width: 100%; margin-top: 16px; }
-.welcome-recent-title { font-size: 11px; font-weight: 500; color: var(--t3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; padding: 0 4px; }
-.welcome-recent-item { display: flex; align-items: center; padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--t2); font-size: 13px; }
-.welcome-recent-item:hover { background: var(--bg-3); color: var(--t1); }
-.welcome-recent-chip { font-size: 10px; color: var(--volt); font-weight: 600; margin-left: auto; }
-
-/* ================================================================
    EDITOR
    ================================================================ */
 #editorContainer {
     flex: 1;
     overflow: hidden;
-    position: relative;
-    min-height: 0;
 }
 
 /* ================================================================
@@ -528,12 +498,15 @@ body {
 .panel-action-btn {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 22px; height: 22px;
+    gap: 4px;
+    padding: 2px 8px;
+    height: 22px;
     background: transparent;
     border: none;
     border-radius: 4px;
     color: var(--t3);
+    font-family: var(--sans);
+    font-size: 11px;
     cursor: pointer;
     transition: all 60ms;
 }
@@ -547,7 +520,8 @@ body {
 }
 
 /* ---- Monitor output ---- */
-#monitorOutput {
+.panel-content {
+    display: none;
     flex: 1;
     overflow-y: auto;
     padding: 8px 16px;
@@ -559,11 +533,127 @@ body {
     color: var(--t2);
     background: var(--bg-0);
 }
+.panel-content.active {
+    display: block;
+}
+#monitorOutput {
+}
 
-.log-info  { color: var(--info); }
-.log-warn  { color: var(--warn); }
-.log-error { color: var(--err); font-weight: 500; }
-.log-debug { color: var(--t3); }
+/* ---- Serial monitor ---- */
+.serial-line {
+    color: var(--t1);
+    padding: 1px 0;
+}
+.serial-ts {
+    color: var(--t3);
+    font-size: 10px;
+    margin-right: 6px;
+}
+.serial-info  { color: var(--t1); }
+.serial-warn  { color: var(--warn); }
+.serial-error { color: var(--err); font-weight: 500; }
+.serial-debug { color: var(--t3); }
+
+.panel-action-btn.active {
+    color: var(--volt);
+    background: var(--volt-dim);
+}
+
+/* ---- Build progress bar ---- */
+.build-progress {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: var(--bg-2);
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+}
+.build-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-family: var(--sans);
+    font-size: 11px;
+}
+.build-progress-stage {
+    color: var(--t1);
+    font-weight: 500;
+}
+.build-progress-pct {
+    color: var(--t3);
+    font-size: 10px;
+}
+.build-progress-track {
+    height: 4px;
+    background: var(--bg-4);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.build-progress-bar {
+    height: 100%;
+    background: var(--volt);
+    border-radius: 2px;
+    transition: width 300ms ease;
+    min-width: 2px;
+}
+.build-progress-bar.done {
+    background: var(--ok);
+}
+.build-progress-bar.error {
+    background: var(--err);
+}
+
+/* ---- Output panel entries ---- */
+.output-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+.output-time {
+    color: var(--t3);
+    font-size: 10px;
+    flex-shrink: 0;
+    min-width: 48px;
+    font-family: var(--mono);
+}
+.output-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.output-dot-info    { background: var(--info); }
+.output-dot-warn    { background: var(--warn); }
+.output-dot-error   { background: var(--err); }
+.output-dot-success { background: var(--ok); }
+.output-dot-debug   { background: var(--t3); opacity: 0.5; }
+.output-msg {
+    color: var(--t2);
+    word-break: break-word;
+    font-family: var(--sans);
+    font-size: 12px;
+}
+.output-info .output-msg    { color: var(--t2); }
+.output-warn .output-msg    { color: var(--warn); }
+.output-error .output-msg   { color: var(--err); }
+.output-success .output-msg { color: var(--t1); }
+.output-debug .output-msg   { color: var(--t3); font-size: 11px; }
+
+/* Problems panel */
+.problem-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 12px;
+}
+.problem-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
 
 /* ================================================================
    STATUS BAR
@@ -749,70 +839,5 @@ button:focus-visible {
     box-shadow: 0 0 0 2px var(--volt-ring);
 }
 
-/* ================================================================
-   HOVER INFO BAR (between editor and bottom panel)
-   ================================================================ */
-#hoverBar {
-    height: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 16px;
-    background: var(--bg-2);
-    font-size: 11px;
-    color: var(--t3);
-    flex-shrink: 0;
-    transition: height 100ms, color 100ms, background 100ms, padding 100ms;
-    overflow: hidden;
-}
-#hoverBar.active {
-    height: 26px;
-    color: var(--t1);
-    background: var(--bg-3);
-}
-#hoverBar.type-keyword  { border-top: 2px solid #c586c0; }
-#hoverBar.type-keyword .hover-word { color: #c586c0; }
-#hoverBar.type-type     { border-top: 2px solid #4ec9b0; }
-#hoverBar.type-type .hover-word { color: #4ec9b0; }
-#hoverBar.type-builtin  { border-top: 2px solid #dcdcaa; }
-#hoverBar.type-builtin .hover-word { color: #dcdcaa; }
-#hoverBar.type-chip     { border-top: 2px solid var(--ok); }
-#hoverBar.type-chip .hover-word { color: var(--ok); }
-#hoverBar.type-pin      { border-top: 2px solid #b5cea8; }
-#hoverBar.type-pin .hover-word { color: #b5cea8; }
-#hoverBar.type-control  { border-top: 2px solid #569cd6; }
-#hoverBar.type-control .hover-word { color: #569cd6; }
 
-#hoverIcon {
-    font-size: 12px;
-    opacity: 0.6;
-    flex-shrink: 0;
-}
-#hoverText {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.hover-word {
-    font-family: var(--mono);
-    font-weight: 600;
-    font-size: 12px;
-}
 
-/* ---- Hover info bar ---- */
-.hover-word {
-    font-family: var(--mono);
-    font-weight: 600;
-    font-size: 12px;
-}
-
-/* ---- Scrollbar ---- */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
-
-::selection { background: rgba(43, 124, 179, 0.25); }
-
-button { outline: none; }
-button:focus-visible { box-shadow: 0 0 0 2px var(--volt-ring); }
