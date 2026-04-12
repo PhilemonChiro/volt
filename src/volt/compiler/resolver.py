@@ -214,6 +214,10 @@ def _resolve_stmt(stmt, scope: Scope, errors: CompilerErrors):
         _resolve_expr(stmt.target, scope, errors)
         _resolve_expr(stmt.value, scope, errors)
 
+    elif isinstance(stmt, CompoundAssign):
+        _resolve_expr(stmt.target, scope, errors)
+        _resolve_expr(stmt.value, scope, errors)
+
     elif isinstance(stmt, ExprStmt):
         _resolve_expr(stmt.expr, scope, errors)
 

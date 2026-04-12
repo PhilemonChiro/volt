@@ -23,12 +23,55 @@ from .codegen import generate
 from .errors import CompilerErrors
 
 
+import re as _re
+
+def _resolve_includes(source: str, filename: str, errors) -> str:
+    """Resolve include "file.volt" directives by inlining file contents."""
+    base_dir = Path(filename).parent if filename != "main.volt" else Path(".")
+    seen = {str(Path(filename).resolve())}
+    max_depth = 10
+
+    def resolve(src: str, base: Path, depth: int) -> str:
+        if depth > max_depth:
+            return src
+        lines = src.split('\n')
+        result = []
+        for line in lines:
+            match = _re.match(r'^\s*include\s+"([^"]+)"\s*$', line)
+            if match:
+                inc_path = base / match.group(1)
+                resolved = str(inc_path.resolve())
+                if resolved in seen:
+                    result.append(f"// include cycle skipped: {match.group(1)}")
+                    continue
+                seen.add(resolved)
+                try:
+                    inc_source = inc_path.read_text()
+                    inc_source = resolve(inc_source, inc_path.parent, depth + 1)
+                    result.append(f"// --- included from {match.group(1)} ---")
+                    result.append(inc_source)
+                    result.append(f"// --- end {match.group(1)} ---")
+                except FileNotFoundError:
+                    from .ast_nodes import Region
+                    errors.error(Region(1, 1, 1, 1), "INCLUDE ERROR",
+                                 f"File not found: {inc_path}")
+                    result.append(line)
+            else:
+                result.append(line)
+        return '\n'.join(result)
+
+    return resolve(source, base_dir, 0)
+
+
 def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, CompilerErrors]:
     """
     Compile Volt source to C code.
     Returns (c_code, errors). c_code is None if there are errors.
     """
     errors = CompilerErrors()
+
+    # Preprocess: resolve include statements
+    source = _resolve_includes(source, filename, errors)
     errors.set_source(source)
 
     # Pass 1: Parse

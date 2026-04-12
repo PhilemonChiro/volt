@@ -174,6 +174,7 @@ class CCodeGen:
         self.pin_map: dict[str, tuple[int, str]] = {}  # name → (gpio, mode)
         self.sensor_map: dict[str, str] = {}  # name → sensor_type
         self.builtin_types: dict[str, str] = {}  # name → type (WiFi, MQTT, etc.)
+        self._var_types: dict[str, str] = {}    # name → declared type (for codegen dispatch)
 
     def generate(self, program: Program) -> str:
         """Generate complete C source from AST."""
@@ -228,6 +229,13 @@ class CCodeGen:
             "wifi": "WiFi", "mqtt": "MQTT", "http": "HTTP",
             "storage": "Storage", "system": "System", "ota": "OTA",
         }
+
+        # Track variable types for dispatch
+        for sv in program.storage_vars:
+            self._var_types[sv.name] = sv.type_name
+        for gv in program.global_vars:
+            if gv.type_name:
+                self._var_types[gv.name] = gv.type_name
 
     # ============================================================
     # Section emitters
@@ -732,6 +740,9 @@ class CCodeGen:
             self._line_directive(stmt)
             c_type = TYPE_MAP.get(stmt.type_name, "int32_t")
             val = self._emit_expr_str(stmt.value, ctx_prefix, cv)
+            # Track variable types for dispatch (storage.save etc.)
+            if stmt.type_name:
+                self._var_types[stmt.name] = stmt.type_name
             if stmt.name in cv and ctx_prefix:
                 # Lifted var: assign to context, don't declare
                 self._out(f"{ctx_prefix}{_c_name(stmt.name)} = {val};")
@@ -839,7 +850,7 @@ class CCodeGen:
         elif isinstance(stmt, OnBlock):
             event_str = self._emit_expr_str(stmt.event, ctx_prefix, cv)
             self._out(f"// on {event_str}")
-            self._out(f"VOLT_WAIT_LABEL(t, {stmt.yield_label}, {event_str});")
+            self._out(f"VOLT_WAIT_LABEL(_vt, {stmt.yield_label}, {event_str});")
             if stmt.debounce:
                 deb_ms = stmt.debounce.milliseconds if isinstance(stmt.debounce, DurationLiteral) else 50
                 self._out(f"VOLT_YIELD_LABEL(_vt, {stmt.debounce_label}, {deb_ms}); // debounce")
@@ -966,14 +977,8 @@ class CCodeGen:
             self.lines.append(f'#line {node.region.start_line} "{safe_file}"')
 
     def _var_type(self, name: str) -> str:
-        """Look up variable type from declarations seen so far."""
-        # Check storage vars, global vars from the program
-        for line in self.lines:
-            if f"float {name}" in line or f"float _{name}" in line:
-                return "float"
-            if f"const char* {name}" in line or f"const char *{name}" in line:
-                return "string"
-        return "int"
+        """Look up variable type from the var_types map built during codegen."""
+        return self._var_types.get(name, "int")
 
     def _all_stmts(self, prog):
         """Collect all statements from tasks + setup + loop."""

@@ -151,7 +151,16 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
     if program.setup:
         _warn_code_after_run(program.setup.body, errors)
 
-    # 11. Conflict check: loop and tasks cannot coexist
+    # 11. Validate break/continue only inside loops
+    all_bodies = [(t.name, t.body) for t in program.tasks]
+    if program.setup:
+        all_bodies.append(("setup", program.setup.body))
+    if program.loop:
+        all_bodies.append(("loop", program.loop.body))
+    for fname, body in all_bodies:
+        _validate_break_continue(body, False, fname, errors)
+
+    # 12. Conflict check: loop and tasks cannot coexist
     if program.loop and program.tasks:
         errors.error(
             program.loop.region, "PROGRAM ERROR",
@@ -696,6 +705,29 @@ def _warn_unreachable_after_loop(stmts: list, task_name: str, errors: CompilerEr
 # ============================================================
 # 10. Code after run() in main
 # ============================================================
+
+def _validate_break_continue(stmts: list, in_loop: bool, context: str, errors: CompilerErrors):
+    """Ensure break/continue only appear inside loops (while/for/loop/every)."""
+    for stmt in stmts:
+        if isinstance(stmt, BreakStmt) and not in_loop:
+            errors.error(stmt.region, "SYNTAX ERROR",
+                         f"`break` can only be used inside a loop (while, for, loop).",
+                         hint="Move this into a loop block.")
+        elif isinstance(stmt, ContinueStmt) and not in_loop:
+            errors.error(stmt.region, "SYNTAX ERROR",
+                         f"`continue` can only be used inside a loop (while, for, loop).",
+                         hint="Move this into a loop block.")
+        elif isinstance(stmt, (WhileStmt, ForStmt)):
+            _validate_break_continue(stmt.body, True, context, errors)
+        elif isinstance(stmt, IfStmt):
+            _validate_break_continue(stmt.then_body, in_loop, context, errors)
+            if isinstance(stmt.else_body, list):
+                _validate_break_continue(stmt.else_body, in_loop, context, errors)
+            elif isinstance(stmt.else_body, IfStmt):
+                _validate_break_continue([stmt.else_body], in_loop, context, errors)
+        elif isinstance(stmt, EveryBlock):
+            _validate_break_continue(stmt.body, True, context, errors)
+
 
 def _warn_code_after_run(stmts: list, errors: CompilerErrors):
     """Warn if code follows a run() call — run() blocks forever."""

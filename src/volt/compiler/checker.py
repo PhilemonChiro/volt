@@ -323,6 +323,34 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                     f"Cannot assign `{val_type}` to `{target_type}`.",
                 )
 
+    elif isinstance(stmt, BreakStmt) or isinstance(stmt, ContinueStmt):
+        # Validated by analyzer — break/continue only valid in loops
+        pass
+
+    elif isinstance(stmt, CompoundAssign):
+        target_type = _infer(stmt.target, scope, errors)
+        val_type = _infer(stmt.value, scope, errors)
+
+        # Check mutability
+        if isinstance(stmt.target, VarRef):
+            sym = scope.lookup(stmt.target.name)
+            if sym and not sym.mutable and sym.kind == "var":
+                errors.error(
+                    stmt.region, "MUTABILITY ERROR",
+                    f"Cannot assign to `{stmt.target.name}` — it was declared with `let` (immutable).",
+                    hint="Use `var` instead of `let` to make it mutable.",
+                )
+
+        # Check type compatibility — compound ops require matching types
+        if target_type != ERROR_TYPE and val_type != ERROR_TYPE:
+            base_op = stmt.op[0] if stmt.op[0] != '<' and stmt.op[0] != '>' else stmt.op[:2]
+            key = (target_type, base_op, val_type)
+            if key not in BINARY_OP_TYPES:
+                errors.error(
+                    stmt.region, "TYPE MISMATCH",
+                    f"Cannot use `{stmt.op}` between `{target_type}` and `{val_type}`.",
+                )
+
     elif isinstance(stmt, ExprStmt):
         _infer(stmt.expr, scope, errors)
 
