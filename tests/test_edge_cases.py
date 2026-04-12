@@ -45,7 +45,7 @@ print("\n=== CORE SYNTAX ===\n")
 
 expect_ok("empty program",          "\n")
 expect_ok("chip",                   "chip esp32\n")
-expect_ok("hardware pins",          "hardware {\n    pin led: Output = 2\n    pin btn: Input.PullUp = 0\n}\n")
+expect_ok("hardware pins",          "hardware {\n    pin led: Output = 2\n    pin btn: PullUpInput = 0\n}\n")
 expect_ok("hardware bus + sensor",  "hardware {\n    i2c bus = i2c(sda: 21, scl: 22)\n    sensor bme: BME280 on bus at 0x76\n}\n")
 expect_ok("struct",                 "struct P {\n    x: int\n    y: float\n}\n")
 expect_ok("func",                   "func add(a: int, b: int) -> int {\n    return a + b\n}\n")
@@ -243,7 +243,7 @@ chip esp32
 
 hardware {
     pin led: Output = 2
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
     pin battery: Analog = 36
 }
 

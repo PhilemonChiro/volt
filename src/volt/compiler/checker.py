@@ -51,12 +51,12 @@ METHOD_TYPES = {
         "read":       (INT, []),
         "is_pressed": (BOOL, []),
     },
-    "Input.PullUp": {
+    "PullUpInput": {
         "read":       (INT, []),
         "is_pressed": (BOOL, []),
         "press":      (VOID, []),  # event source for on blocks
     },
-    "Input.PullDown": {
+    "PullDownInput": {
         "read":       (INT, []),
         "is_pressed": (BOOL, []),
         "press":      (VOID, []),

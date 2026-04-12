@@ -3,7 +3,7 @@ chip esp32
 hardware {
     pin led: Output = 2
     pin relay: Output = 4
-    pin button: Input.PullUp = 5
+    pin button: PullUpInput = 5
 }
 
 task blink {
@@ -23,7 +23,7 @@ task check_button {
 }
 
 task report {
-    every 30seconds {
+    every 30s {
         mqtt.send_int("device/status", 1)
     }
 }
@@ -31,5 +31,4 @@ task report {
 setup {
     wifi.connect("TestNet", "password")
     mqtt.connect("mqtt://broker.local")
-    run(blink, check_button, report)
 }

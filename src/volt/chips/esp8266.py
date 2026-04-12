@@ -219,13 +219,13 @@ class ESP8266(ChipSpec, WiFiCapable):
             errors.append(("error",
                            "ESP8266 does not have capacitive touch pins.",
                            "Capacitive touch is available on ESP32."))
-        if mode in ("Input.PullDown", "InputPullDown"):
+        if mode in ("PullDownInput", "InputPullDown"):
             if pin.gpio != 16:
                 errors.append(("error",
                                f"ESP8266 GPIOs 0-15 do not support pull-down. "
                                f"Only GPIO 16 (RTC domain) has internal pull-down.",
                                "Use an external pull-down resistor."))
-        if mode in ("Input.PullUp", "InputPullUp") and not pin.has_internal_pullup:
+        if mode in ("PullUpInput", "InputPullUp") and not pin.has_internal_pullup:
             errors.append(("error",
                            f"GPIO {pin_name} has no internal pull-up (GPIO 16 is RTC domain).",
                            "Use an external pull-up resistor."))

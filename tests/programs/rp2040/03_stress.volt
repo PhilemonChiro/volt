@@ -24,53 +24,56 @@ var led_count: int = 0
 task t0 {
     every 100ms {
         p0.toggle()
-        c0 = c0 + 1
+        c0 += 1
     }
 }
+
 task t1 {
     every 200ms {
         p1.toggle()
-        c1 = c1 + 1
+        c1 += 1
     }
 }
+
 task t2 {
     every 300ms {
         p2.toggle()
-        c2 = c2 + 1
+        c2 += 1
     }
 }
+
 task t3 {
     every 400ms {
         p3.toggle()
-        c3 = c3 + 1
+        c3 += 1
     }
 }
+
 task t4 {
     every 500ms {
         p4.toggle()
-        c4 = c4 + 1
+        c4 += 1
     }
 }
+
 task t5 {
     every 600ms {
         p5.toggle()
-        c5 = c5 + 1
+        c5 += 1
     }
 }
+
 task heartbeat {
-    every 1seconds {
+    every 1s {
         led.toggle()
-        led_count = led_count + 1
+        led_count += 1
     }
 }
+
 task adc_poll {
-    every 1seconds {
+    every 1s {
         let v0 = a0.read()
         let v1 = a1.read()
         let v2 = a2.read()
     }
-}
-
-setup {
-    run(t0, t1, t2, t3, t4, t5, heartbeat, adc_poll)
 }

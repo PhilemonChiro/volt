@@ -81,7 +81,7 @@ class HardwareBlock(Node):
 class PinDecl(Node):
     """pin led: Output = 2"""
     name: str = ""
-    mode: str = ""          # "Output", "Input", "Input.PullUp", "Analog", "PWM"
+    mode: str = ""          # "Output", "Input", "PullUpInput", "Analog", "PWM"
     gpio: int = 0
 
 

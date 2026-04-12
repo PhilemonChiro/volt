@@ -249,7 +249,7 @@ VOLT_KEYWORDS = [
     "debounce", "throttle", "true", "false", "run",
 ]
 
-PIN_MODES = ["Output", "Input", "Input.PullUp", "Input.PullDown", "Analog", "PWM"]
+PIN_MODES = ["Output", "Input", "PullUpInput", "PullDownInput", "Analog", "PWM"]
 
 DURATION_UNITS = ["ms", "seconds", "second", "minutes", "minute", "hours", "hour", "us"]
 

@@ -206,7 +206,7 @@ print("\n=== State Machine Names ===\n")
 _, errors = resolve_program("""
 hardware {
     pin led: Output = 2
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
 }
 
 machine DeviceState {

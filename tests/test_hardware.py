@@ -53,7 +53,7 @@ print("\n=== Valid Hardware (no errors) ===\n")
 errs = validate("""
 hardware {
     pin led: Output = 2
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
     pin battery: Analog = 36
 }
 setup {
@@ -87,7 +87,7 @@ for gpio in (34, 35, 36, 39):
 print("\n=== No Pull-Up on Input-Only ===\n")
 # ============================================================
 
-errs = validate("hardware {\n    pin btn: Input.PullUp = 34\n}\n")
+errs = validate("hardware {\n    pin btn: PullUpInput = 34\n}\n")
 check("GPIO 34 no pullup", has_error_about(errs, "pull-up"),
       f"errors: {[e.message for e in errs.errors]}")
 
@@ -245,7 +245,7 @@ chip esp32
 hardware {
     pin led: Output = 2
     pin motor: PWM = 4
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
     pin battery: Analog = 36
     pin soil: Analog = 39
 }

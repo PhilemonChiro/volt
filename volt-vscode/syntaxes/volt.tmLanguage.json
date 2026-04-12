@@ -263,7 +263,7 @@
           "match": "\\b(Output|Input|PWM|Analog)\\b"
         },
         {
-          "comment": "Pin mode with qualifier: Input.PullUp",
+          "comment": "Pin mode with qualifier: PullUpInput",
           "match": "(Input)\\.(PullUp|PullDown)",
           "captures": {
             "1": { "name": "support.type.pin-mode.volt" },

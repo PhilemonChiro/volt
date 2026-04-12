@@ -39,75 +39,84 @@ var net_count: int = 0
 task t1 {
     every 100ms {
         p1.toggle()
-        t1_count = t1_count + 1
+        t1_count += 1
     }
 }
+
 task t2 {
     every 200ms {
         p2.toggle()
-        t2_count = t2_count + 1
+        t2_count += 1
     }
 }
+
 task t3 {
     every 300ms {
         p3.toggle()
-        t3_count = t3_count + 1
+        t3_count += 1
     }
 }
+
 task t4 {
     every 400ms {
         p4.toggle()
-        t4_count = t4_count + 1
+        t4_count += 1
     }
 }
+
 task t5 {
     every 500ms {
         p5.toggle()
-        t5_count = t5_count + 1
+        t5_count += 1
     }
 }
+
 task t6 {
     every 600ms {
         p6.toggle()
-        t6_count = t6_count + 1
+        t6_count += 1
     }
 }
+
 task t7 {
     every 700ms {
         p7.toggle()
-        t7_count = t7_count + 1
+        t7_count += 1
     }
 }
+
 task t8 {
     every 800ms {
         p8.toggle()
-        t8_count = t8_count + 1
+        t8_count += 1
     }
 }
+
 task t9 {
     every 900ms {
         p9.toggle()
-        t9_count = t9_count + 1
+        t9_count += 1
     }
 }
+
 task t10 {
-    every 1seconds {
+    every 1s {
         p10.toggle()
-        t10_count = t10_count + 1
+        t10_count += 1
     }
 }
 
 task isr1 {
     every 1ms strict {
         p11.toggle()
-        isr1_count = isr1_count + 1
+        isr1_count += 1
     }
 }
 
 task isr2 {
     every 500ms strict {
         p12.toggle()
-        isr2_count = isr2_count + 1
+        isr2_count += 1
     }
 }
 
@@ -119,7 +128,7 @@ task adc_poll {
         let v4 = a4.read()
         let v5 = a5.read()
         let v6 = a6.read()
-        adc_count = adc_count + 1
+        adc_count += 1
         if adc_count % 50 == 0 {
             log("adc", "#" + adc_count + " ch0=" + v1 + " ch1=" + v2 + " ch2=" + v3 + " ch3=" + v4 + " ch4=" + v5 + " ch5=" + v6)
         }
@@ -127,8 +136,8 @@ task adc_poll {
 }
 
 task net_report {
-    every 10seconds {
-        net_count = net_count + 1
+    every 10s {
+        net_count += 1
         mqtt.send_int("stress/a1", a1.read())
         mqtt.send_int("stress/a2", a2.read())
         mqtt.send_int("stress/a3", a3.read())
@@ -137,26 +146,15 @@ task net_report {
 }
 
 task stress_report {
-    every 5seconds {
-        log("stress", "=== STRESS REPORT ===")
-        log("stress", "  background tasks: t1=" + t1_count + " t2=" + t2_count + " t3=" + t3_count + " t4=" + t4_count + " t5=" + t5_count)
-        log("stress", "  background tasks: t6=" + t6_count + " t7=" + t7_count + " t8=" + t8_count + " t9=" + t9_count + " t10=" + t10_count)
-        log("stress", "  critical ISRs: isr1=" + isr1_count + " isr2=" + isr2_count)
-        log("stress", "  adc_polls=" + adc_count + " net_reports=" + net_count)
-        log("stress", "  heap=" + system.free_heap())
-        log("stress", "  wifi=" + wifi.is_connected())
-        log("stress", "=====================")
+    every 5s {
+        log("stress", "t1=" + t1_count + " t2=" + t2_count + " t3=" + t3_count + " t4=" + t4_count + " t5=" + t5_count)
+        log("stress", "t6=" + t6_count + " t7=" + t7_count + " t8=" + t8_count + " t9=" + t9_count + " t10=" + t10_count)
+        log("stress", "isr1=" + isr1_count + " isr2=" + isr2_count + " adc=" + adc_count + " net=" + net_count)
+        log("stress", "heap=" + system.free_heap() + " wifi=" + wifi.is_connected())
     }
 }
 
 setup {
-    log("system", "=== ESP32 STRESS TEST ===")
-    log("system", "18 pins: 12 output + 6 analog")
-    log("system", "15 tasks: 10 background + 2 critical ISR + 1 ADC + 1 net + 1 report")
-    log("system", "expected after 10s: t1~100 t2~50 t3~33 t4~25 t5~20 isr1~10000 isr2~20")
-    log("system", "connecting...")
     wifi.connect("StressNet", "password")
     mqtt.connect("mqtt://broker.local")
-    log("system", "starting 15 tasks")
-    run(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, isr1, isr2, adc_poll, net_report, stress_report)
 }

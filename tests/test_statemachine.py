@@ -399,7 +399,7 @@ chip esp32
 
 hardware {
     pin led: Output = 2
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
 }
 
 machine DeviceState {

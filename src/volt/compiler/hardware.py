@@ -181,13 +181,13 @@ def _validate_pin_legacy(pin: PinDecl, used_pins: dict, uses_wifi: bool,
                      hint="ADC1 (safe with WiFi): GPIO 32-39. ADC2 (blocked by WiFi): GPIO 0, 2, 4, 12-15, 25-27.")
         return
 
-    if mode.startswith("Input") and "PullUp" in mode and not info.has_internal_pullup:
+    if "PullUp" in mode and not info.has_internal_pullup:
         errors.error(pin.region, "HARDWARE ERROR",
                      f"GPIO {gpio} has no internal pull-up resistor (input-only pins 34-39).",
                      hint="Use an external pull-up resistor, or use a different pin.")
         return
 
-    if mode.startswith("Input") and "PullDown" in mode and not info.has_internal_pulldown:
+    if "PullDown" in mode and not info.has_internal_pulldown:
         errors.error(pin.region, "HARDWARE ERROR",
                      f"GPIO {gpio} has no internal pull-down resistor (input-only pins 34-39).",
                      hint="Use an external pull-down resistor, or use a different pin.")

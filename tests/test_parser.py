@@ -36,7 +36,7 @@ print("\n=== Test 2: Hardware block ===\n")
 prog = parse("""
 hardware {
     pin led: Output = 2
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
     pin battery: Analog = 36
 }
 """)
@@ -45,7 +45,7 @@ check("3 pins", len(prog.hardware.pins) == 3, f"got {len(prog.hardware.pins)}")
 check("led name", prog.hardware.pins[0].name == "led")
 check("led mode", prog.hardware.pins[0].mode == "Output")
 check("led gpio", prog.hardware.pins[0].gpio == 2)
-check("button mode", prog.hardware.pins[1].mode == "Input.PullUp")
+check("button mode", prog.hardware.pins[1].mode == "PullUpInput")
 check("battery mode", prog.hardware.pins[2].mode == "Analog")
 check("battery gpio", prog.hardware.pins[2].gpio == 36)
 

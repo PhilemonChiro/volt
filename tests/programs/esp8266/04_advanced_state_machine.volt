@@ -14,7 +14,7 @@ machine DoorController {
         enter {
             relay.off()
             led.off()
-            log("door", "STATE -> locked | relay=OFF led=OFF")
+            log("door", "STATE -> locked")
         }
         on unlock_cmd -> unlocked
     }
@@ -23,35 +23,28 @@ machine DoorController {
         enter {
             relay.on()
             led.on()
-            lock_toggles = lock_toggles + 1
-            log("door", "STATE -> unlocked #" + lock_toggles + " | relay=ON led=ON")
-            log("door", "auto-lock in 10 seconds")
+            lock_toggles += 1
+            log("door", "STATE -> unlocked #" + lock_toggles + " | auto-lock in 10s")
         }
-        after 10seconds -> locked
+        after 10s -> locked
         on lock_cmd -> locked
     }
 }
 
 task status_blink {
-    every 2seconds {
+    every 2s {
         buzzer.toggle()
-        blink_count = blink_count + 1
+        blink_count += 1
         log("status", "blink #" + blink_count + " | lock_toggles=" + lock_toggles)
     }
 }
 
 task health {
-    every 10seconds {
+    every 10s {
         log("health", "lock_toggles=" + lock_toggles + " blinks=" + blink_count + " wifi=" + wifi.is_connected() + " heap=" + system.free_heap())
     }
 }
 
 setup {
-    log("system", "=== ESP8266 State Machine Test ===")
-    log("system", "machine: DoorController (locked <-> unlocked)")
-    log("system", "auto-lock after 10s in unlocked state")
-    log("system", "pins: led=2, relay=4, buzzer=14")
     wifi.connect("DoorNet", "password")
-    log("system", "starting tasks")
-    run(status_blink, health)
 }

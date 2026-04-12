@@ -279,7 +279,7 @@ print("\n=== PIN METHODS ===\n")
 c = compile_ok("pin methods", """
 hardware {
     pin led: Output = 2
-    pin btn: Input.PullUp = 0
+    pin btn: PullUpInput = 0
     pin bat: Analog = 36
 }
 setup {
@@ -422,7 +422,7 @@ print("\n=== ERROR: Hardware Errors ===\n")
 
 compile_fail("flash pin", "hardware {\n    pin x: Output = 6\n}\n", "flash")
 compile_fail("input-only output", "hardware {\n    pin x: Output = 34\n}\n", "input-only")
-compile_fail("no pullup on 34", "hardware {\n    pin x: Input.PullUp = 34\n}\n", "pull-up")
+compile_fail("no pullup on 34", "hardware {\n    pin x: PullUpInput = 34\n}\n", "pull-up")
 compile_fail("invalid gpio", "hardware {\n    pin x: Output = 50\n}\n", "does not exist")
 compile_fail("non-analog pin", "hardware {\n    pin x: Analog = 21\n}\n", "adc")
 compile_fail("i2c addr conflict", """
@@ -518,7 +518,7 @@ chip esp32
 
 hardware {
     pin led: Output = 2
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
     pin motor: PWM = 4
     pin battery: Analog = 36
 }

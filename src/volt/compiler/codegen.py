@@ -55,9 +55,9 @@ METHOD_MAP = {
     ("Output", "blink"):      "pin_blink({gpio}, {args})",
     ("Output", "blink_once"): "pin_blink_once({gpio}, {args})",
     ("Input", "read"):     "pin_read({gpio})",
-    ("Input.PullUp", "read"):      "pin_read({gpio})",
-    ("Input.PullUp", "is_pressed"): "(pin_read({gpio}) == LOW)",
-    ("Input.PullDown", "read"):     "pin_read({gpio})",
+    ("PullUpInput", "read"):      "pin_read({gpio})",
+    ("PullUpInput", "is_pressed"): "(pin_read({gpio}) == LOW)",
+    ("PullDownInput", "read"):     "pin_read({gpio})",
     ("Analog", "read"):    "pin_read({gpio})",
     ("PWM", "set_pwm"):    "pin_write({gpio}, {args})",
     ("PWM", "write"):      "pin_write({gpio}, {args})",
@@ -651,9 +651,9 @@ class CCodeGen:
                     self._out(f"pin_set_output({pin.gpio});")
                 elif pin.mode == "Input":
                     self._out(f"pin_set_input({pin.gpio});")
-                elif pin.mode == "Input.PullUp":
+                elif pin.mode == "PullUpInput":
                     self._out(f"pin_set_input_pullup({pin.gpio});")
-                elif pin.mode == "Input.PullDown":
+                elif pin.mode == "PullDownInput":
                     self._out(f"pin_set_input_pulldown({pin.gpio});")
                 elif pin.mode == "Analog":
                     pass  # ADC pins don't need explicit init
@@ -876,6 +876,9 @@ class CCodeGen:
             return "true" if expr.value else "false"
 
         if isinstance(expr, StringLiteral):
+            # Check for string interpolation: "text {expr} more"
+            if '{' in expr.value and '}' in expr.value:
+                return self._emit_interpolated_string(expr.value, ctx_prefix, cv)
             return f'"{expr.value}"'
 
         if isinstance(expr, DurationLiteral):
@@ -928,7 +931,7 @@ class CCodeGen:
                 key = (mode, expr.method)
                 if key in METHOD_MAP:
                     return METHOD_MAP[key].format(gpio=gpio, args=args_str)
-                # Fallback for modes with dots (Input.PullUp)
+                # Fallback for modes with dots (PullUpInput)
                 base_mode = mode.split(".")[0]
                 key = (base_mode, expr.method)
                 if key in METHOD_MAP:
@@ -1021,6 +1024,85 @@ class CCodeGen:
         if isinstance(expr, BinaryExpr) and expr.op == "+":
             return self._flatten_concat(expr.left) + self._flatten_concat(expr.right)
         return [expr]
+
+    def _emit_interpolated_string(self, text: str, ctx_prefix, cv) -> str:
+        """Generate snprintf for "text {expr} more" interpolation."""
+        import re
+        parts = re.split(r'\{([^}]+)\}', text)
+        # parts = ["text ", "expr", " more"] — alternating text and expressions
+
+        if len(parts) <= 1:
+            return f'"{text}"'
+
+        fmt_parts = []
+        args = []
+        for i, part in enumerate(parts):
+            if i % 2 == 0:
+                # Text part — escape % for printf
+                fmt_parts.append(part.replace("%", "%%"))
+            else:
+                # Expression part — parse and emit
+                expr_str = part.strip()
+                # Resolve the expression through a mini-parse
+                c_expr = self._resolve_interp_expr(expr_str, ctx_prefix, cv)
+                # Detect type for format specifier
+                if any(m in expr_str for m in [".read()", ".free_heap()", ".uptime()", ".id()", "_count", "count"]):
+                    fmt_parts.append("%ld")
+                    args.append(f"(long)({c_expr})")
+                elif any(m in expr_str for m in [".is_connected()", ".is_on()", ".is_pressed()"]):
+                    fmt_parts.append("%s")
+                    args.append(f'({c_expr} ? "true" : "false")')
+                elif any(m in expr_str for m in [".temperature()", ".humidity()", ".pressure()", ".lux()"]):
+                    fmt_parts.append("%.1f")
+                    args.append(f"(double)({c_expr})")
+                elif expr_str.replace("_", "").replace(".", "").isalpha():
+                    # Simple variable — assume int
+                    fmt_parts.append("%ld")
+                    args.append(f"(long)({c_expr})")
+                else:
+                    # Default — assume int
+                    fmt_parts.append("%ld")
+                    args.append(f"(long)({c_expr})")
+
+        self._needs_sprintf_buf = True
+        buf_idx = getattr(self, '_sprintf_buf_idx', 0)
+        self._sprintf_buf_idx = (buf_idx + 1) % 16
+        fmt = "".join(fmt_parts)
+        args_str = ", ".join(args)
+        if args_str:
+            return f'(snprintf(_volt_strbuf[{buf_idx}], sizeof(_volt_strbuf[{buf_idx}]), "{fmt}", {args_str}), _volt_strbuf[{buf_idx}])'
+        else:
+            return f'"{fmt}"'
+
+    def _resolve_interp_expr(self, expr_str: str, ctx_prefix, cv) -> str:
+        """Resolve a string interpolation expression to C code."""
+        # Handle method calls: obj.method()
+        if '.' in expr_str and '(' in expr_str:
+            parts = expr_str.split('.', 1)
+            obj = parts[0].strip()
+            rest = parts[1].strip()
+            method = rest.rstrip('()')
+
+            # Check builtins
+            if obj in self.builtin_types:
+                type_name = self.builtin_types[obj]
+                key = (type_name, method)
+                if key in METHOD_MAP:
+                    return METHOD_MAP[key].format(args="")
+            # Check pins
+            if obj in self.pin_map:
+                gpio, mode = self.pin_map[obj]
+                key = (mode.split(".")[0], method)
+                if key in METHOD_MAP:
+                    return METHOD_MAP[key].format(gpio=gpio, args="")
+            return f"{obj}_{method}()"
+
+        # Handle simple variable reference with ctx prefix
+        name = expr_str.strip()
+        c_name = _c_name(name)
+        if cv and name in cv and ctx_prefix:
+            return f"{ctx_prefix}{c_name}"
+        return c_name
 
     def _emit_string_concat(self, expr, ctx_prefix, cv) -> str:
         """Generate snprintf for string + int/float/bool concatenation.

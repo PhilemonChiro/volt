@@ -3,7 +3,7 @@ chip esp8266
 hardware {
     pin led: Output = 2
     pin relay: Output = 4
-    pin button: Input.PullUp = 5
+    pin button: PullUpInput = 5
     pin status: Output = 12
     pin buzzer: Output = 14
 }
@@ -15,7 +15,7 @@ var last_button: int = 1
 task blink {
     every 500ms {
         led.toggle()
-        blink_count = blink_count + 1
+        blink_count += 1
         if blink_count % 10 == 0 {
             log("blink", "count=" + blink_count)
         }
@@ -27,8 +27,8 @@ task read_button {
         let pressed = button.read()
         if pressed == 0 {
             if last_button == 1 {
-                button_presses = button_presses + 1
-                log("button", "PRESSED #" + button_presses + " | relay=ON status=ON")
+                button_presses += 1
+                log("button", "PRESSED #" + button_presses)
             }
             relay.on()
             status.on()
@@ -41,14 +41,7 @@ task read_button {
 }
 
 task health {
-    every 5seconds {
+    every 5s {
         log("health", "blinks=" + blink_count + " presses=" + button_presses + " heap=" + system.free_heap())
     }
-}
-
-setup {
-    log("system", "=== ESP8266 Multi-Pin Test ===")
-    log("system", "pins: led=2, relay=4, button=5(pullup), status=12, buzzer=14")
-    log("system", "expected: blink@500ms, button@50ms poll")
-    run(blink, read_button, health)
 }

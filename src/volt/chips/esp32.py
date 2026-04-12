@@ -284,7 +284,7 @@ class ESP32(ChipSpec, WiFiCapable, BluetoothCapable):
             errors.append(("error",
                            f"GPIO {pin_name} has no ADC channel.",
                            f"Pins with ADC: {', '.join(adc_pins)}"))
-        if mode in ("Input.PullUp", "InputPullUp") and not pin.has_internal_pullup:
+        if mode in ("PullUpInput", "InputPullUp") and not pin.has_internal_pullup:
             errors.append(("error",
                            f"GPIO {pin_name} has no internal pull-up resistor (GPIO 34-39).",
                            "Use an external pull-up resistor."))

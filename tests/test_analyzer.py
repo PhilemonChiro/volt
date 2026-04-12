@@ -268,7 +268,7 @@ chip esp32
 hardware {
     pin led: Output = 2
     pin motor: PWM = 4
-    pin button: Input.PullUp = 0
+    pin button: PullUpInput = 0
 }
 
 task blink {

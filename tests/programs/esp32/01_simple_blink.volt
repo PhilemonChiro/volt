@@ -4,18 +4,11 @@ hardware {
     pin led: Output = 2
 }
 
-var count: int = 0
-
 task blink {
+    var count: int = 0
     every 500ms {
         led.toggle()
-        count = count + 1
-        log("blink", "toggle #" + count + " | pin=2")
+        count += 1
+        log("blink", "toggle #{count}")
     }
-}
-
-setup {
-    log("system", "=== ESP32 Simple Blink Test ===")
-    log("system", "expected: toggle every 500ms on GPIO 2")
-    run(blink)
 }
