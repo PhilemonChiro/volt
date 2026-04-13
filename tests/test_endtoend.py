@@ -382,7 +382,7 @@ setup {
 }
 """)
 c_contains(c, "storage_init()", "storage init called")
-c_contains(c, "// storage boot_count: int", "storage comment")
+c_contains(c, "static int32_t boot_count = 0;", "storage var declared")
 
 
 # ============================================================

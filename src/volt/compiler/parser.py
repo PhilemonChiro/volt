@@ -116,6 +116,8 @@ class ASTBuilder(Transformer):
                 prog.raw_blocks.append(child)
             elif isinstance(child, VarDecl):
                 prog.global_vars.append(child)
+            elif isinstance(child, ChannelDecl):
+                prog.channels.append(child)
             elif isinstance(child, str) and child.endswith('.volt'):
                 prog.includes.append(child)
         return prog
@@ -408,7 +410,7 @@ class ASTBuilder(Transformer):
     # --- Statements ---
 
     def var_decl(self, children):
-        keyword = str(children[0])  # VAR_KEYWORD token: "let" or "var"
+        keyword = str(children[0])
         name = str(children[1])
         mutable = (keyword == "var")
 
@@ -424,6 +426,39 @@ class ASTBuilder(Transformer):
             name=name, type_name=type_name, value=value, mutable=mutable,
             region=_region(children[1]),
         )
+
+    def shared_var_decl(self, children):
+        keyword = str(children[0])
+        name = str(children[1])
+        mutable = (keyword == "var")
+
+        type_name = None
+        value = None
+        for child in children[2:]:
+            if isinstance(child, str):
+                type_name = child
+            elif isinstance(child, Node):
+                value = child
+
+        return VarDecl(
+            name=name, type_name=type_name, value=value, mutable=mutable,
+            shared=True,
+            region=_region(children[1]),
+        )
+
+    def channel_decl(self, children):
+        elem_type = str(children[0])
+        capacity = 4  # default
+        name = ""
+        for child in children[1:]:
+            if isinstance(child, Token) and child.type == 'INT':
+                capacity = int(str(child))
+            elif isinstance(child, Token) and child.type == 'NAME':
+                name = str(child)
+        if not name and isinstance(children[-1], Token):
+            name = str(children[-1])
+        return ChannelDecl(name=name, elem_type=elem_type, capacity=capacity,
+                          region=_region(children[0]))
 
     def type_annotation(self, children):
         return children[0]

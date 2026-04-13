@@ -109,6 +109,13 @@ def _collect_declarations(program: Program, scope: Scope, errors: CompilerErrors
             mutable=True,
         ), errors)
 
+    # Channels
+    for ch in program.channels:
+        _declare_or_error(scope, Symbol(
+            ch.name, "channel", f"channel<{ch.elem_type}>", ch.region,
+            mutable=True,
+        ), errors)
+
     # Global variables
     for var in program.global_vars:
         _declare_or_error(scope, Symbol(

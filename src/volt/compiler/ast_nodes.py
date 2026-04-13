@@ -53,6 +53,7 @@ class Program(Node):
     machines: list[MachineDecl] = field(default_factory=list)
     storage_vars: list[StorageDecl] = field(default_factory=list)
     global_vars: list[VarDecl] = field(default_factory=list)
+    channels: list[ChannelDecl] = field(default_factory=list)
     setup: SetupBlock | None = None         # runs once at boot
     loop: LoopBlock | None = None           # super-loop (alternative to tasks)
     raw_blocks: list[RawBlock] = field(default_factory=list)
@@ -250,13 +251,22 @@ Expr = Any       # Literal | VarRef | BinaryExpr | CallExpr | ...
 
 @dataclass
 class VarDecl(Node):
-    """let x = 42  or  var count: int = 0"""
+    """let x = 42  or  var count: int = 0  or  shared var x: int = 0"""
     name: str = ""
     type_name: str | None = None  # None = infer from value
     value: Expr = None
     mutable: bool = False         # let = False, var = True
+    shared: bool = False          # shared = atomic access across tasks
     # Populated by analyzer:
     needs_lifting: bool = False   # must be moved to context struct
+
+
+@dataclass
+class ChannelDecl(Node):
+    """channel<int, 8> sensor_data"""
+    name: str = ""
+    elem_type: str = "int"
+    capacity: int = 4             # default buffer size
 
 
 @dataclass

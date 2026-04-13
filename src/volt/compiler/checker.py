@@ -130,6 +130,15 @@ METHOD_TYPES = {
         "enable": (VOID, []),
         "check":  (VOID, []),
     },
+    "Channel": {
+        "send":      (VOID, [("value", None)]),   # any type
+        "receive":   (INT, []),                     # returns elem_type (int for now)
+        "try_receive": (INT, []),                   # non-blocking receive
+        "count":     (INT, []),                     # items in buffer
+        "is_empty":  (BOOL, []),
+        "is_full":   (BOOL, []),
+        "clear":     (VOID, []),
+    },
 }
 
 # Built-in function signatures: name → (return_type, [(param_name, param_type)])
@@ -540,7 +549,9 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
         if obj_type == ERROR_TYPE:
             return ERROR_TYPE
         # Look up field in struct definitions or method tables
-        methods = METHOD_TYPES.get(obj_type, {})
+        # Normalize channel<T> → Channel for method lookup
+        lookup_type = "Channel" if obj_type.startswith("channel<") else obj_type
+        methods = METHOD_TYPES.get(lookup_type, {})
         if expr.field_name in methods:
             return methods[expr.field_name][0]
         # Could be a struct field — checker doesn't know struct fields yet
@@ -587,7 +598,8 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
         if obj_type == ERROR_TYPE:
             return ERROR_TYPE
 
-        methods = METHOD_TYPES.get(obj_type, {})
+        lookup_type = "Channel" if obj_type.startswith("channel<") else obj_type
+        methods = METHOD_TYPES.get(lookup_type, {})
         if expr.method not in methods:
             known_methods = list(methods.keys())
             suggestion = suggest_similar(expr.method, known_methods)

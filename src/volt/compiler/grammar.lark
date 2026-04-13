@@ -26,6 +26,7 @@ start: (_NL | top_level)*
     | raw_block
     | storage_decl _NL
     | var_decl _NL
+    | channel_decl _NL
 
 
 // --- Chip Declaration ---
@@ -171,10 +172,14 @@ block: "{" (_NL | statement)* "}"
     | continue_stmt _NL
 
 var_decl: VAR_KEYWORD NAME type_annotation? "=" expr
+    | "shared" VAR_KEYWORD NAME type_annotation? "=" expr -> shared_var_decl
 
 VAR_KEYWORD.4: "let" | "var"
 
 type_annotation: ":" type_name
+
+// Channel declaration: channel<int, 8> sensor_data
+channel_decl: "channel" "<" type_name ("," INT)? ">" NAME
 
 return_stmt: "return" expr?
 

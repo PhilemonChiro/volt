@@ -196,8 +196,11 @@ class CCodeGen:
         # Section 4: Context structs (for background tasks with lifted vars)
         self._emit_context_structs(program)
 
-        # Section 4: Storage variables
+        # Section 4b: Storage variables
         self._emit_storage_vars(program)
+
+        # Section 4c: Channels
+        self._emit_channels(program)
 
         # Section 5: User functions (non-yielding)
         self._emit_functions(program)
@@ -229,6 +232,10 @@ class CCodeGen:
             "wifi": "WiFi", "mqtt": "MQTT", "http": "HTTP",
             "storage": "Storage", "system": "System", "ota": "OTA",
         }
+
+        # Register channels as builtin types
+        for ch in program.channels:
+            self.builtin_types[ch.name] = "Channel"
 
         # Track variable types for dispatch
         for sv in program.storage_vars:
@@ -326,15 +333,19 @@ class CCodeGen:
         if not program.global_vars:
             return
         self._out("// Module-level variables")
-        # Determine which vars are shared across tiers (need volatile)
         volatile_vars = self._find_volatile_vars(program)
         for var in program.global_vars:
             c_type = TYPE_MAP.get(var.type_name, "int32_t")
-            vol = "volatile " if var.name in volatile_vars else ""
             init = ""
             if var.value is not None:
                 init = f" = {self._emit_expr_str(var.value)}"
-            self._out(f"static {vol}{c_type} {_c_name(var.name)}{init};")
+            # shared var → _Atomic for thread-safe access
+            if var.shared:
+                self._out(f"static _Atomic {c_type} {_c_name(var.name)}{init};")
+            elif var.name in volatile_vars:
+                self._out(f"static volatile {c_type} {_c_name(var.name)}{init};")
+            else:
+                self._out(f"static {c_type} {_c_name(var.name)}{init};")
         self._out("")
 
     def _find_volatile_vars(self, program: Program) -> set:
@@ -358,6 +369,53 @@ class CCodeGen:
                 default = self._emit_expr_str(sv.default_value) if sv.default_value else "0"
                 self._out(f"static {c_type} {_c_name(sv.name)} = {default};")
             self._out("")
+
+    def _emit_channels(self, program: Program):
+        if program.channels:
+            self._out("// Inter-task channels")
+            for ch in program.channels:
+                c_type = TYPE_MAP.get(ch.elem_type, "int32_t")
+                cap = ch.capacity
+                name = _c_name(ch.name)
+                # Generate a simple ring buffer struct per channel
+                self._out(f"typedef struct {{")
+                self._out(f"    {c_type} buf[{cap}];")
+                self._out(f"    volatile uint8_t head;")
+                self._out(f"    volatile uint8_t tail;")
+                self._out(f"    _Atomic uint8_t count;")
+                self._out(f"}} _ch_{name}_t;")
+                self._out(f"static _ch_{name}_t _ch_{name} = {{{{0}}, 0, 0, 0}};")
+                self._out(f"")
+                # send function (atomic count for dual-core safety)
+                self._out(f"static inline void {name}_send({c_type} val) {{")
+                self._out(f"    _ch_{name}_t *ch = &_ch_{name};")
+                self._out(f"    if (atomic_load(&ch->count) < {cap}) {{")
+                self._out(f"        ch->buf[ch->head] = val;")
+                self._out(f"        ch->head = (ch->head + 1) % {cap};")
+                self._out(f"        atomic_fetch_add(&ch->count, 1);")
+                self._out(f"    }}")
+                self._out(f"}}")
+                # receive function (atomic count for dual-core safety)
+                self._out(f"static inline {c_type} {name}_receive(void) {{")
+                self._out(f"    _ch_{name}_t *ch = &_ch_{name};")
+                self._out(f"    if (atomic_load(&ch->count) > 0) {{")
+                self._out(f"        {c_type} val = ch->buf[ch->tail];")
+                self._out(f"        ch->tail = (ch->tail + 1) % {cap};")
+                self._out(f"        atomic_fetch_sub(&ch->count, 1);")
+                self._out(f"        return val;")
+                self._out(f"    }}")
+                self._out(f"    return 0;")
+                self._out(f"}}")
+                # try_receive (same as receive for now)
+                self._out(f"static inline {c_type} {name}_try_receive(void) {{ return {name}_receive(); }}")
+                # count
+                self._out(f"static inline int {name}_count(void) {{ return _ch_{name}.count; }}")
+                # is_empty / is_full
+                self._out(f"static inline bool {name}_is_empty(void) {{ return _ch_{name}.count == 0; }}")
+                self._out(f"static inline bool {name}_is_full(void) {{ return _ch_{name}.count >= {cap}; }}")
+                # clear
+                self._out(f"static inline void {name}_clear(void) {{ _ch_{name}.head = 0; _ch_{name}.tail = 0; _ch_{name}.count = 0; }}")
+                self._out("")
 
     def _emit_functions(self, program: Program):
         for func in program.functions:
