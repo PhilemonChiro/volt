@@ -14,8 +14,9 @@ pub struct DiagnosticItem {
 pub fn check_code(source: &str) -> Vec<DiagnosticItem> {
     let volt_src = crate::runner::get_volt_src_path();
 
-    // Write source to a temp file
-    let tmp = std::env::temp_dir().join("_volt_check.volt");
+    // Write source to a unique temp file (avoid race with multiple windows)
+    let pid = std::process::id();
+    let tmp = std::env::temp_dir().join(format!("_volt_check_{}.volt", pid));
     std::fs::write(&tmp, source).ok();
 
     let script = format!(
@@ -110,7 +111,7 @@ print(json.dumps(result))
         tmp.to_string_lossy().replace("\\", "/"),
     );
 
-    let script_path = std::env::temp_dir().join("_volt_check.py");
+    let script_path = std::env::temp_dir().join(format!("_volt_check_{}.py", std::process::id()));
     std::fs::write(&script_path, &script).ok();
 
     let output = Command::new("python3")
@@ -144,7 +145,7 @@ pub struct SymbolRef {
 /// Extract all symbol definitions and references from Volt source
 pub fn find_symbols(source: &str) -> Vec<SymbolInfo> {
     let volt_src = crate::runner::get_volt_src_path();
-    let tmp = std::env::temp_dir().join("_volt_symbols.volt");
+    let tmp = std::env::temp_dir().join(format!("_volt_symbols_{}.volt", std::process::id()));
     std::fs::write(&tmp, source).ok();
 
     let script = format!(
@@ -366,7 +367,7 @@ print(json.dumps(list(symbols.values())))
         tmp.to_string_lossy().replace("\\", "/"),
     );
 
-    let script_path = std::env::temp_dir().join("_volt_symbols.py");
+    let script_path = std::env::temp_dir().join(format!("_volt_symbols_{}.py", std::process::id()));
     std::fs::write(&script_path, &script).ok();
 
     let output = Command::new("python3")

@@ -20,7 +20,10 @@ typedef enum {
 #define PIN_COUNT 40
 
 // LEDC channel tracking for PWM (ESP32 has 8 channels)
-static int8_t pwm_channel_map[PIN_COUNT];  // gpio → LEDC channel (-1 = not assigned)
+// -1 = not assigned. Must be initialized explicitly (static zero-init would give 0 = valid channel)
+static int8_t pwm_channel_map[PIN_COUNT] = {
+    [0 ... 39] = -1
+};
 static uint8_t next_pwm_channel = 0;
 static pin_mode_t pin_modes[PIN_COUNT];
 

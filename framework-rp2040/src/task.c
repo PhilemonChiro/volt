@@ -13,6 +13,7 @@ void volt_run(volt_task_entry_t *tasks, int count)
     log_info("task", "scheduler started with %d background tasks", count);
 
     while (1) {
+        bool any_ran = false;
         uint32_t now = volt_tick_ms();
 
         for (int i = 0; i < count; i++) {
@@ -23,10 +24,14 @@ void volt_run(volt_task_entry_t *tasks, int count)
             }
             t->status = VOLT_TASK_RUNNING;
             tasks[i].func(t);
+            any_ran = true;
         }
 
-        // Yield to USB and other SDK tasks
-        sleep_ms(1);
+        // Only sleep when no task ran — keeps timing precise
+        // tight_loop_contents() yields to USB stack without blocking
+        if (!any_ran) {
+            tight_loop_contents();
+        }
     }
 }
 
