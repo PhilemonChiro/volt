@@ -27,6 +27,7 @@ target_include_directories(volt-rp2040 PRIVATE
 target_link_libraries(volt-rp2040
     pico_stdlib
     hardware_gpio
+    hardware_pwm
     hardware_timer
     hardware_adc
     hardware_watchdog

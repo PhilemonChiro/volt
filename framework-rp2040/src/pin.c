@@ -5,6 +5,7 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/adc.h"
+#include "hardware/pwm.h"
 
 static bool adc_initialized = false;
 
@@ -14,6 +15,7 @@ typedef enum {
     PIN_MODE_INPUT,
     PIN_MODE_INPUT_PULLUP,
     PIN_MODE_INPUT_PULLDOWN,
+    PIN_MODE_PWM,
 } pin_mode_t;
 
 // RP2040 has GP0-GP29 (30 pins)
@@ -153,6 +155,34 @@ volt_error_t pin_release(uint8_t pin)
     isr_contexts[pin].callback = NULL;
     gpio_deinit(pin);
     pin_modes[pin] = PIN_MODE_UNUSED;
+    return VOLT_OK;
+}
+
+volt_error_t pin_set_pwm(uint8_t pin)
+{
+    if (!is_valid_pin(pin)) return VOLT_ERR_INVALID_PIN;
+    if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
+
+    // RP2040: each GPIO maps to a PWM slice (pin/2) and channel (pin%2)
+    gpio_set_function(pin, GPIO_FUNC_PWM);
+    uint slice = pwm_gpio_to_slice_num(pin);
+
+    // Configure: ~1kHz frequency, 8-bit resolution (wrap at 255)
+    pwm_set_wrap(slice, 255);
+    pwm_set_clkdiv(slice, 488.28f);  // 125MHz / 488.28 / 256 ≈ 1kHz
+    pwm_set_enabled(slice, true);
+    pwm_set_gpio_level(pin, 0);  // start at 0% duty
+
+    pin_modes[pin] = PIN_MODE_PWM;
+    return VOLT_OK;
+}
+
+volt_error_t pin_pwm_write(uint8_t pin, uint8_t duty)
+{
+    if (pin >= PIN_COUNT) return VOLT_ERR_INVALID_PIN;
+    if (pin_modes[pin] != PIN_MODE_PWM) return VOLT_ERR_WRONG_PIN_MODE;
+
+    pwm_set_gpio_level(pin, duty);
     return VOLT_OK;
 }
 

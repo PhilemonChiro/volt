@@ -59,8 +59,8 @@ METHOD_MAP = {
     ("PullUpInput", "is_pressed"): "(pin_read({gpio}) == LOW)",
     ("PullDownInput", "read"):     "pin_read({gpio})",
     ("Analog", "read"):    "pin_read({gpio})",
-    ("PWM", "set_pwm"):    "pin_write({gpio}, {args})",
-    ("PWM", "write"):      "pin_write({gpio}, {args})",
+    ("PWM", "set_pwm"):    "pin_pwm_write({gpio}, {args})",
+    ("PWM", "write"):      "pin_pwm_write({gpio}, {args})",
     # WiFi
     ("WiFi", "connect"):      "wifi_connect({args})",
     ("WiFi", "disconnect"):   "wifi_disconnect()",
@@ -758,7 +758,7 @@ class CCodeGen:
                 elif pin.mode == "Analog":
                     pass  # ADC pins don't need explicit init
                 elif pin.mode == "PWM":
-                    self._out(f"pin_set_output({pin.gpio}); // PWM")
+                    self._out(f"pin_set_pwm({pin.gpio});")
             self._out("")
 
         # Storage variable loading — restore from flash with defaults

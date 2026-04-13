@@ -147,7 +147,7 @@ c_contains(c, "VOLT_YIELD_LABEL", "protothread yield")
 
 # Critical tier
 c_contains(c, "static void IRAM_ATTR motor_pid_isr(void *arg)", "motor_pid is ISR")
-c_contains(c, "pin_write(4, 0)", "motor ISR body")
+c_contains(c, "pin_pwm_write(4, 0)", "motor ISR body")
 c_contains(c, "volt_critical_create", "critical task creation")
 c_contains(c, "1000", "1ms = 1000us period")
 

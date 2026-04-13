@@ -3,6 +3,7 @@
 #include "volt/pin.h"
 #include "volt/log.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "esp_attr.h"
 
 // Track the mode of each pin so we can validate operations
@@ -12,10 +13,15 @@ typedef enum {
     PIN_MODE_INPUT,
     PIN_MODE_INPUT_PULLUP,
     PIN_MODE_INPUT_PULLDOWN,
+    PIN_MODE_PWM,
 } pin_mode_t;
 
 // ESP32 has GPIO 0-39 (40 pins total)
 #define PIN_COUNT 40
+
+// LEDC channel tracking for PWM (ESP32 has 8 channels)
+static int8_t pwm_channel_map[PIN_COUNT];  // gpio → LEDC channel (-1 = not assigned)
+static uint8_t next_pwm_channel = 0;
 static pin_mode_t pin_modes[PIN_COUNT];
 
 // Track output state ourselves — gpio_get_level() reads the INPUT register
@@ -236,6 +242,58 @@ volt_error_t pin_release(uint8_t pin)
 
     pin_modes[pin] = PIN_MODE_UNUSED;
     log_debug("pin", "GPIO %d released", pin);
+    return VOLT_OK;
+}
+
+volt_error_t pin_set_pwm(uint8_t pin)
+{
+    if (!is_valid_pin(pin)) return VOLT_ERR_INVALID_PIN;
+    if (!can_output(pin)) return VOLT_ERR_INVALID_PIN;
+    if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
+    if (next_pwm_channel >= 8) {
+        log_error("pin", "No LEDC channels left for GPIO %d (max 8 PWM pins)", pin);
+        return VOLT_ERR_NOT_SUPPORTED;
+    }
+
+    uint8_t ch = next_pwm_channel++;
+    pwm_channel_map[pin] = ch;
+
+    // Configure LEDC timer (shared by all channels on same timer)
+    ledc_timer_config_t timer_cfg = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_8_BIT,  // 0-255
+        .timer_num = LEDC_TIMER_0,
+        .freq_hz = 1000,  // 1kHz default
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&timer_cfg);
+
+    // Configure LEDC channel
+    ledc_channel_config_t ch_cfg = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = ch,
+        .timer_sel = LEDC_TIMER_0,
+        .gpio_num = pin,
+        .duty = 0,
+        .hpoint = 0,
+    };
+    ledc_channel_config(&ch_cfg);
+
+    pin_modes[pin] = PIN_MODE_PWM;
+    log_debug("pin", "GPIO %d configured as PWM (LEDC ch%d, 1kHz, 8-bit)", pin, ch);
+    return VOLT_OK;
+}
+
+volt_error_t pin_pwm_write(uint8_t pin, uint8_t duty)
+{
+    if (pin >= PIN_COUNT) return VOLT_ERR_INVALID_PIN;
+    if (pin_modes[pin] != PIN_MODE_PWM) return VOLT_ERR_WRONG_PIN_MODE;
+
+    int8_t ch = pwm_channel_map[pin];
+    if (ch < 0) return VOLT_ERR_INTERNAL;
+
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, ch, duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
     return VOLT_OK;
 }
 

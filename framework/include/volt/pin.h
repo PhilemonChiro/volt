@@ -43,6 +43,12 @@ volt_error_t pin_on_change(uint8_t pin, pin_callback_t callback, void *arg);
 // Release a pin back to unused state. Removes any callbacks.
 volt_error_t pin_release(uint8_t pin);
 
+// Configure a pin as PWM output. Default frequency ~1kHz, 8-bit resolution (0-255).
+volt_error_t pin_set_pwm(uint8_t pin);
+
+// Set PWM duty cycle (0-255). Pin must be configured with pin_set_pwm().
+volt_error_t pin_pwm_write(uint8_t pin, uint8_t duty);
+
 // Blink an output pin: toggle, wait interval_ms, toggle back.
 // Non-blocking in protothread context (used with yield macros).
 // For simple use in main or one-shot code.
