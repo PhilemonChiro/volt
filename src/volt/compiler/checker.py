@@ -113,8 +113,8 @@ METHOD_TYPES = {
         "post": (STRING, [("url", STRING), ("body", STRING)]),
     },
     "Storage": {
-        "save": (VOID, [("key", STRING), ("value", STRING)]),
-        "load": (STRING, [("key", STRING)]),
+        "save": (VOID, [("key", STRING), ("value", None)]),  # None = any type (dispatched at codegen)
+        "load": (INT, [("key", STRING)]),
         "push": (VOID, [("list_name", STRING), ("value", INT)]),
         "drain": (STRING, [("list_name", STRING)]),
         "list_count": (INT, [("list_name", STRING)]),
@@ -607,7 +607,7 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
             arg_type = _infer(arg, scope, errors)
             if i < len(params):
                 expected = params[i][1]
-                if arg_type != ERROR_TYPE and arg_type != expected:
+                if expected is not None and arg_type != ERROR_TYPE and arg_type != expected:
                     errors.error(
                         arg.region, "TYPE MISMATCH",
                         f"Argument {i+1} of `{expr.method}` expects `{expected}`, "

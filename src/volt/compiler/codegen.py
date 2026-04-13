@@ -354,7 +354,9 @@ class CCodeGen:
         if program.storage_vars:
             self._out("// Storage variables (persisted via NVS)")
             for sv in program.storage_vars:
-                self._out(f"// storage {sv.name}: {sv.type_name}")
+                c_type = TYPE_MAP.get(sv.type_name, "int32_t")
+                default = self._emit_expr_str(sv.default_value) if sv.default_value else "0"
+                self._out(f"static {c_type} {_c_name(sv.name)} = {default};")
             self._out("")
 
     def _emit_functions(self, program: Program):
