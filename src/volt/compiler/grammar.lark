@@ -178,8 +178,9 @@ VAR_KEYWORD.4: "let" | "var"
 
 type_annotation: ":" type_name
 
-// Channel declaration: channel<int, 8> sensor_data
-channel_decl: "channel" "<" type_name ("," INT)? ">" NAME
+// Channel declaration: channel name: int  or  channel name: int[16]
+channel_decl: "channel" NAME ":" type_name
+    | "channel" NAME ":" type_name "[" INT "]"
 
 return_stmt: "return" expr?
 

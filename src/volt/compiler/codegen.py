@@ -115,6 +115,10 @@ def _collect_var_refs(stmts: list) -> set:
             if isinstance(stmt.target, VarRef):
                 names.add(stmt.target.name)
             names |= _collect_expr_refs(stmt.value)
+        elif isinstance(stmt, CompoundAssign):
+            if isinstance(stmt.target, VarRef):
+                names.add(stmt.target.name)
+            names |= _collect_expr_refs(stmt.value)
         elif isinstance(stmt, ExprStmt):
             names |= _collect_expr_refs(stmt.expr)
         elif isinstance(stmt, ReturnStmt) and stmt.value:
@@ -161,6 +165,13 @@ def _collect_expr_refs(expr) -> set:
         if isinstance(expr.target, VarRef):
             names.add(expr.target.name)
         names |= _collect_expr_refs(expr.value)
+    elif isinstance(expr, StringLiteral):
+        # Extract variable references from interpolation: "text {varname} more"
+        import re
+        for match in re.finditer(r'\{(\w+)(?:\.\w+\(\))?\}', expr.value):
+            names.add(match.group(1))
+    elif isinstance(expr, DotAccess):
+        names |= _collect_expr_refs(expr.obj)
     return names
 
 
@@ -333,33 +344,52 @@ class CCodeGen:
         if not program.global_vars:
             return
         self._out("// Module-level variables")
-        volatile_vars = self._find_volatile_vars(program)
+        shared_vars = self._find_shared_vars(program)
         for var in program.global_vars:
             c_type = TYPE_MAP.get(var.type_name, "int32_t")
             init = ""
             if var.value is not None:
                 init = f" = {self._emit_expr_str(var.value)}"
-            # shared var → _Atomic for thread-safe access
-            if var.shared:
+            # Auto-detect: var used by 2+ tasks → _Atomic
+            # Explicit: shared keyword → _Atomic
+            if var.shared or var.name in shared_vars:
                 self._out(f"static _Atomic {c_type} {_c_name(var.name)}{init};")
-            elif var.name in volatile_vars:
-                self._out(f"static volatile {c_type} {_c_name(var.name)}{init};")
             else:
                 self._out(f"static {c_type} {_c_name(var.name)}{init};")
         self._out("")
 
-    def _find_volatile_vars(self, program: Program) -> set:
-        """Find global vars accessed by tasks in different tiers — need volatile."""
-        var_tiers = {}  # var_name → set of tiers
+    def _find_shared_vars(self, program: Program) -> set:
+        """Find global vars accessed by 2+ tasks — need _Atomic for safety."""
+        var_tasks = {}  # var_name → set of task names
         global_names = {v.name for v in program.global_vars}
         for task in program.tasks:
             refs = _collect_var_refs(task.body)
             for name in refs:
                 if name in global_names:
-                    if name not in var_tiers:
-                        var_tiers[name] = set()
-                    var_tiers[name].add(task.tier)
-        return {name for name, tiers in var_tiers.items() if len(tiers) > 1 or "critical" in tiers}
+                    if name not in var_tasks:
+                        var_tasks[name] = set()
+                    var_tasks[name].add(task.name)
+        # Also check setup and loop blocks
+        for block_name, block in [("setup", program.setup), ("loop", program.loop)]:
+            if block:
+                refs = _collect_var_refs(block.body)
+                for name in refs:
+                    if name in global_names:
+                        if name not in var_tasks:
+                            var_tasks[name] = set()
+                        var_tasks[name].add(block_name)
+        # Also mark vars in critical tasks (ISR preempts everything)
+        for task in program.tasks:
+            if task.tier == "critical":
+                refs = _collect_var_refs(task.body)
+                for name in refs:
+                    if name in global_names:
+                        if name not in var_tasks:
+                            var_tasks[name] = set()
+                        var_tasks[name].add("__critical__")
+                        var_tasks[name].add("__main__")  # ISR preempts main
+        # Shared if accessed by 2+ different contexts
+        return {name for name, tasks in var_tasks.items() if len(tasks) > 1}
 
     def _emit_storage_vars(self, program: Program):
         if program.storage_vars:
@@ -410,9 +440,10 @@ class CCodeGen:
                 self._out(f"static inline {c_type} {name}_try_receive(void) {{ return {name}_receive(); }}")
                 # count
                 self._out(f"static inline int {name}_count(void) {{ return _ch_{name}.count; }}")
-                # is_empty / is_full
-                self._out(f"static inline bool {name}_is_empty(void) {{ return _ch_{name}.count == 0; }}")
-                self._out(f"static inline bool {name}_is_full(void) {{ return _ch_{name}.count >= {cap}; }}")
+                # has_data / is_empty / is_full
+                self._out(f"static inline bool {name}_has_data(void) {{ return atomic_load(&_ch_{name}.count) > 0; }}")
+                self._out(f"static inline bool {name}_is_empty(void) {{ return atomic_load(&_ch_{name}.count) == 0; }}")
+                self._out(f"static inline bool {name}_is_full(void) {{ return atomic_load(&_ch_{name}.count) >= {cap}; }}")
                 # clear
                 self._out(f"static inline void {name}_clear(void) {{ _ch_{name}.head = 0; _ch_{name}.tail = 0; _ch_{name}.count = 0; }}")
                 self._out("")

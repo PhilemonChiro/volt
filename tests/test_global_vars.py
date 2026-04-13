@@ -126,7 +126,7 @@ setup {
     run(slow_task, fast_task)
 }
 """)
-c_contains(c, "static volatile int32_t counter", "counter is volatile (shared across tiers)")
+c_contains(c, "static _Atomic int32_t counter", "counter is volatile (shared across tiers)")
 
 
 # ============================================================
@@ -165,7 +165,7 @@ setup {
     run(isr_task)
 }
 """)
-c_contains(c, "static volatile int32_t isr_count", "isr_count is volatile (critical task)")
+c_contains(c, "static _Atomic int32_t isr_count", "isr_count is volatile (critical task)")
 
 
 # ============================================================
@@ -193,7 +193,7 @@ setup {
 """)
 c_contains(c, "static int32_t max_speed = 100;", "let max_speed is non-volatile static")
 c_not_contains(c, "volatile int32_t max_speed", "let max_speed cannot be volatile")
-c_contains(c, "static volatile int32_t shared_flag", "shared_flag used in critical+background → volatile")
+c_contains(c, "static _Atomic int32_t shared_flag", "shared_flag used in critical+background → volatile")
 # speed is only in background task monitor, not volatile
 c_contains(c, "static int32_t speed", "speed is in single tier — no volatile")
 c_not_contains(c, "volatile int32_t speed", "speed is not volatile")
@@ -224,7 +224,7 @@ setup {
     run(deep, isr)
 }
 """)
-c_contains(c, "static volatile int32_t depth", "depth detected through nested if/while → volatile")
+c_contains(c, "static _Atomic int32_t depth", "depth detected through nested if/while → volatile")
 
 
 # ============================================================
@@ -246,9 +246,9 @@ setup {
 }
 """)
 # All three used only in critical tier → all volatile
-c_contains(c, "static volatile int32_t x", "x detected in expression → volatile")
-c_contains(c, "static volatile int32_t y", "y detected in expression → volatile")
-c_contains(c, "static volatile int32_t z", "z detected in expression → volatile")
+c_contains(c, "static _Atomic int32_t x", "x detected in expression → volatile")
+c_contains(c, "static _Atomic int32_t y", "y detected in expression → volatile")
+c_contains(c, "static _Atomic int32_t z", "z detected in expression → volatile")
 
 
 # ============================================================
@@ -272,7 +272,7 @@ setup {
     run(bg, isr)
 }
 """)
-c_contains(c, "static volatile int32_t x", "x detected as assignment target + rhs → volatile")
+c_contains(c, "static _Atomic int32_t x", "x detected as assignment target + rhs → volatile")
 
 
 # ============================================================

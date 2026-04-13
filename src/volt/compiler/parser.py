@@ -447,16 +447,12 @@ class ASTBuilder(Transformer):
         )
 
     def channel_decl(self, children):
-        elem_type = str(children[0])
+        name = str(children[0])
+        elem_type = str(children[1])
         capacity = 4  # default
-        name = ""
-        for child in children[1:]:
+        for child in children[2:]:
             if isinstance(child, Token) and child.type == 'INT':
                 capacity = int(str(child))
-            elif isinstance(child, Token) and child.type == 'NAME':
-                name = str(child)
-        if not name and isinstance(children[-1], Token):
-            name = str(children[-1])
         return ChannelDecl(name=name, elem_type=elem_type, capacity=capacity,
                           region=_region(children[0]))
 

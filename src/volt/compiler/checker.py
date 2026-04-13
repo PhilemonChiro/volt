@@ -132,9 +132,10 @@ METHOD_TYPES = {
     },
     "Channel": {
         "send":      (VOID, [("value", None)]),   # any type
-        "receive":   (INT, []),                     # returns elem_type (int for now)
+        "receive":   (INT, []),                     # returns elem_type
         "try_receive": (INT, []),                   # non-blocking receive
         "count":     (INT, []),                     # items in buffer
+        "has_data":  (BOOL, []),                    # true if not empty
         "is_empty":  (BOOL, []),
         "is_full":   (BOOL, []),
         "clear":     (VOID, []),
