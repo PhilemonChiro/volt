@@ -160,7 +160,11 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
     for fname, body in all_bodies:
         _validate_break_continue(body, False, fname, errors)
 
-    # 12. Conflict check: loop and tasks cannot coexist
+    # 12. Warn about unused channels
+    if program.channels:
+        _warn_unused_channels(program, errors)
+
+    # 13. Conflict check: loop and tasks cannot coexist
     if program.loop and program.tasks:
         errors.error(
             program.loop.region, "PROGRAM ERROR",
@@ -769,4 +773,96 @@ def _warn_unused_tasks(program: Program, errors: CompilerErrors):
                 task.region, "TASK WARNING",
                 f"Task `{task.name}` is declared but never started. Did you forget `run({task.name})`?",
                 hint=f"Add `run({task.name})` in your main block to start this task.",
+            )
+
+
+# ============================================================
+# 12. Unused channels warning
+# ============================================================
+
+def _warn_unused_channels(program: Program, errors: CompilerErrors):
+    """Warn if a channel is declared but never consumed (no receive/has_data call)."""
+    channel_names = {ch.name for ch in program.channels}
+    if not channel_names:
+        return
+
+    # Collect all method calls on channels
+    consumed = set()
+    sent = set()
+
+    def scan_expr(expr):
+        if expr is None:
+            return
+        if isinstance(expr, MethodCall):
+            scan_expr(expr.obj)
+            if isinstance(expr.obj, VarRef) and expr.obj.name in channel_names:
+                if expr.method in ("receive", "try_receive", "has_data"):
+                    consumed.add(expr.obj.name)
+                elif expr.method == "send":
+                    sent.add(expr.obj.name)
+            for arg in expr.args:
+                scan_expr(arg)
+        elif isinstance(expr, FuncCall):
+            for arg in expr.args:
+                scan_expr(arg)
+        elif isinstance(expr, BinaryExpr):
+            scan_expr(expr.left)
+            scan_expr(expr.right)
+        elif isinstance(expr, UnaryExpr):
+            scan_expr(expr.operand)
+
+    def scan_stmts(stmts):
+        for stmt in stmts:
+            if stmt is None:
+                continue
+            if isinstance(stmt, ExprStmt):
+                scan_expr(stmt.expr)
+            elif isinstance(stmt, VarDecl) and stmt.value:
+                scan_expr(stmt.value)
+            elif isinstance(stmt, AssignExpr):
+                scan_expr(stmt.target)
+                scan_expr(stmt.value)
+            elif isinstance(stmt, CompoundAssign):
+                scan_expr(stmt.target)
+                scan_expr(stmt.value)
+            elif isinstance(stmt, IfStmt):
+                scan_expr(stmt.condition)
+                scan_stmts(stmt.then_body)
+                if isinstance(stmt.else_body, list):
+                    scan_stmts(stmt.else_body)
+                elif isinstance(stmt.else_body, IfStmt):
+                    scan_stmts([stmt.else_body])
+            elif isinstance(stmt, WhileStmt):
+                scan_expr(stmt.condition)
+                scan_stmts(stmt.body)
+            elif isinstance(stmt, ForStmt):
+                scan_stmts(stmt.body)
+            elif isinstance(stmt, EveryBlock):
+                scan_stmts(stmt.body)
+            elif isinstance(stmt, OnBlock):
+                scan_expr(stmt.event)
+                scan_stmts(stmt.body)
+            elif isinstance(stmt, ReturnStmt):
+                scan_expr(stmt.value)
+
+    # Scan all task/setup/loop bodies
+    for task in program.tasks:
+        scan_stmts(task.body)
+    if program.setup:
+        scan_stmts(program.setup.body)
+    if program.loop:
+        scan_stmts(program.loop.body)
+
+    # Warn about channels that are sent to but never consumed
+    for ch in program.channels:
+        if ch.name in sent and ch.name not in consumed:
+            errors.warning(
+                ch.region, "CHANNEL WARNING",
+                f"Channel `{ch.name}` is sent to but never consumed (no receive/has_data call).",
+                hint=f"Add `{ch.name}.receive()` or `on {ch.name}.has_data()` in a task to process the data.",
+            )
+        elif ch.name not in sent and ch.name not in consumed:
+            errors.warning(
+                ch.region, "CHANNEL WARNING",
+                f"Channel `{ch.name}` is declared but never used.",
             )
