@@ -185,6 +185,7 @@ class CCodeGen:
         self.pin_map: dict[str, tuple[int, str]] = {}  # name → (gpio, mode)
         self.sensor_map: dict[str, str] = {}  # name → sensor_type
         self.builtin_types: dict[str, str] = {}  # name → type (WiFi, MQTT, etc.)
+        self._shared_vars: set = set()          # vars that need atomic operations
         self._var_types: dict[str, str] = {}    # name → declared type (for codegen dispatch)
 
     def generate(self, program: Program) -> str:
@@ -345,6 +346,11 @@ class CCodeGen:
             return
         self._out("// Module-level variables")
         shared_vars = self._find_shared_vars(program)
+        # Include explicitly shared vars
+        for var in program.global_vars:
+            if var.shared:
+                shared_vars.add(var.name)
+        self._shared_vars = shared_vars  # store for CompoundAssign atomic dispatch
         for var in program.global_vars:
             c_type = TYPE_MAP.get(var.type_name, "int32_t")
             init = ""
@@ -851,7 +857,23 @@ class CCodeGen:
             self._line_directive(stmt)
             target = self._emit_expr_str(stmt.target, ctx_prefix, cv)
             val = self._emit_expr_str(stmt.value, ctx_prefix, cv)
-            self._out(f"{target} {stmt.op} {val};")
+            # Use atomic operations for shared variables
+            var_name = stmt.target.name if isinstance(stmt.target, VarRef) else None
+            if var_name and var_name in self._shared_vars:
+                atomic_op = {
+                    "+=": "atomic_fetch_add",
+                    "-=": "atomic_fetch_sub",
+                    "|=": "atomic_fetch_or",
+                    "&=": "atomic_fetch_and",
+                    "^=": "atomic_fetch_xor",
+                }.get(stmt.op)
+                if atomic_op:
+                    self._out(f"{atomic_op}(&{target}, {val});")
+                else:
+                    # For *=, /=, %=, <<=, >>= — no single atomic, use load-op-store
+                    self._out(f"{{ {TYPE_MAP.get(self._var_types.get(var_name, 'int'), 'int32_t')} _tmp = atomic_load(&{target}); _tmp {stmt.op} {val}; atomic_store(&{target}, _tmp); }}")
+            else:
+                self._out(f"{target} {stmt.op} {val};")
 
         elif isinstance(stmt, BreakStmt):
             self._out("break;")
