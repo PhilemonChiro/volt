@@ -117,9 +117,23 @@ def _collect_declarations(program: Program, scope: Scope, errors: CompilerErrors
         ), errors)
 
     # Global variables
+    # NOTE: We can't infer types here (need type checker). Defer to checker.
+    # But we'll try to infer from simple literals for common cases.
     for var in program.global_vars:
+        inferred_type = var.type_name
+        if not inferred_type and var.value:
+            # Simple heuristic: infer int/float/bool from literal values
+            if isinstance(var.value, IntLiteral):
+                inferred_type = "int"
+            elif isinstance(var.value, FloatLiteral):
+                inferred_type = "float"
+            elif isinstance(var.value, BoolLiteral):
+                inferred_type = "bool"
+            elif isinstance(var.value, StringLiteral):
+                inferred_type = "string"
+
         _declare_or_error(scope, Symbol(
-            var.name, "var", var.type_name or "unknown", var.region,
+            var.name, "var", inferred_type or "unknown", var.region,
             mutable=var.mutable,
         ), errors)
 
