@@ -173,11 +173,15 @@ def _split_multi_every(task: TaskDecl) -> list[TaskDecl]:
             block_idx += 1
             sub_name = task.name if block_idx == 1 else f"{task.name}_{block_idx}"
             sub_body = list(preamble) + [stmt]
+            # Re-detect crossing vars for this sub-task's body
+            from .analyzer import _find_yield_points, _find_crossing_vars
+            yield_pts = _find_yield_points(sub_body)
+            crossing = _find_crossing_vars(sub_body, yield_pts) if yield_pts else []
             result_tasks.append(replace(
                 task,
                 name=sub_name,
                 body=sub_body,
-                crossing_vars=[],
+                crossing_vars=crossing,
             ))
         else:
             preamble.append(stmt)

@@ -836,6 +836,8 @@ def _warn_unused_channels(program: Program, errors: CompilerErrors):
                 scan_expr(stmt.condition)
                 scan_stmts(stmt.body)
             elif isinstance(stmt, ForStmt):
+                scan_expr(stmt.start)
+                scan_expr(stmt.end)
                 scan_stmts(stmt.body)
             elif isinstance(stmt, EveryBlock):
                 scan_stmts(stmt.body)

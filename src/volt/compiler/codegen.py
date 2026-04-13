@@ -134,10 +134,13 @@ def _collect_var_refs(stmts: list) -> set:
             names |= _collect_expr_refs(stmt.condition)
             names |= _collect_var_refs(stmt.body)
         elif isinstance(stmt, ForStmt):
+            names |= _collect_expr_refs(stmt.start)
+            names |= _collect_expr_refs(stmt.end)
             names |= _collect_var_refs(stmt.body)
         elif isinstance(stmt, EveryBlock):
             names |= _collect_var_refs(stmt.body)
         elif isinstance(stmt, OnBlock):
+            names |= _collect_expr_refs(stmt.event)
             names |= _collect_var_refs(stmt.body)
     return names
 
@@ -416,8 +419,8 @@ class CCodeGen:
                 # Generate a simple ring buffer struct per channel
                 self._out(f"typedef struct {{")
                 self._out(f"    {c_type} buf[{cap}];")
-                self._out(f"    volatile uint8_t head;")
-                self._out(f"    volatile uint8_t tail;")
+                self._out(f"    _Atomic uint8_t head;")
+                self._out(f"    _Atomic uint8_t tail;")
                 self._out(f"    _Atomic uint8_t count;")
                 self._out(f"}} _ch_{name}_t;")
                 self._out(f"static _ch_{name}_t _ch_{name} = {{{{0}}, 0, 0, 0}};")
@@ -908,16 +911,16 @@ class CCodeGen:
             cond = self._emit_expr_str(stmt.condition, ctx_prefix, cv)
             self._out(f"if ({cond}) {{")
             self.indent += 1
-            self._emit_stmts(stmt.then_body, ctx_prefix, cv)
+            self._emit_stmts(stmt.then_body, ctx_prefix, cv, use_freertos_delay)
             self.indent -= 1
             if stmt.else_body:
                 if isinstance(stmt.else_body, IfStmt):
                     self._out(f"}} else")
-                    self._emit_stmt(stmt.else_body, ctx_prefix, cv)
+                    self._emit_stmt(stmt.else_body, ctx_prefix, cv, use_freertos_delay)
                 elif isinstance(stmt.else_body, list):
                     self._out("} else {")
                     self.indent += 1
-                    self._emit_stmts(stmt.else_body, ctx_prefix, cv)
+                    self._emit_stmts(stmt.else_body, ctx_prefix, cv, use_freertos_delay)
                     self.indent -= 1
                     self._out("}")
                 else:
@@ -930,7 +933,7 @@ class CCodeGen:
             cond = self._emit_expr_str(stmt.condition, ctx_prefix, cv)
             self._out(f"while ({cond}) {{")
             self.indent += 1
-            self._emit_stmts(stmt.body, ctx_prefix, cv)
+            self._emit_stmts(stmt.body, ctx_prefix, cv, use_freertos_delay)
             self.indent -= 1
             self._out("}")
 
@@ -941,7 +944,7 @@ class CCodeGen:
             var = _c_name(stmt.var_name)
             self._out(f"for (int32_t {var} = {start}; {var} < {end}; {var}++) {{")
             self.indent += 1
-            self._emit_stmts(stmt.body, ctx_prefix, cv)
+            self._emit_stmts(stmt.body, ctx_prefix, cv, use_freertos_delay)
             self.indent -= 1
             self._out("}")
 
