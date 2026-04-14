@@ -68,15 +68,16 @@ class CompilerErrors:
             color_tag = "yellow"
 
         # Header
-        lines.append(f"\n[{color_tag} bold]-- {err.category} -- {filename}:{err.region.start_line}[/{color_tag} bold]\n")
+        line_ref = err.region.start_line if err.region else 0
+        lines.append(f"\n[{color_tag} bold]-- {err.category} -- {filename}:{line_ref}[/{color_tag} bold]\n")
 
         # Message
         lines.append(f"{err.message}\n")
 
         # Source context (1 line before, error line, pointer)
-        line_num = err.region.start_line
+        line_num = err.region.start_line if err.region else 0
         if line_num > 0 and line_num <= len(self._source_lines):
-            gutter = len(str(line_num + 1))
+            gutter = len(str(line_num))
 
             # Line before (context)
             if line_num > 1:

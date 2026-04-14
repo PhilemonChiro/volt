@@ -75,12 +75,19 @@ def collect_var_refs(stmts: list) -> set:
         elif isinstance(stmt, ForStmt):
             names |= collect_expr_refs(stmt.start)
             names |= collect_expr_refs(stmt.end)
+            if stmt.step:
+                names |= collect_expr_refs(stmt.step)
             names |= collect_var_refs(stmt.body)
         elif isinstance(stmt, EveryBlock):
+            names |= collect_expr_refs(stmt.interval)
             names |= collect_var_refs(stmt.body)
         elif isinstance(stmt, OnBlock):
             names |= collect_expr_refs(stmt.event)
             names |= collect_var_refs(stmt.body)
+        elif isinstance(stmt, TimeoutBlock):
+            names |= collect_expr_refs(stmt.duration)
+            names |= collect_var_refs(stmt.try_body)
+            names |= collect_var_refs(stmt.fallback_body)
     return names
 
 
