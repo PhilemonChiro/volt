@@ -574,6 +574,9 @@ def _walk_expr_tree(expr):
         yield from _walk_expr_tree(expr.obj)
         for arg in expr.args:
             yield from _walk_expr_tree(arg)
+    elif isinstance(expr, AssignExpr):
+        yield from _walk_expr_tree(expr.target)
+        yield from _walk_expr_tree(expr.value)
     elif isinstance(expr, DotAccess):
         yield from _walk_expr_tree(expr.obj)
     elif isinstance(expr, ArrayLiteral):
