@@ -83,11 +83,15 @@
         var_keywords: ["let", "var", "storage"],
         modifiers: ["strict", "initial", "debounce", "throttle"],
         lifecycle: ["enter", "exit", "after"],
-        pin_modes: ["Output", "Input", "PullUpInput", "PullDownInput", "Analog", "PWM"],
+        pin_modes: ["Output", "Input", "PullUpInput", "PullDownInput", "Analog", "PWM", "Servo"],
         primitives: ["int", "float", "bool", "string", "void", "Duration", "u8", "u16", "u32", "i8", "i16"],
         builtins: ["wifi", "mqtt", "http", "system", "ota"],
-        builtin_fns: ["log", "sleep", "deep_sleep", "light_sleep"],
-        constants: ["true", "false", "HIGH", "LOW", "ON", "OFF"],
+        builtin_fns: ["log", "sleep", "deep_sleep", "light_sleep", "float", "int"],
+        constants: ["true", "false", "HIGH", "LOW", "ON", "OFF",
+            "linear", "ease_in", "ease_out", "ease_in_out",
+            "ease_in_cubic", "ease_out_cubic", "ease_in_out_cubic",
+            "ease_in_sine", "ease_out_sine", "ease_in_out_sine",
+            "ease_bounce", "ease_back", "ease_elastic"],
         chips: ["esp32", "esp8266", "rp2040", "stm32f103"],
         operators: ["==", "!=", "<=", ">=", "<", ">", "&&", "||", "!", "=", "+", "-", "*", "/", "%", "->", ".."],
         symbols: /[=><!~?:&|+\-*\/\^%.]+/,
@@ -250,7 +254,7 @@
     // -- Snippet templates for top-level declarations --
     var SNIPPETS = [
         { label: "chip", detail: "Declare target chip", insert: "chip ${1|esp32,esp8266,rp2040,stm32f103|}", kind: Kind.Keyword },
-        { label: "hardware", detail: "Hardware pin block", insert: "hardware {\n\tpin ${1:name}: ${2|Output,Input,PullUpInput,PullDownInput,Analog,PWM|} = ${3:pin_number}\n}", kind: Kind.Keyword },
+        { label: "hardware", detail: "Hardware pin block", insert: "hardware {\n\tpin ${1:name}: ${2|Output,Input,PullUpInput,PullDownInput,Analog,PWM,Servo|} = ${3:pin_number}\n}", kind: Kind.Keyword },
         { label: "setup", detail: "Runs once at boot", insert: "setup {\n\t$0\n}", kind: Kind.Keyword },
         { label: "loop", detail: "Super-loop, runs forever", insert: "loop {\n\t$0\n}", kind: Kind.Keyword },
         { label: "include", detail: "Include another .volt file", insert: "include \"${0:file.volt}\"", kind: Kind.Keyword },
@@ -292,6 +296,7 @@
         { label: "pin PullUpInput", detail: "Input with pull-up", insert: "pin ${1:btn}: PullUpInput = ${0:0}", kind: Kind.Property },
         { label: "pin Analog", detail: "Analog input (ADC)", insert: "pin ${1:sensor}: Analog = ${0:34}", kind: Kind.Property },
         { label: "pin PWM", detail: "PWM output", insert: "pin ${1:motor}: PWM = ${0:25}", kind: Kind.Property },
+        { label: "pin Servo", detail: "Servo motor (0-180\u00B0)", insert: "pin ${1:arm}: Servo = ${0:13}", kind: Kind.Property },
         { label: "bus I2C", detail: "I2C bus declaration", insert: "bus ${1:sensors}: I2C(sda: ${2:21}, scl: ${3:22})", kind: Kind.Property },
         { label: "device BME280", detail: "Temp/humidity/pressure", insert: "device ${1:bme}: BME280 on ${2:sensors} at ${0:0x76}", kind: Kind.Property },
         { label: "device AHT20", detail: "Temp/humidity", insert: "device ${1:aht}: AHT20 on ${2:sensors} at ${0:0x38}", kind: Kind.Property },
@@ -366,7 +371,6 @@
         ],
         Input: [
             { label: "read", detail: "() -> int (0 or 1)", insert: "read()" },
-            { label: "is_pressed", detail: "() -> bool", insert: "is_pressed()" },
         ],
         "PullUpInput": [
             { label: "read", detail: "() -> int (0 or 1)", insert: "read()" },
@@ -382,8 +386,31 @@
             { label: "read", detail: "() -> int (0-4095)", insert: "read()" },
         ],
         PWM: [
-            { label: "write", detail: "(value: int) -> void", insert: "write(${1:128})" },
-            { label: "set_pwm", detail: "(value: int) -> void", insert: "set_pwm(${1:128})" },
+            { label: "write", detail: "(value: int) -> void — duty cycle 0-255", insert: "write(${1:128})" },
+            { label: "set_pwm", detail: "(value: int) -> void — duty cycle 0-255", insert: "set_pwm(${1:128})" },
+            { label: "tone", detail: "(freq: int) -> void — play frequency", insert: "tone(${1:440})" },
+            { label: "tone_ms", detail: "(freq: int, dur: int) -> void — play for duration", insert: "tone_ms(${1:440}, ${2:500})" },
+            { label: "no_tone", detail: "() -> void — stop tone", insert: "no_tone()" },
+            { label: "click", detail: "() -> void — short click feedback", insert: "click()" },
+            { label: "beep_success", detail: "() -> void — two rising beeps", insert: "beep_success()" },
+            { label: "beep_error", detail: "() -> void — three low buzzes", insert: "beep_error()" },
+            { label: "beep_warning", detail: "() -> void — two-tone alert", insert: "beep_warning()" },
+            { label: "beep_startup", detail: "() -> void — ascending chime", insert: "beep_startup()" },
+            { label: "beep_shutdown", detail: "() -> void — descending notes", insert: "beep_shutdown()" },
+            { label: "beep_notify", detail: "() -> void — gentle double beep", insert: "beep_notify()" },
+            { label: "beep_alarm", detail: "() -> void — urgent siren pattern", insert: "beep_alarm()" },
+            { label: "beep_keypad", detail: "(digit: int) -> void — DTMF beep 0-9", insert: "beep_keypad(${1:0})" },
+        ],
+        Servo: [
+            { label: "move", detail: "(angle: int) -> void — instant move (0-180\u00B0)", insert: "move(${1:90})" },
+            { label: "move_us", detail: "(us: int) -> void — raw pulse width", insert: "move_us(${1:1500})" },
+            { label: "angle", detail: "() -> float — current angle", insert: "angle()" },
+            { label: "ease_to", detail: "(angle, duration) -> void — smooth move", insert: "ease_to(${1:90}, ${2:500ms})" },
+            { label: "ease_to_with", detail: "(angle, duration, easing) -> void", insert: "ease_to_with(${1:90}, ${2:500ms}, ${3:ease_out})" },
+            { label: "sweep", detail: "(from, to, duration) -> void — linear sweep", insert: "sweep(${1:0}, ${2:180}, ${3:2s})" },
+            { label: "sweep_ease", detail: "(from, to, duration, easing) -> void", insert: "sweep_ease(${1:0}, ${2:180}, ${3:2s}, ${4:ease_in_out})" },
+            { label: "detach", detail: "() -> void — release servo (goes limp)", insert: "detach()" },
+            { label: "set_max_angle", detail: "(angle: int) -> void — for 270\u00B0 servos", insert: "set_max_angle(${1:270})" },
         ],
     };
 
@@ -462,6 +489,7 @@
         { label: "PullDownInput", detail: "Input with pull-down resistor" },
         { label: "Analog", detail: "ADC analog input" },
         { label: "PWM", detail: "PWM output" },
+        { label: "Servo", detail: "Servo motor control (0-180\u00B0, 50Hz PWM)" },
     ];
 
     // -- Chip names (after "chip ") --
@@ -487,6 +515,20 @@
         { label: "LOW", detail: "Pin level 0", kind: Kind.Constant },
         { label: "ON", detail: "Pin level 1", kind: Kind.Constant },
         { label: "OFF", detail: "Pin level 0", kind: Kind.Constant },
+        // Servo easing curves — use case hints in detail
+        { label: "linear", detail: "Constant speed \u2014 conveyors, wipers, scanning", kind: Kind.Constant },
+        { label: "ease_in", detail: "Slow start, fast end \u2014 lifting from rest", kind: Kind.Constant },
+        { label: "ease_out", detail: "Fast start, gentle stop \u2014 grippers, gauges", kind: Kind.Constant },
+        { label: "ease_in_out", detail: "Smooth start + stop \u2014 default, most natural", kind: Kind.Constant },
+        { label: "ease_in_cubic", detail: "Very slow start \u2014 heavy machinery, cranes", kind: Kind.Constant },
+        { label: "ease_out_cubic", detail: "Extra gentle stop \u2014 precision positioning", kind: Kind.Constant },
+        { label: "ease_in_out_cubic", detail: "Dramatic S-curve \u2014 animatronics, stage props", kind: Kind.Constant },
+        { label: "ease_in_sine", detail: "Subtlest slow start \u2014 organic, breathing", kind: Kind.Constant },
+        { label: "ease_out_sine", detail: "Natural deceleration \u2014 doors, pendulums", kind: Kind.Constant },
+        { label: "ease_in_out_sine", detail: "Smoothest motion \u2014 gimbals, cameras", kind: Kind.Constant },
+        { label: "ease_bounce", detail: "Bouncy landing \u2014 toys, indicators, playful", kind: Kind.Constant },
+        { label: "ease_back", detail: "Overshoots then settles \u2014 latches, switches", kind: Kind.Constant },
+        { label: "ease_elastic", detail: "Springy wobble \u2014 bobbleheads, novelty", kind: Kind.Constant },
     ];
 
     // Scan document for pin and sensor declarations to resolve dot-completions
@@ -496,7 +538,7 @@
         var lines = model.getLineCount();
         for (var i = 1; i <= lines; i++) {
             var line = model.getLineContent(i);
-            var pm = line.match(/\bpin\s+(\w+)\s*:\s*(Output|PullUpInput|PullDownInput|Input|Analog|PWM)/);
+            var pm = line.match(/\bpin\s+(\w+)\s*:\s*(Output|PullUpInput|PullDownInput|Input|Analog|PWM|Servo)/);
             if (pm) pins[pm[1]] = pm[2];
             var sm = line.match(/\bdevice\s+(\w+)\s*:\s*(BME280|AHT20|SHT31|DHT22|MPU6050|INA219|DS3231|BH1750|VEML7700|SSD1306|SX1262)/);
             if (sm) sensors[sm[1]] = sm[2];
@@ -1030,11 +1072,12 @@
     // Type documentation
     var TYPE_DOCS = {
         Output:        { desc: "Digital output pin", detail: "Methods: `on()`, `off()`, `toggle()`, `write(level)`, `is_on()`, `blink(interval)`, `blink_once(duration)`" },
-        Input:         { desc: "Digital input pin (floating)", detail: "Methods: `read()` returns 0 or 1, `is_pressed()` returns bool" },
+        Input:         { desc: "Digital input pin (floating)", detail: "Methods: `read()` returns 0 or 1\n\nFor buttons, use `PullUpInput` or `PullDownInput` instead \u2014 they have `is_pressed()` and reliable logic levels." },
         "PullUpInput":{ desc: "Input with internal pull-up resistor", detail: "Button convention: pressed = LOW. Methods: `read()`, `is_pressed()`, `press` (event for `on` blocks)" },
         "PullDownInput":{ desc: "Input with internal pull-down resistor", detail: "Methods: `read()`, `is_pressed()`, `press` (event for `on` blocks)" },
         Analog:        { desc: "ADC analog input", detail: "Returns 0-4095 (12-bit). On ESP32: ADC2 pins are blocked during WiFi — use ADC1 (GPIO 32-39)." },
-        PWM:           { desc: "Pulse-width modulation output", detail: "Methods: `write(value)`, `set_pwm(value)` — duty cycle 0-255" },
+        PWM:           { desc: "Pulse-width modulation output", detail: "Methods: `write(value)`, `set_pwm(value)` — duty cycle 0-255\nTone: `tone(freq)`, `tone_ms(freq, dur)`, `no_tone()`\nPatterns: `click()`, `beep_success()`, `beep_error()`, `beep_warning()`, `beep_startup()`, `beep_shutdown()`, `beep_notify()`, `beep_alarm()`, `beep_keypad(digit)`" },
+        Servo:         { desc: "Servo motor control (50Hz PWM)", detail: "Works with SG90, MG90S, MG996R, DS3218, and any hobby servo.\n\nMethods:\n- `move(angle)` — instant position (0-180\u00B0)\n- `ease_to(angle, duration)` — smooth movement\n- `ease_to_with(angle, duration, easing)` — with curve\n- `sweep(from, to, duration)` — linear sweep\n- `sweep_ease(from, to, duration, easing)` — eased sweep\n- `angle()` — read current position\n- `detach()` — release (servo goes limp)\n- `set_max_angle(270)` — for 270\u00B0 servos\n\nEasing: `linear`, `ease_in`, `ease_out`, `ease_in_out`, `ease_bounce`, `ease_back`, `ease_elastic`" },
         int:           { desc: "32-bit signed integer (-2B to +2B)", detail: "Arithmetic: `+`, `-`, `*`, `/`, `%`\nConvert to float: `float(x)`" },
         float:         { desc: "32-bit floating point", detail: "Arithmetic: `+`, `-`, `*`, `/`\nConvert to int: `int(x)`\nNote: no `%` for floats" },
         bool:          { desc: "Boolean — `true` or `false`", detail: "Operators: `&&` (and), `||` (or), `!` (not)\nRequired for `if`/`while` conditions" },
@@ -1084,6 +1127,75 @@
         39: "Input only. ADC1. ISR errata with WiFi sleep.",
     };
 
+    // Easing curve documentation — real-world use cases for each curve
+    var EASING_DOCS = {
+        linear: {
+            desc: "Constant speed from start to finish. No acceleration or deceleration.",
+            use_case: "Conveyor belts, windshield wipers, radar scanning, linear actuators, or any mechanical motion where constant speed matters. Also good for LED dimming ramps.",
+            examples: "`arm.sweep(0, 180, 2s)` \u2014 steady pan across 180\u00B0"
+        },
+        ease_in: {
+            desc: "Starts slow, accelerates toward the end (quadratic curve).",
+            use_case: "Objects starting from rest \u2014 a door beginning to swing open, a robotic arm lifting from a dead stop, a camera starting a pan. Feels natural for movements that 'build up' energy.",
+            examples: "`arm.ease_to_with(90, 1s, ease_in)` \u2014 gentle start, fast finish"
+        },
+        ease_out: {
+            desc: "Starts fast, decelerates to a gentle stop (quadratic curve).",
+            use_case: "The most commonly useful easing. Perfect for: servo arriving at a target position, a gripper closing gently on an object, a pan/tilt camera settling on a point, a needle gauge landing on a value. Prevents mechanical shock on arrival.",
+            examples: "`gripper.ease_to_with(45, 500ms, ease_out)` \u2014 close gently"
+        },
+        ease_in_out: {
+            desc: "Slow start AND slow end, fast in the middle (quadratic S-curve).",
+            use_case: "The default for `ease_to()`. Best all-around choice for natural-looking movement. Robot arm repositioning, pan/tilt camera tracking, animatronic gestures, automated door openers. Feels human-like.",
+            examples: "`arm.ease_to(90, 1s)` \u2014 uses this by default"
+        },
+        ease_in_cubic: {
+            desc: "Very slow start, dramatic acceleration (cubic curve \u2014 sharper than quadratic).",
+            use_case: "Heavy machinery starting up \u2014 a crane beginning to rotate, a large servo overcoming inertia. When you want the 'building momentum' feeling to be more dramatic than ease_in.",
+            examples: "`crane.ease_to_with(180, 3s, ease_in_cubic)`"
+        },
+        ease_out_cubic: {
+            desc: "Fast start, very gradual stop (cubic curve \u2014 softer landing than quadratic).",
+            use_case: "Precision positioning where the last few degrees must be very gentle. Needle instruments, micro-adjustment tools, focus motors, 3D printer bed leveling. Gives extra 'cushion' at the end.",
+            examples: "`focus.ease_to_with(42, 200ms, ease_out_cubic)`"
+        },
+        ease_in_out_cubic: {
+            desc: "Pronounced S-curve \u2014 very slow start/end, very fast middle.",
+            use_case: "Theatrical or dramatic movements. Animatronic head turns, stage props, robotic dance moves. The exaggerated acceleration/deceleration creates visual impact.",
+            examples: "`head.ease_to_with(90, 1s, ease_in_out_cubic)` \u2014 dramatic look"
+        },
+        ease_in_sine: {
+            desc: "Gentle, natural slow start (sine curve \u2014 subtler than quadratic).",
+            use_case: "Subtle organic motion. Breathing LED effects, slow sunrise dimmers, plant-watering tilt mechanisms. The gentlest 'ease in' option \u2014 almost imperceptible start.",
+            examples: "`tilt.ease_to_with(30, 2s, ease_in_sine)` \u2014 barely noticeable start"
+        },
+        ease_out_sine: {
+            desc: "Gentle, natural deceleration (sine curve \u2014 subtler than quadratic).",
+            use_case: "Smooth natural stops. Pendulum-like deceleration, gentle door closing, analog gauge settling. More organic than ease_out \u2014 mimics friction.",
+            examples: "`door.ease_to_with(0, 1s, ease_out_sine)` \u2014 soft close"
+        },
+        ease_in_out_sine: {
+            desc: "Smoothest possible S-curve \u2014 like a pendulum's motion.",
+            use_case: "The most natural-feeling motion. Perfect for camera gimbals, smooth panning, robotic arms that should move 'elegantly'. Less dramatic than cubic, more natural than quadratic. Best choice when movement should be invisible/seamless.",
+            examples: "`gimbal.sweep_ease(0, 180, 3s, ease_in_out_sine)` \u2014 buttery smooth"
+        },
+        ease_bounce: {
+            desc: "The servo bounces at the target like a ball hitting the floor.",
+            use_case: "Playful or attention-grabbing movements. Toy robots, interactive displays, vending machine indicators, game props. Also useful for simulating mechanical bounce (spring-loaded mechanisms).",
+            examples: "`indicator.ease_to_with(90, 800ms, ease_bounce)` \u2014 bouncy landing"
+        },
+        ease_back: {
+            desc: "Overshoots the target by ~10%, then settles back.",
+            use_case: "Snappy, satisfying 'click into place' motion. Toggle switches, latching mechanisms, menu selection feedback, retractable arms. Creates a sense of decisiveness.",
+            examples: "`latch.ease_to_with(180, 400ms, ease_back)` \u2014 snap into place"
+        },
+        ease_elastic: {
+            desc: "Spring-like oscillation \u2014 wobbles past the target then settles.",
+            use_case: "Springy, whimsical motion. Bobblehead toys, antenna wobble, jelly-like feedback, novelty displays. Most dramatic easing \u2014 use sparingly. Multiple oscillations before settling.",
+            examples: "`bobble.ease_to_with(90, 1s, ease_elastic)` \u2014 springy wobble"
+        },
+    };
+
     // Method signatures for signature help
     var METHOD_SIGS = {
         // wifi
@@ -1129,6 +1241,18 @@
         "blink":    { label: "blink(interval: Duration)", params: [{ label: "interval: Duration", doc: "e.g. 500ms" }] },
         "blink_once": { label: "blink_once(duration: Duration)", params: [{ label: "duration: Duration", doc: "ON time before turning off" }] },
         "set_pwm":  { label: "set_pwm(value: int)", params: [{ label: "value: int", doc: "Duty cycle 0-255" }] },
+        // PWM tone methods
+        "tone":          { label: "tone(frequency: int)", params: [{ label: "frequency: int", doc: "Frequency in Hz (e.g. 440 for A4). 0 = silence." }] },
+        "tone_ms":       { label: "tone_ms(frequency: int, duration: int)", params: [{ label: "frequency: int", doc: "Frequency in Hz" }, { label: "duration: int", doc: "Duration in ms" }] },
+        "beep_keypad":   { label: "beep_keypad(digit: int)", params: [{ label: "digit: int", doc: "Digit 0-9 for DTMF-like beep" }] },
+        // Servo methods
+        "move":          { label: "move(angle: int)", params: [{ label: "angle: int", doc: "Target angle 0-180 degrees" }] },
+        "move_us":       { label: "move_us(microseconds: int)", params: [{ label: "microseconds: int", doc: "Pulse width in \u00B5s (500-2500)" }] },
+        "ease_to":       { label: "ease_to(angle: int, duration: Duration)", params: [{ label: "angle: int", doc: "Target angle 0-180\u00B0" }, { label: "duration: Duration", doc: "Move time (e.g. 500ms, 1s)" }] },
+        "ease_to_with":  { label: "ease_to_with(angle: int, duration: Duration, easing: int)", params: [{ label: "angle: int", doc: "Target angle 0-180\u00B0" }, { label: "duration: Duration", doc: "Move time" }, { label: "easing: int", doc: "Curve: linear, ease_out, ease_bounce, etc." }] },
+        "sweep":         { label: "sweep(from: int, to: int, duration: Duration)", params: [{ label: "from: int", doc: "Start angle" }, { label: "to: int", doc: "End angle" }, { label: "duration: Duration", doc: "Sweep time" }] },
+        "sweep_ease":    { label: "sweep_ease(from: int, to: int, duration: Duration, easing: int)", params: [{ label: "from: int", doc: "Start angle" }, { label: "to: int", doc: "End angle" }, { label: "duration: Duration", doc: "Sweep time" }, { label: "easing: int", doc: "Easing curve" }] },
+        "set_max_angle": { label: "set_max_angle(angle: int)", params: [{ label: "angle: int", doc: "Max degrees (default 180, use 270 for 270\u00B0 servos)" }] },
         // sensor methods
         "text":     { label: "text(x: int, y: int, text: string)", params: [{ label: "x: int", doc: "X pixel position" }, { label: "y: int", doc: "Y pixel position" }, { label: "text: string", doc: "Text to display" }] },
         "send":     { label: "send(data: string) -> bool", params: [{ label: "data: string", doc: "Payload to transmit" }] },
@@ -1185,7 +1309,28 @@
         // PWM
         "PWM.write":         { sig: ".write(value: int) -> void", desc: "Set PWM duty cycle (0-255)." },
         "PWM.set_pwm":       { sig: ".set_pwm(value: int) -> void", desc: "Set PWM duty cycle (0-255). Alias for write()." },
-        // BME280
+        "PWM.tone":          { sig: ".tone(freq: int) -> void", desc: "Play a tone at the given frequency in Hz.", detail: "Sets 50% duty cycle square wave. Pass 0 to silence." },
+        "PWM.tone_ms":       { sig: ".tone_ms(freq: int, duration: int) -> void", desc: "Play a tone for a duration (ms) then stop." },
+        "PWM.no_tone":       { sig: ".no_tone() -> void", desc: "Stop any tone playing on this pin." },
+        "PWM.click":         { sig: ".click() -> void", desc: "Short 2kHz tick for button press feedback.", detail: "Use case: Confirm a button was registered. Quick and unobtrusive." },
+        "PWM.beep_success":  { sig: ".beep_success() -> void", desc: "Two rising beeps for confirmation.", detail: "Use case: Save completed, connection established, calibration done." },
+        "PWM.beep_error":    { sig: ".beep_error() -> void", desc: "Three low buzzes for error/denied.", detail: "Use case: Invalid input, failed operation, access denied." },
+        "PWM.beep_warning":  { sig: ".beep_warning() -> void", desc: "Two-tone alert for caution.", detail: "Use case: Low battery, timeout approaching, sensor out of range." },
+        "PWM.beep_startup":  { sig: ".beep_startup() -> void", desc: "Ascending three-note chime.", detail: "Use case: Device powered on, system ready, boot complete." },
+        "PWM.beep_shutdown": { sig: ".beep_shutdown() -> void", desc: "Descending two-note melody.", detail: "Use case: Power off, entering sleep mode, session ended." },
+        "PWM.beep_notify":   { sig: ".beep_notify() -> void", desc: "Gentle double beep for notifications.", detail: "Use case: New message, event fired, threshold reached." },
+        "PWM.beep_alarm":    { sig: ".beep_alarm() -> void", desc: "Urgent siren pattern (repeats 3x).", detail: "Use case: Intrusion detected, critical temperature, emergency stop." },
+        "PWM.beep_keypad":   { sig: ".beep_keypad(digit: int) -> void", desc: "DTMF-like beep for digits 0-9.", detail: "Use case: Keypad input feedback, phone dialing simulation." },
+        // Servo
+        "Servo.move":         { sig: ".move(angle: int) -> void", desc: "Move to angle instantly (0-180\u00B0).", detail: "Use case: Set a position immediately. No interpolation \u2014 the servo jumps.\n\nExample: `arm.move(90)` \u2014 center position" },
+        "Servo.move_us":      { sig: ".move_us(microseconds: int) -> void", desc: "Set exact pulse width in microseconds.", detail: "Bypasses angle mapping. Standard range: 500-2500\u00B5s.\n\nUse case: Fine-tuning when you know your servo's exact pulse range.\n\nExample: `arm.move_us(1500)` \u2014 center for most servos" },
+        "Servo.angle":        { sig: ".angle() -> float", desc: "Read the last written angle.", detail: "Returns the most recently set angle, not a hardware readback.\n\nUse case: Track position for relative movements.\n\nExample: `var pos: float = arm.angle()`" },
+        "Servo.ease_to":      { sig: ".ease_to(angle: int, duration: Duration) -> void", desc: "Smooth move to target angle over time.", detail: "Uses `ease_in_out` (quadratic) by default \u2014 slow start, smooth stop.\nBlocks for the full duration.\n\nUse case: Any movement that should look natural \u2014 robot arms, pan/tilt, door openers.\n\nExample: `arm.ease_to(180, 1s)`" },
+        "Servo.ease_to_with": { sig: ".ease_to_with(angle: int, duration: Duration, easing: int) -> void", desc: "Smooth move with a specific easing curve.", detail: "Choose a curve to match the motion feel:\n- `linear` \u2014 constant speed\n- `ease_out` \u2014 fast start, gentle stop\n- `ease_bounce` \u2014 bouncy landing\n- `ease_elastic` \u2014 springy overshoot\n\nExample: `arm.ease_to_with(0, 500ms, ease_bounce)`" },
+        "Servo.sweep":        { sig: ".sweep(from: int, to: int, duration: Duration) -> void", desc: "Linear sweep between two angles.", detail: "Moves to `from` first, then sweeps to `to` at constant speed.\nBlocks for the duration.\n\nUse case: Radar scanning, wipers, sensor panning.\n\nExample: `arm.sweep(0, 180, 2s)`" },
+        "Servo.sweep_ease":   { sig: ".sweep_ease(from: int, to: int, duration: Duration, easing: int) -> void", desc: "Sweep with an easing curve applied.", detail: "Same as sweep but with shaped motion.\n\nUse case: Smooth camera pan (ease_in_out_sine), dramatic reveal (ease_out_cubic).\n\nExample: `arm.sweep_ease(0, 180, 2s, ease_in_out_sine)`" },
+        "Servo.detach":       { sig: ".detach() -> void", desc: "Release the servo \u2014 stops PWM signal.", detail: "The servo goes limp (no holding torque). Reduces power consumption and prevents buzzing.\n\nUse case: Save power when position doesn't need to be held.\n\nExample: `arm.detach()`" },
+        "Servo.set_max_angle":{ sig: ".set_max_angle(angle: int) -> void", desc: "Set maximum angle (default 180).", detail: "Use 270 for 270-degree servos like DS3218.\n\nExample: `arm.set_max_angle(270)`" },
         // BME280
         "BME280.temperature": { sig: ".temperature() -> float", desc: "Read temperature in degrees Celsius." },
         "BME280.humidity":    { sig: ".humidity() -> float", desc: "Read relative humidity as percentage." },
@@ -1392,6 +1537,13 @@
             }
             else if (w === "HIGH" || w === "LOW" || w === "ON" || w === "OFF") {
                 contents.push({ value: "**Constant** — Pin level `" + w + "` (" + (w === "HIGH" || w === "ON" ? "1" : "0") + ")" });
+            }
+            else if (EASING_DOCS[w]) {
+                var ed = EASING_DOCS[w];
+                contents.push({ value: "**Easing** \u2014 `" + w + "`" });
+                contents.push({ value: ed.desc });
+                contents.push({ value: "**When to use:** " + ed.use_case });
+                if (ed.examples) contents.push({ value: "**Examples:** " + ed.examples });
             }
             // Declared pins — show pin info when hovering the variable name
             else {
