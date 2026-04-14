@@ -13,10 +13,11 @@ void system_restart(void)
 
 uint32_t system_free_heap(void)
 {
-    // RP2040 doesn't have a heap allocator by default
-    // Return 0 to indicate "not tracked"
-    extern char __StackLimit, __bss_end__;
-    return (uint32_t)(&__StackLimit - &__bss_end__);
+    // RP2040 doesn't have a standard heap allocator.
+    // This returns 0 to indicate heap tracking is not available.
+    // For stack remaining, use system_stack_remaining() instead.
+    // Applications should not rely on this for memory management.
+    return 0;
 }
 
 uint32_t system_uptime(void)
@@ -71,6 +72,11 @@ void volt_wdt_feed(void)
 void volt_wdt_disable(void)
 {
     // RP2040 watchdog cannot be disabled once enabled — only reset stops it.
-    // This is a hardware limitation. Feed continuously instead.
+    // This is a hardware limitation documented by Pico SDK.
+    // The function exists for API compatibility but has no effect.
+    // Applications must either:
+    // 1. Never enable watchdog if they need to stop it
+    // 2. Use a long timeout and let it reset if needed
+    // 3. Use software-based timeout tracking instead
     wdt_enabled = false;
 }
