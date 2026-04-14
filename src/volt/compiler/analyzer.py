@@ -172,7 +172,18 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
                     f"but may not return a value on all paths.",
                 )
 
-    # 13. Warn about unused channels
+    # 13. Validate channel capacities
+    for ch in program.channels:
+        if ch.capacity < 1:
+            errors.error(ch.region, "CHANNEL ERROR",
+                         f"Channel `{ch.name}` capacity must be at least 1.",
+                         hint="Example: `channel data: int[8]`")
+        elif ch.capacity > 1024:
+            errors.error(ch.region, "CHANNEL ERROR",
+                         f"Channel `{ch.name}` capacity {ch.capacity} exceeds maximum (1024).",
+                         hint="Embedded devices have limited RAM. Use 1-1024.")
+
+    # 14. Warn about unused channels
     if program.channels:
         _warn_unused_channels(program, errors)
 
