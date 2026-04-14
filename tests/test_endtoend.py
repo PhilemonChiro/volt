@@ -6,12 +6,15 @@ Covers all features, edge cases, error cases, and three task tiers.
 """
 
 import sys
-import os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from volt.compiler.voltc import compile_volt
 
 passed = 0
 failed = 0
+
 
 def check(name, condition, detail=""):
     global passed, failed
@@ -21,6 +24,7 @@ def check(name, condition, detail=""):
     else:
         print(f"FAIL: {name} — {detail}")
         failed += 1
+
 
 def compile_ok(name, source):
     """Compile and expect success. Returns C code."""
@@ -32,6 +36,7 @@ def compile_ok(name, source):
     check(name, c_code is not None, "c_code is None")
     return c_code
 
+
 def compile_fail(name, source, expect_text=None):
     """Compile and expect failure."""
     c_code, errors = compile_volt(source, f"{name}.volt")
@@ -40,9 +45,14 @@ def compile_fail(name, source, expect_text=None):
         return
     if expect_text:
         found = any(expect_text.lower() in e.message.lower() for e in errors.errors)
-        check(name, found, f"expected '{expect_text}' in errors, got: {[e.message for e in errors.errors]}")
+        check(
+            name,
+            found,
+            f"expected '{expect_text}' in errors, got: {[e.message for e in errors.errors]}",
+        )
     else:
         check(name, True)
+
 
 def c_contains(c_code, text, name):
     """Check generated C contains expected text."""
@@ -50,6 +60,7 @@ def c_contains(c_code, text, name):
         check(name, False, "no C code generated")
         return
     check(name, text in c_code, f"'{text}' not found in generated C")
+
 
 def c_not_contains(c_code, text, name):
     """Check generated C does NOT contain text."""
@@ -72,11 +83,14 @@ c_contains(c, "volt_init", "has volt_init")
 c = compile_ok("empty program", "\n")
 
 # Just a function
-c = compile_ok("just a func", """
+c = compile_ok(
+    "just a func",
+    """
 func add(a: int, b: int) -> int {
     return a + b
 }
-""")
+""",
+)
 c_contains(c, "int32_t add(int32_t a, int32_t b)", "func signature correct")
 c_contains(c, "return (a + b)", "return expression")
 
@@ -85,7 +99,9 @@ c_contains(c, "return (a + b)", "return expression")
 print("\n=== BLINK (Background Task) ===\n")
 # ============================================================
 
-c = compile_ok("blink", """
+c = compile_ok(
+    "blink",
+    """
 chip esp32
 hardware {
     pin led: Output = 2
@@ -98,7 +114,8 @@ task blink {
 setup {
     run(blink)
 }
-""")
+""",
+)
 c_contains(c, "static void blink_run(volt_task_t *_vt)", "protothread function")
 c_contains(c, "VOLT_TASK_BEGIN(_vt)", "task begin")
 c_contains(c, "VOLT_TASK_END(_vt)", "task end")
@@ -114,7 +131,9 @@ c_not_contains(c, "__LINE__", "no __LINE__ in generated code")
 print("\n=== THREE TIERS ===\n")
 # ============================================================
 
-c = compile_ok("three tiers", """
+c = compile_ok(
+    "three tiers",
+    """
 chip esp32
 hardware {
     pin led: Output = 2
@@ -140,7 +159,8 @@ setup {
     mqtt.connect("mqtt://broker")
     run(blink, motor_pid, telemetry)
 }
-""")
+""",
+)
 # Background tier
 c_contains(c, "static void blink_run(volt_task_t *_vt)", "blink is protothread")
 c_contains(c, "VOLT_YIELD_LABEL", "protothread yield")
@@ -169,7 +189,9 @@ c_contains(c, '#include "volt/mqtt.h"', "mqtt include (used)")
 print("\n=== VARIABLES AND EXPRESSIONS ===\n")
 # ============================================================
 
-c = compile_ok("variables", """
+c = compile_ok(
+    "variables",
+    """
 setup {
     let x = 42
     let pi = 3.14
@@ -178,7 +200,8 @@ setup {
     var count = 0
     count = count + 1
 }
-""")
+""",
+)
 c_contains(c, "int32_t x = 42", "int var")
 c_contains(c, "float pi = 3.14f", "float var")
 c_contains(c, 'const char* name = "hello"', "string var")
@@ -191,7 +214,9 @@ c_contains(c, "count = (count + 1)", "assignment")
 print("\n=== CONTROL FLOW ===\n")
 # ============================================================
 
-c = compile_ok("if else", """
+c = compile_ok(
+    "if else",
+    """
 setup {
     let x = 42
     if x > 10 {
@@ -200,30 +225,39 @@ setup {
         log("low")
     }
 }
-""")
+""",
+)
 c_contains(c, "x > 10", "if condition")
 c_contains(c, "} else {", "else clause")
 
-c = compile_ok("while loop", """
+c = compile_ok(
+    "while loop",
+    """
 setup {
     var i = 0
     while i < 10 {
         i = i + 1
     }
 }
-""")
+""",
+)
 c_contains(c, "i < 10", "while condition")
 
-c = compile_ok("for loop", """
+c = compile_ok(
+    "for loop",
+    """
 setup {
     for i in 0..10 {
         log("tick")
     }
 }
-""")
+""",
+)
 c_contains(c, "for (int32_t i = 0; i < 10; i++)", "for loop")
 
-c = compile_ok("nested if", """
+c = compile_ok(
+    "nested if",
+    """
 setup {
     let a = true
     let b = true
@@ -233,7 +267,8 @@ setup {
         }
     }
 }
-""")
+""",
+)
 c_contains(c, "if (a)", "outer if")
 
 
@@ -241,7 +276,9 @@ c_contains(c, "if (a)", "outer if")
 print("\n=== FUNCTIONS ===\n")
 # ============================================================
 
-c = compile_ok("func with return", """
+c = compile_ok(
+    "func with return",
+    """
 func clamp(val: int, lo: int, hi: int) -> int {
     if val < lo {
         return lo
@@ -254,21 +291,25 @@ func clamp(val: int, lo: int, hi: int) -> int {
 setup {
     let x = clamp(42, 0, 100)
 }
-""")
+""",
+)
 c_contains(c, "int32_t clamp(int32_t val, int32_t lo, int32_t hi)", "func signature")
 c_contains(c, "return lo", "return low")
 c_contains(c, "return hi", "return high")
 c_contains(c, "return val", "return val")
 c_contains(c, "clamp(42, 0, 100)", "func call in main")
 
-c = compile_ok("void func", """
+c = compile_ok(
+    "void func",
+    """
 func greet(name: string) {
     log(name)
 }
 setup {
     greet("world")
 }
-""")
+""",
+)
 c_contains(c, "void greet(const char* name)", "void func signature")
 
 
@@ -276,7 +317,9 @@ c_contains(c, "void greet(const char* name)", "void func signature")
 print("\n=== PIN METHODS ===\n")
 # ============================================================
 
-c = compile_ok("pin methods", """
+c = compile_ok(
+    "pin methods",
+    """
 hardware {
     pin led: Output = 2
     pin btn: PullUpInput = 0
@@ -289,7 +332,8 @@ setup {
     let pressed = btn.is_pressed()
     let val = bat.read()
 }
-""")
+""",
+)
 c_contains(c, "pin_write(2, HIGH)", "led.on()")
 c_contains(c, "pin_write(2, LOW)", "led.off()")
 c_contains(c, "pin_toggle(2)", "led.toggle()")
@@ -301,7 +345,9 @@ c_contains(c, "pin_read(36)", "bat.read()")
 print("\n=== WIFI AND MQTT METHODS ===\n")
 # ============================================================
 
-c = compile_ok("wifi mqtt methods", """
+c = compile_ok(
+    "wifi mqtt methods",
+    """
 setup {
     wifi.connect("ssid", "pass")
     mqtt.connect("mqtt://broker")
@@ -310,7 +356,8 @@ setup {
     mqtt.send_float("topic", 3.14)
     let connected = wifi.is_connected()
 }
-""")
+""",
+)
 c_contains(c, 'wifi_connect("ssid", "pass")', "wifi connect")
 c_contains(c, 'mqtt_connect("mqtt://broker")', "mqtt connect")
 c_contains(c, 'mqtt_send("topic", "data")', "mqtt send")
@@ -323,7 +370,9 @@ c_contains(c, "wifi_is_connected()", "wifi is_connected")
 print("\n=== VARIABLE LIFTING (Crossing Yields) ===\n")
 # ============================================================
 
-c = compile_ok("var lifting", """
+c = compile_ok(
+    "var lifting",
+    """
 task monitor {
     var count = 0
     every 1seconds {
@@ -331,19 +380,23 @@ task monitor {
         log("tick")
     }
 }
-""")
+""",
+)
 # count should be lifted to context struct
 c_contains(c, "monitor_ctx_t", "context struct generated")
 c_contains(c, "ctx->count", "lifted variable accessed via ctx")
 
-c = compile_ok("non-crossing var stays local", """
+c = compile_ok(
+    "non-crossing var stays local",
+    """
 task simple {
     every 1seconds {
         let temp = 42
         log("done")
     }
 }
-""")
+""",
+)
 # temp should NOT be lifted — it's local to every body
 c_not_contains(c, "simple_ctx_t", "no context struct needed")
 
@@ -352,22 +405,28 @@ c_not_contains(c, "simple_ctx_t", "no context struct needed")
 print("\n=== DURATION UNITS ===\n")
 # ============================================================
 
-c = compile_ok("durations", """
+c = compile_ok(
+    "durations",
+    """
 task t {
     every 500ms {
         log("a")
     }
 }
-""")
+""",
+)
 c_contains(c, "500", "500ms → 500")
 
-c = compile_ok("duration seconds", """
+c = compile_ok(
+    "duration seconds",
+    """
 task t {
     every 5seconds {
         log("b")
     }
 }
-""")
+""",
+)
 c_contains(c, "5000", "5seconds → 5000")
 
 
@@ -375,12 +434,15 @@ c_contains(c, "5000", "5seconds → 5000")
 print("\n=== STORAGE ===\n")
 # ============================================================
 
-c = compile_ok("storage vars", """
+c = compile_ok(
+    "storage vars",
+    """
 storage boot_count: int = 0
 setup {
     log("boot")
 }
-""")
+""",
+)
 c_contains(c, "storage_init()", "storage init called")
 c_contains(c, "static int32_t boot_count = 0;", "storage var declared")
 
@@ -391,15 +453,19 @@ print("\n=== ERROR: Type Mismatch ===\n")
 
 compile_fail("int = string", 'setup {\n    let x: int = "hello"\n}\n', "declared as")
 c = compile_ok("int + float auto-promote", "setup {\n    let x = 1 + 3.14\n}\n")
-compile_fail("if int", "setup {\n    if 42 {\n        log(\"no\")\n    }\n}\n", "bool")
-compile_fail("wrong arg type", """
+compile_fail("if int", 'setup {\n    if 42 {\n        log("no")\n    }\n}\n', "bool")
+compile_fail(
+    "wrong arg type",
+    """
 func add(a: int, b: int) -> int {
     return a + b
 }
 setup {
     add("a", "b")
 }
-""", "expects")
+""",
+    "expects",
+)
 
 
 # ============================================================
@@ -408,12 +474,16 @@ print("\n=== ERROR: Name Errors ===\n")
 
 compile_fail("unknown var", "setup {\n    let x = unknown\n}\n", "unknown")
 compile_fail("unknown func", "setup {\n    nonexistent()\n}\n", "unknown")
-compile_fail("duplicate pin", """
+compile_fail(
+    "duplicate pin",
+    """
 hardware {
     pin led: Output = 2
     pin led: Output = 4
 }
-""", "already")
+""",
+    "already",
+)
 
 
 # ============================================================
@@ -425,36 +495,50 @@ compile_fail("input-only output", "hardware {\n    pin x: Output = 34\n}\n", "in
 compile_fail("no pullup on 34", "hardware {\n    pin x: PullUpInput = 34\n}\n", "pull-up")
 compile_fail("invalid gpio", "hardware {\n    pin x: Output = 50\n}\n", "does not exist")
 compile_fail("non-analog pin", "hardware {\n    pin x: Analog = 21\n}\n", "adc")
-compile_fail("i2c addr conflict", """
+compile_fail(
+    "i2c addr conflict",
+    """
 hardware {
     bus bus: I2C(sda: 21, scl: 22)
     device a: BME280 on bus at 0x76
     device b: BME280 on bus at 0x76
 }
-""", "address")
+""",
+    "address",
+)
 
 
 # ============================================================
 print("\n=== ERROR: ISR Safety ===\n")
 # ============================================================
 
-compile_fail("log in critical", """
+compile_fail(
+    "log in critical",
+    """
 task pid {
     every 1ms strict {
         log("tick")
     }
 }
-""", "critical")
+""",
+    "critical",
+)
 
-compile_fail("wifi in critical", """
+compile_fail(
+    "wifi in critical",
+    """
 task pid {
     every 1ms strict {
         wifi.connect("a", "b")
     }
 }
-""", "critical")
+""",
+    "critical",
+)
 
-compile_fail("sensor in critical", """
+compile_fail(
+    "sensor in critical",
+    """
 hardware {
     device bme: BME280 on bus at 0x76
 }
@@ -463,57 +547,81 @@ task pid {
         bme.temperature()
     }
 }
-""", "critical")
+""",
+    "critical",
+)
 
 
 # ============================================================
 print("\n=== ERROR: Task Errors ===\n")
 # ============================================================
 
-compile_fail("recursive yield", """
+compile_fail(
+    "recursive yield",
+    """
 func retry(n: int) {
     sleep(1second)
     retry(n)
 }
-""", "recursive")
+""",
+    "recursive",
+)
 
-compile_fail("wrong return type", """
+compile_fail(
+    "wrong return type",
+    """
 func get_name() -> string {
     return 42
 }
-""", "returns")
+""",
+    "returns",
+)
 
-compile_fail("immutable assign", """
+compile_fail(
+    "immutable assign",
+    """
 setup {
     let x = 5
     x = 10
 }
-""", "immutable")
+""",
+    "immutable",
+)
 
-compile_fail("too few args", """
+compile_fail(
+    "too few args",
+    """
 func add(a: int, b: int) -> int {
     return a + b
 }
 setup {
     add(1)
 }
-""", "expects 2")
+""",
+    "expects 2",
+)
 
-compile_fail("method not found", """
+compile_fail(
+    "method not found",
+    """
 hardware {
     pin led: Output = 2
 }
 setup {
     led.read()
 }
-""", "no method")
+""",
+    "no method",
+)
 
 
 # ============================================================
 print("\n=== COMPLEX PROGRAM ===\n")
 # ============================================================
 
-c = compile_ok("complex iot", """
+c = compile_ok(
+    "complex iot",
+    """
 chip esp32
 
 hardware {
@@ -565,7 +673,8 @@ setup {
     mqtt.connect("mqtt://broker.local")
     run(blink, motor_control, monitor)
 }
-""")
+""",
+)
 # Verify all three tiers
 c_contains(c, "blink_run(volt_task_t *_vt)", "blink = background")
 c_contains(c, "IRAM_ATTR motor_control_isr", "motor = critical")
@@ -581,6 +690,110 @@ c_contains(c, "volt_run(", "background scheduler")
 
 
 # ============================================================
+print("\n=== TIMEOUT BLOCK CODEGEN ===\n")
+# ============================================================
+
+c = compile_ok(
+    "timeout block generates code",
+    """
+setup {
+    timeout 5seconds {
+        log("ok")
+    } {
+        log("timeout")
+    }
+}
+""",
+)
+c_contains(c, "_timeout_start = volt_tick_ms()", "timeout start captured")
+c_contains(c, "volt_tick_ms() - _timeout_start - 5000", "elapsed check")
+c_contains(c, "log", "try body emitted")
+c_contains(c, "ok", "fallback body emitted")
+
+
+# ============================================================
+print("\n=== STORAGE SAVE TYPE DISPATCH ===\n")
+# ============================================================
+
+c = compile_ok(
+    "storage.save with sensor method",
+    """
+hardware {
+    bus bus: I2C(sda: 21, scl: 22)
+    device bme: BME280 on bus at 0x76
+}
+setup {
+    storage.save("temp", bme.temperature())
+}
+""",
+)
+c_contains(c, "storage_save_float", "sensor temp saved as float")
+
+c = compile_ok(
+    "storage.save with float variable",
+    """
+setup {
+    var temp: float = 25.5
+    storage.save("temp", temp)
+}
+""",
+)
+c_contains(c, "storage_save_float", "float var saved as float")
+
+c = compile_ok(
+    "storage.save with user function returning float",
+    """
+func get_temp() -> float {
+    return 25.5
+}
+setup {
+    storage.save("temp", get_temp())
+}
+""",
+)
+c_contains(c, "storage_save_float", "func returning float saved as float")
+
+c = compile_ok(
+    "storage.save with int (default)",
+    """
+setup {
+    storage.save("count", 42)
+}
+""",
+)
+c_contains(c, "storage_save_int", "int literal saved as int")
+
+
+# ============================================================
+print("\n=== STRING INTERPOLATION TYPE INFERENCE ===\n")
+# ============================================================
+
+c = compile_ok(
+    "string interp with sensor method",
+    """
+hardware {
+    bus bus: I2C(sda: 21, scl: 22)
+    device bme: BME280 on bus at 0x76
+}
+setup {
+    log("temp: {bme.temperature()}")
+}
+""",
+)
+c_contains(c, "%.2f", "sensor temp uses float format")
+
+c = compile_ok(
+    "string interp with bool method",
+    """
+setup {
+    log("connected: {wifi.is_connected()}")
+}
+""",
+)
+c_contains(c, "%s", "bool uses string format")
+
+
+# ============================================================
 print("\n=== SYNTAX ERRORS (graceful failure) ===\n")
 # ============================================================
 
@@ -590,9 +803,9 @@ compile_fail("empty parens", "setup {\n    let x = ()\n}\n", None)
 
 
 # ============================================================
-print(f"\n{'='*60}")
+print(f"\n{'=' * 60}")
 print(f"  RESULTS: {passed}/{passed + failed} passed, {failed} failed")
-print(f"{'='*60}\n")
+print(f"{'=' * 60}\n")
 
 if failed > 0:
     exit(1)

@@ -17,7 +17,9 @@ Output: C source code string
 
 from .ast_nodes import *
 from .codegen_utils import (
-    C_KEYWORDS, TYPE_MAP, c_name as _c_name,
+    C_KEYWORDS,
+    TYPE_MAP,
+    c_name as _c_name,
     collect_var_refs as _collect_var_refs,
     collect_expr_refs as _collect_expr_refs,
     find_var_decls_by_name as _find_var_decls_by_name,
@@ -27,233 +29,235 @@ from .codegen_utils import (
 # Volt method → C framework function
 METHOD_MAP = {
     # Pin methods
-    ("Output", "on"):      "pin_write({gpio}, HIGH)",
-    ("Output", "off"):     "pin_write({gpio}, LOW)",
-    ("Output", "toggle"):  "pin_toggle({gpio})",
-    ("Output", "write"):   "pin_write({gpio}, {args})",
-    ("Output", "is_on"):   "pin_read({gpio})",
-    ("Output", "blink"):      "pin_blink({gpio}, {args})",
+    ("Output", "on"): "pin_write({gpio}, HIGH)",
+    ("Output", "off"): "pin_write({gpio}, LOW)",
+    ("Output", "toggle"): "pin_toggle({gpio})",
+    ("Output", "write"): "pin_write({gpio}, {args})",
+    ("Output", "is_on"): "pin_read({gpio})",
+    ("Output", "blink"): "pin_blink({gpio}, {args})",
     ("Output", "blink_once"): "pin_blink_once({gpio}, {args})",
-    ("Input", "read"):     "pin_read({gpio})",
-    ("PullUpInput", "read"):      "pin_read({gpio})",
+    ("Input", "read"): "pin_read({gpio})",
+    ("PullUpInput", "read"): "pin_read({gpio})",
     ("PullUpInput", "is_pressed"): "(pin_read({gpio}) == LOW)",
-    ("PullDownInput", "read"):        "pin_read({gpio})",
+    ("PullDownInput", "read"): "pin_read({gpio})",
     ("PullDownInput", "is_pressed"): "(pin_read({gpio}) == HIGH)",
-    ("Analog", "read"):    "pin_read({gpio})",
+    ("Analog", "read"): "pin_read({gpio})",
     # DAC
-    ("DAC", "write"):      "pin_dac_write({gpio}, {args})",
-    ("DAC", "voltage"):    "pin_dac_voltage({gpio}, {args})",
-    ("DAC", "read"):       "pin_dac_read({gpio})",
+    ("DAC", "write"): "pin_dac_write({gpio}, {args})",
+    ("DAC", "voltage"): "pin_dac_voltage({gpio}, {args})",
+    ("DAC", "read"): "pin_dac_read({gpio})",
     # Touch
-    ("Touch", "read"):          "touch_read({gpio})",
-    ("Touch", "is_touched"):    "touch_is_touched({gpio})",
+    ("Touch", "read"): "touch_read({gpio})",
+    ("Touch", "is_touched"): "touch_is_touched({gpio})",
     ("Touch", "set_threshold"): "touch_set_threshold({gpio}, {args})",
-    ("Touch", "release"):       "touch_release({gpio})",
+    ("Touch", "release"): "touch_release({gpio})",
     # Note: Touch.touch is an event source sentinel — no METHOD_MAP entry needed
     # Servo
-    ("Servo", "move"):          "servo_write({gpio}, {args})",
-    ("Servo", "move_us"):       "servo_write_us({gpio}, {args})",
-    ("Servo", "angle"):         "servo_read({gpio})",
-    ("Servo", "ease_to"):       "servo_ease_to({gpio}, {args}, SERVO_EASE_IN_OUT)",
-    ("Servo", "ease_to_with"):  "servo_ease_to({gpio}, {args})",
-    ("Servo", "sweep"):         "servo_sweep({gpio}, {args})",
-    ("Servo", "sweep_ease"):    "servo_sweep_ease({gpio}, {args})",
-    ("Servo", "detach"):        "servo_detach({gpio})",
+    ("Servo", "move"): "servo_write({gpio}, {args})",
+    ("Servo", "move_us"): "servo_write_us({gpio}, {args})",
+    ("Servo", "angle"): "servo_read({gpio})",
+    ("Servo", "ease_to"): "servo_ease_to({gpio}, {args}, SERVO_EASE_IN_OUT)",
+    ("Servo", "ease_to_with"): "servo_ease_to({gpio}, {args})",
+    ("Servo", "sweep"): "servo_sweep({gpio}, {args})",
+    ("Servo", "sweep_ease"): "servo_sweep_ease({gpio}, {args})",
+    ("Servo", "detach"): "servo_detach({gpio})",
     ("Servo", "set_max_angle"): "servo_set_max_angle({gpio}, {args})",
     # PWM
-    ("PWM", "set_pwm"):    "pin_pwm_write({gpio}, {args})",
-    ("PWM", "write"):      "pin_pwm_write({gpio}, {args})",
-    ("PWM", "tone"):          "pin_tone({gpio}, {args})",
-    ("PWM", "tone_ms"):       "pin_tone_ms({gpio}, {args})",
-    ("PWM", "no_tone"):       "pin_no_tone({gpio})",
-    ("PWM", "click"):         "pin_tone_click({gpio})",
-    ("PWM", "beep_success"):  "pin_tone_success({gpio})",
-    ("PWM", "beep_error"):    "pin_tone_error({gpio})",
-    ("PWM", "beep_warning"):  "pin_tone_warning({gpio})",
-    ("PWM", "beep_startup"):  "pin_tone_startup({gpio})",
+    ("PWM", "set_pwm"): "pin_pwm_write({gpio}, {args})",
+    ("PWM", "write"): "pin_pwm_write({gpio}, {args})",
+    ("PWM", "tone"): "pin_tone({gpio}, {args})",
+    ("PWM", "tone_ms"): "pin_tone_ms({gpio}, {args})",
+    ("PWM", "no_tone"): "pin_no_tone({gpio})",
+    ("PWM", "click"): "pin_tone_click({gpio})",
+    ("PWM", "beep_success"): "pin_tone_success({gpio})",
+    ("PWM", "beep_error"): "pin_tone_error({gpio})",
+    ("PWM", "beep_warning"): "pin_tone_warning({gpio})",
+    ("PWM", "beep_startup"): "pin_tone_startup({gpio})",
     ("PWM", "beep_shutdown"): "pin_tone_shutdown({gpio})",
-    ("PWM", "beep_notify"):   "pin_tone_notify({gpio})",
-    ("PWM", "beep_alarm"):    "pin_tone_alarm({gpio})",
-    ("PWM", "beep_keypad"):   "pin_tone_keypad({gpio}, {args})",
+    ("PWM", "beep_notify"): "pin_tone_notify({gpio})",
+    ("PWM", "beep_alarm"): "pin_tone_alarm({gpio})",
+    ("PWM", "beep_keypad"): "pin_tone_keypad({gpio}, {args})",
     # WiFi
-    ("WiFi", "connect"):      "wifi_connect({args})",
-    ("WiFi", "disconnect"):   "wifi_disconnect()",
+    ("WiFi", "connect"): "wifi_connect({args})",
+    ("WiFi", "disconnect"): "wifi_disconnect()",
     ("WiFi", "is_connected"): "wifi_is_connected()",
-    ("WiFi", "get_ip"):       "wifi_get_ip()",
-    ("WiFi", "get_rssi"):     "wifi_get_rssi()",
+    ("WiFi", "get_ip"): "wifi_get_ip()",
+    ("WiFi", "get_rssi"): "wifi_get_rssi()",
     # MQTT
-    ("MQTT", "connect"):      "mqtt_connect({args})",
-    ("MQTT", "disconnect"):   "mqtt_disconnect()",
-    ("MQTT", "send"):         "mqtt_send({args})",
-    ("MQTT", "send_float"):   "mqtt_send_float({args})",
-    ("MQTT", "send_int"):     "mqtt_send_int({args})",
-    ("MQTT", "on_receive"):   "mqtt_on_receive({args}, NULL)",
+    ("MQTT", "connect"): "mqtt_connect({args})",
+    ("MQTT", "disconnect"): "mqtt_disconnect()",
+    ("MQTT", "send"): "mqtt_send({args})",
+    ("MQTT", "send_float"): "mqtt_send_float({args})",
+    ("MQTT", "send_int"): "mqtt_send_int({args})",
+    ("MQTT", "on_receive"): "mqtt_on_receive({args}, NULL)",
     ("MQTT", "is_connected"): "mqtt_is_connected()",
     # HTTP
-    ("HTTP", "get"):  "http_get({args}, NULL, 0, NULL)",
+    ("HTTP", "get"): "http_get({args}, NULL, 0, NULL)",
     ("HTTP", "post"): "http_post({args}, NULL, NULL, 0, NULL)",
     # Storage — save/load dispatch handled in _emit_method_call
-    ("Storage", "push"):       "storage_push({args})",
-    ("Storage", "drain"):      "storage_drain({args})",
+    ("Storage", "push"): "storage_push({args})",
+    ("Storage", "drain"): "storage_drain({args})",
     ("Storage", "list_count"): "storage_list_count({args})",
     ("Storage", "list_clear"): "storage_list_clear({args})",
     # System — portable names (implemented per-chip)
-    ("System", "restart"):          "system_restart()",
-    ("System", "free_heap"):        "system_free_heap()",
-    ("System", "uptime"):           "system_uptime()",
-    ("System", "id"):               "system_id()",
-    ("System", "watchdog_enable"):  "volt_wdt_enable({args})",
-    ("System", "watchdog_feed"):    "volt_wdt_feed()",
+    ("System", "restart"): "system_restart()",
+    ("System", "free_heap"): "system_free_heap()",
+    ("System", "uptime"): "system_uptime()",
+    ("System", "id"): "system_id()",
+    ("System", "watchdog_enable"): "volt_wdt_enable({args})",
+    ("System", "watchdog_feed"): "volt_wdt_feed()",
     ("System", "watchdog_disable"): "volt_wdt_disable()",
     # BLE
-    ("BLE", "advertise"):     "ble_advertise({args})",
-    ("BLE", "stop"):          "ble_stop()",
-    ("BLE", "is_connected"):  "ble_is_connected()",
-    ("BLE", "expose_int"):    "ble_expose_int({args})",
-    ("BLE", "expose_float"):  "ble_expose_float({args})",
+    ("BLE", "advertise"): "ble_advertise({args})",
+    ("BLE", "stop"): "ble_stop()",
+    ("BLE", "is_connected"): "ble_is_connected()",
+    ("BLE", "expose_int"): "ble_expose_int({args})",
+    ("BLE", "expose_float"): "ble_expose_float({args})",
     ("BLE", "expose_string"): "ble_expose_string({args})",
-    ("BLE", "update_int"):    "ble_update_int({args})",
-    ("BLE", "update_float"):  "ble_update_float({args})",
+    ("BLE", "update_int"): "ble_update_int({args})",
+    ("BLE", "update_float"): "ble_update_float({args})",
     ("BLE", "update_string"): "ble_update_string({args})",
-    ("BLE", "scan"):          "ble_scan({args})",
-    ("BLE", "scan_name"):     "ble_scan_name({args})",
-    ("BLE", "scan_rssi"):     "ble_scan_rssi({args})",
+    ("BLE", "scan"): "ble_scan({args})",
+    ("BLE", "scan_name"): "ble_scan_name({args})",
+    ("BLE", "scan_rssi"): "ble_scan_rssi({args})",
     # UART / Serial (both keywords accepted)
-    ("UART", "print"):     "volt_uart_print(0, {args})",
+    ("UART", "print"): "volt_uart_print(0, {args})",
     ("UART", "read_byte"): "volt_uart_read_byte(0)",
     ("UART", "read_line"): "volt_uart_read_line(0, _volt_strbuf[0], 128)",
     ("UART", "available"): "volt_uart_available(0)",
-    ("UART", "flush"):     "volt_uart_flush(0)",
-    ("SERIAL", "print"):     "volt_uart_print(0, {args})",
+    ("UART", "flush"): "volt_uart_flush(0)",
+    ("SERIAL", "print"): "volt_uart_print(0, {args})",
     ("SERIAL", "read_byte"): "volt_uart_read_byte(0)",
     ("SERIAL", "read_line"): "volt_uart_read_line(0, _volt_strbuf[0], 128)",
     ("SERIAL", "available"): "volt_uart_available(0)",
-    ("SERIAL", "flush"):     "volt_uart_flush(0)",
+    ("SERIAL", "flush"): "volt_uart_flush(0)",
     # OTA
     ("OTA", "enable"): "ota_enable()",
     # Sensors — {sensor} is replaced with &_sensorname
     ("BME280", "temperature"): "bme280_temperature({sensor})",
-    ("BME280", "humidity"):    "bme280_humidity({sensor})",
-    ("BME280", "pressure"):    "bme280_pressure({sensor})",
-    ("AHT20", "temperature"):  "aht20_temperature({sensor})",
-    ("AHT20", "humidity"):     "aht20_humidity({sensor})",
-    ("SHT31", "temperature"):  "sht31_temperature({sensor})",
-    ("SHT31", "humidity"):     "sht31_humidity({sensor})",
-    ("MPU6050", "accel_x"):    "mpu6050_accel_x({sensor})",
-    ("MPU6050", "accel_y"):    "mpu6050_accel_y({sensor})",
-    ("MPU6050", "accel_z"):    "mpu6050_accel_z({sensor})",
-    ("MPU6050", "gyro_x"):     "mpu6050_gyro_x({sensor})",
-    ("MPU6050", "gyro_y"):     "mpu6050_gyro_y({sensor})",
-    ("MPU6050", "gyro_z"):     "mpu6050_gyro_z({sensor})",
+    ("BME280", "humidity"): "bme280_humidity({sensor})",
+    ("BME280", "pressure"): "bme280_pressure({sensor})",
+    ("AHT20", "temperature"): "aht20_temperature({sensor})",
+    ("AHT20", "humidity"): "aht20_humidity({sensor})",
+    ("SHT31", "temperature"): "sht31_temperature({sensor})",
+    ("SHT31", "humidity"): "sht31_humidity({sensor})",
+    ("MPU6050", "accel_x"): "mpu6050_accel_x({sensor})",
+    ("MPU6050", "accel_y"): "mpu6050_accel_y({sensor})",
+    ("MPU6050", "accel_z"): "mpu6050_accel_z({sensor})",
+    ("MPU6050", "gyro_x"): "mpu6050_gyro_x({sensor})",
+    ("MPU6050", "gyro_y"): "mpu6050_gyro_y({sensor})",
+    ("MPU6050", "gyro_z"): "mpu6050_gyro_z({sensor})",
     ("MPU6050", "temperature"): "mpu6050_temperature({sensor})",
-    ("INA219", "voltage"):     "ina219_voltage({sensor})",
-    ("INA219", "current"):     "ina219_current({sensor})",
-    ("INA219", "power"):       "ina219_power({sensor})",
+    ("INA219", "voltage"): "ina219_voltage({sensor})",
+    ("INA219", "current"): "ina219_current({sensor})",
+    ("INA219", "power"): "ina219_power({sensor})",
     ("INA219", "shunt_voltage"): "ina219_shunt_voltage({sensor})",
-    ("DS3231", "hours"):       "ds3231_hours({sensor})",
-    ("DS3231", "minutes"):     "ds3231_minutes({sensor})",
-    ("DS3231", "seconds"):     "ds3231_seconds({sensor})",
-    ("DS3231", "year"):        "ds3231_year({sensor})",
-    ("DS3231", "month"):       "ds3231_month({sensor})",
-    ("DS3231", "date"):        "ds3231_date({sensor})",
+    ("DS3231", "hours"): "ds3231_hours({sensor})",
+    ("DS3231", "minutes"): "ds3231_minutes({sensor})",
+    ("DS3231", "seconds"): "ds3231_seconds({sensor})",
+    ("DS3231", "year"): "ds3231_year({sensor})",
+    ("DS3231", "month"): "ds3231_month({sensor})",
+    ("DS3231", "date"): "ds3231_date({sensor})",
     ("DS3231", "temperature"): "ds3231_temperature({sensor})",
-    ("BH1750", "lux"):         "bh1750_lux({sensor})",
-    ("VEML7700", "lux"):       "veml7700_lux({sensor})",
-    ("VEML7700", "white"):     "veml7700_white({sensor})",
-    ("SSD1306", "clear"):      "ssd1306_clear({sensor})",
-    ("SSD1306", "text"):       "ssd1306_text({sensor}, {args})",
-    ("SSD1306", "show"):       "ssd1306_show({sensor})",
+    ("BH1750", "lux"): "bh1750_lux({sensor})",
+    ("VEML7700", "lux"): "veml7700_lux({sensor})",
+    ("VEML7700", "white"): "veml7700_white({sensor})",
+    ("SSD1306", "clear"): "ssd1306_clear({sensor})",
+    ("SSD1306", "text"): "ssd1306_text({sensor}, {args})",
+    ("SSD1306", "show"): "ssd1306_show({sensor})",
     # Additional I2C devices
-    ("BMP180", "temperature"):   "bmp180_temperature({sensor})",
-    ("BMP180", "pressure"):      "bmp180_pressure({sensor})",
-    ("ADS1115", "read_raw"):     "ads1115_read_raw({sensor}, {args})",
-    ("ADS1115", "voltage"):      "ads1115_voltage({sensor}, {args})",
-    ("PCA9685", "set_servo"):    "pca9685_set_servo({sensor}, {args})",
-    ("PCA9685", "set_duty"):     "pca9685_set_duty({sensor}, {args})",
-    ("PCF8574", "write"):        "pcf8574_write({sensor}, {args})",
-    ("PCF8574", "read"):         "pcf8574_read({sensor})",
-    ("PCF8574", "set_pin"):      "pcf8574_set_pin({sensor}, {args})",
-    ("MLX90614", "ambient"):     "mlx90614_ambient({sensor})",
-    ("MLX90614", "object"):      "mlx90614_object({sensor})",
-    ("MCP4725", "write"):        "mcp4725_write({sensor}, {args})",
-    ("MCP4725", "set_voltage"):  "mcp4725_set_voltage({sensor}, {args})",
-    ("MAX30102", "red"):               "max30102_red({sensor})",
-    ("MAX30102", "ir"):                "max30102_ir({sensor})",
-    ("MAX30102", "temperature"):       "max30102_temperature({sensor})",
+    ("BMP180", "temperature"): "bmp180_temperature({sensor})",
+    ("BMP180", "pressure"): "bmp180_pressure({sensor})",
+    ("ADS1115", "read_raw"): "ads1115_read_raw({sensor}, {args})",
+    ("ADS1115", "voltage"): "ads1115_voltage({sensor}, {args})",
+    ("PCA9685", "set_servo"): "pca9685_set_servo({sensor}, {args})",
+    ("PCA9685", "set_duty"): "pca9685_set_duty({sensor}, {args})",
+    ("PCF8574", "write"): "pcf8574_write({sensor}, {args})",
+    ("PCF8574", "read"): "pcf8574_read({sensor})",
+    ("PCF8574", "set_pin"): "pcf8574_set_pin({sensor}, {args})",
+    ("MLX90614", "ambient"): "mlx90614_ambient({sensor})",
+    ("MLX90614", "object"): "mlx90614_object({sensor})",
+    ("MCP4725", "write"): "mcp4725_write({sensor}, {args})",
+    ("MCP4725", "set_voltage"): "mcp4725_set_voltage({sensor}, {args})",
+    ("MAX30102", "red"): "max30102_red({sensor})",
+    ("MAX30102", "ir"): "max30102_ir({sensor})",
+    ("MAX30102", "temperature"): "max30102_temperature({sensor})",
     ("MAX30102", "is_finger_present"): "max30102_is_finger_present({sensor})",
-    ("MAX30100", "red"):               "max30100_red({sensor})",
-    ("MAX30100", "ir"):                "max30100_ir({sensor})",
-    ("MAX30100", "temperature"):       "max30100_temperature({sensor})",
+    ("MAX30100", "red"): "max30100_red({sensor})",
+    ("MAX30100", "ir"): "max30100_ir({sensor})",
+    ("MAX30100", "temperature"): "max30100_temperature({sensor})",
     ("MAX30100", "is_finger_present"): "max30100_is_finger_present({sensor})",
-    ("HD44780", "clear"):            "hd44780_clear({sensor})",
-    ("HD44780", "print"):            "hd44780_print({sensor}, {args})",
-    ("HD44780", "set_cursor"):       "hd44780_set_cursor({sensor}, {args})",
-    ("HD44780", "backlight"):        "hd44780_backlight({sensor}, {args})",
-    ("BME680", "temperature"):       "bme680_temperature({sensor})",
-    ("BME680", "humidity"):          "bme680_humidity({sensor})",
-    ("BME680", "pressure"):          "bme680_pressure({sensor})",
-    ("BME680", "gas"):               "bme680_gas({sensor})",
-    ("APDS9960", "proximity"):       "apds9960_proximity({sensor})",
-    ("APDS9960", "red"):             "apds9960_red({sensor})",
-    ("APDS9960", "green"):           "apds9960_green({sensor})",
-    ("APDS9960", "blue"):            "apds9960_blue({sensor})",
-    ("QMC5883L", "x"):               "qmc5883l_x({sensor})",
-    ("QMC5883L", "y"):               "qmc5883l_y({sensor})",
-    ("QMC5883L", "z"):               "qmc5883l_z({sensor})",
-    ("QMC5883L", "heading"):         "qmc5883l_heading({sensor})",
-    ("TCA9548A", "select"):          "tca9548a_select({sensor}, {args})",
-    ("TCA9548A", "disable"):         "tca9548a_disable({sensor})",
-    ("HTU21D", "temperature"):       "htu21d_temperature({sensor})",
-    ("HTU21D", "humidity"):          "htu21d_humidity({sensor})",
-    ("MS5611", "temperature"):       "ms5611_temperature({sensor})",
-    ("MS5611", "pressure"):          "ms5611_pressure({sensor})",
-    ("MAX7219", "set_row"):          "max7219_set_row({sensor}, {args})",
-    ("MAX7219", "set_intensity"):    "max7219_set_intensity({sensor}, {args})",
-    ("MAX7219", "clear"):            "max7219_clear({sensor})",
-    ("MAX7219", "set_digit"):        "max7219_set_digit({sensor}, {args})",
+    ("HD44780", "clear"): "hd44780_clear({sensor})",
+    ("HD44780", "print"): "hd44780_print({sensor}, {args})",
+    ("HD44780", "set_cursor"): "hd44780_set_cursor({sensor}, {args})",
+    ("HD44780", "backlight"): "hd44780_backlight({sensor}, {args})",
+    ("BME680", "temperature"): "bme680_temperature({sensor})",
+    ("BME680", "humidity"): "bme680_humidity({sensor})",
+    ("BME680", "pressure"): "bme680_pressure({sensor})",
+    ("BME680", "gas"): "bme680_gas({sensor})",
+    ("APDS9960", "proximity"): "apds9960_proximity({sensor})",
+    ("APDS9960", "red"): "apds9960_red({sensor})",
+    ("APDS9960", "green"): "apds9960_green({sensor})",
+    ("APDS9960", "blue"): "apds9960_blue({sensor})",
+    ("QMC5883L", "x"): "qmc5883l_x({sensor})",
+    ("QMC5883L", "y"): "qmc5883l_y({sensor})",
+    ("QMC5883L", "z"): "qmc5883l_z({sensor})",
+    ("QMC5883L", "heading"): "qmc5883l_heading({sensor})",
+    ("TCA9548A", "select"): "tca9548a_select({sensor}, {args})",
+    ("TCA9548A", "disable"): "tca9548a_disable({sensor})",
+    ("HTU21D", "temperature"): "htu21d_temperature({sensor})",
+    ("HTU21D", "humidity"): "htu21d_humidity({sensor})",
+    ("MS5611", "temperature"): "ms5611_temperature({sensor})",
+    ("MS5611", "pressure"): "ms5611_pressure({sensor})",
+    ("MAX7219", "set_row"): "max7219_set_row({sensor}, {args})",
+    ("MAX7219", "set_intensity"): "max7219_set_intensity({sensor}, {args})",
+    ("MAX7219", "clear"): "max7219_clear({sensor})",
+    ("MAX7219", "set_digit"): "max7219_set_digit({sensor}, {args})",
     # SPI devices
     ("MAX31855", "temperature"): "max31855_temperature({sensor})",
-    ("MAX31855", "internal"):    "max31855_internal({sensor})",
-    ("MAX31855", "is_fault"):    "max31855_is_fault({sensor})",
-    ("MCP3008", "read"):         "mcp3008_read({sensor}, {args})",
+    ("MAX31855", "internal"): "max31855_internal({sensor})",
+    ("MAX31855", "is_fault"): "max31855_is_fault({sensor})",
+    ("MCP3008", "read"): "mcp3008_read({sensor}, {args})",
 }
 
 # Builtin function → C function
 BUILTIN_MAP = {
-    "log":         "log_info({args})",
-    "sleep":       None,  # handled specially (yield point)
-    "deep_sleep":  "system_deep_sleep({args} * 1000)",
+    "log": "log_info({args})",
+    "sleep": None,  # handled specially (yield point)
+    "deep_sleep": "system_deep_sleep({args} * 1000)",
     "light_sleep": "system_light_sleep()",
-    "run":         None,  # handled in app_main generation
-    "float":       "(float)({args})",
-    "int":         "(int32_t)({args})",
+    "run": None,  # handled in app_main generation
+    "float": "(float)({args})",
+    "int": "(int32_t)({args})",
 }
 
 # Servo easing constants — Volt names → C macros
 _EASING_CONSTANTS = {
-    "linear":          "SERVO_LINEAR",
-    "ease_in":         "SERVO_EASE_IN",
-    "ease_out":        "SERVO_EASE_OUT",
-    "ease_in_out":     "SERVO_EASE_IN_OUT",
-    "ease_in_cubic":   "SERVO_EASE_IN_CUBIC",
-    "ease_out_cubic":  "SERVO_EASE_OUT_CUBIC",
+    "linear": "SERVO_LINEAR",
+    "ease_in": "SERVO_EASE_IN",
+    "ease_out": "SERVO_EASE_OUT",
+    "ease_in_out": "SERVO_EASE_IN_OUT",
+    "ease_in_cubic": "SERVO_EASE_IN_CUBIC",
+    "ease_out_cubic": "SERVO_EASE_OUT_CUBIC",
     "ease_in_out_cubic": "SERVO_EASE_IN_OUT_CUBIC",
-    "ease_in_sine":    "SERVO_EASE_IN_SINE",
-    "ease_out_sine":   "SERVO_EASE_OUT_SINE",
+    "ease_in_sine": "SERVO_EASE_IN_SINE",
+    "ease_out_sine": "SERVO_EASE_OUT_SINE",
     "ease_in_out_sine": "SERVO_EASE_IN_OUT_SINE",
-    "ease_bounce":     "SERVO_EASE_BOUNCE",
-    "ease_back":       "SERVO_EASE_BACK",
-    "ease_elastic":    "SERVO_EASE_ELASTIC",
+    "ease_bounce": "SERVO_EASE_BOUNCE",
+    "ease_back": "SERVO_EASE_BACK",
+    "ease_elastic": "SERVO_EASE_ELASTIC",
 }
 
 
 # Load device registry — merge device methods into METHOD_MAP
 def _load_device_registry():
     from .device_registry import get_registry
+
     registry = get_registry()
     for key, value in registry.get_method_map().items():
         if key not in METHOD_MAP:
             METHOD_MAP[key] = value
+
 
 _load_device_registry()
 
@@ -270,8 +274,9 @@ class CCodeGen:
         self.pin_map: dict[str, tuple[int, str]] = {}  # name → (gpio, mode)
         self.sensor_map: dict[str, str] = {}  # name → sensor_type
         self.builtin_types: dict[str, str] = {}  # name → type (WiFi, MQTT, etc.)
-        self._shared_vars: set = set()          # vars that need atomic operations
-        self._var_types: dict[str, str] = {}    # name → declared type (for codegen dispatch)
+        self._shared_vars: set = set()  # vars that need atomic operations
+        self._var_types: dict[str, str] = {}  # name → declared type (for codegen dispatch)
+        self._func_return_types: dict[str, str] = {}  # func name → return type
 
     def generate(self, program: Program) -> str:
         """Generate complete C source from AST."""
@@ -330,8 +335,12 @@ class CCodeGen:
 
         # Builtins
         self.builtin_types = {
-            "wifi": "WiFi", "mqtt": "MQTT", "http": "HTTP",
-            "storage": "Storage", "system": "System", "ota": "OTA",
+            "wifi": "WiFi",
+            "mqtt": "MQTT",
+            "http": "HTTP",
+            "storage": "Storage",
+            "system": "System",
+            "ota": "OTA",
         }
 
         # Register channels as builtin types
@@ -350,6 +359,11 @@ class CCodeGen:
         for gv in program.global_vars:
             if gv.type_name:
                 self._var_types[gv.name] = gv.type_name
+
+        # Track function return types for type inference
+        for func in program.functions:
+            if func.return_type:
+                self._func_return_types[func.name] = func.return_type
 
     # ============================================================
     # Section emitters
@@ -431,8 +445,9 @@ class CCodeGen:
         for func in program.functions:
             if not func.contains_yield:
                 ret = TYPE_MAP.get(func.return_type, "void")
-                params = ", ".join(f"{TYPE_MAP.get(p.type_name, 'int32_t')} {_c_name(p.name)}"
-                                   for p in func.params)
+                params = ", ".join(
+                    f"{TYPE_MAP.get(p.type_name, 'int32_t')} {_c_name(p.name)}" for p in func.params
+                )
                 self._out(f"static {ret} {_c_name(func.name)}({params or 'void'});")
         for machine in program.machines:
             self._out(f"static void {machine.name}_run(volt_task_t *_vt);")
@@ -562,15 +577,27 @@ class CCodeGen:
                 self._out(f"    return 0;")
                 self._out(f"}}")
                 # try_receive (same as receive for now)
-                self._out(f"static inline {c_type} {name}_try_receive(void) {{ return {name}_receive(); }}")
+                self._out(
+                    f"static inline {c_type} {name}_try_receive(void) {{ return {name}_receive(); }}"
+                )
                 # count
-                self._out(f"static inline int {name}_count(void) {{ return atomic_load(&_ch_{name}.count); }}")
+                self._out(
+                    f"static inline int {name}_count(void) {{ return atomic_load(&_ch_{name}.count); }}"
+                )
                 # has_data / is_empty / is_full
-                self._out(f"static inline bool {name}_has_data(void) {{ return atomic_load(&_ch_{name}.count) > 0; }}")
-                self._out(f"static inline bool {name}_is_empty(void) {{ return atomic_load(&_ch_{name}.count) == 0; }}")
-                self._out(f"static inline bool {name}_is_full(void) {{ return atomic_load(&_ch_{name}.count) >= {cap}; }}")
+                self._out(
+                    f"static inline bool {name}_has_data(void) {{ return atomic_load(&_ch_{name}.count) > 0; }}"
+                )
+                self._out(
+                    f"static inline bool {name}_is_empty(void) {{ return atomic_load(&_ch_{name}.count) == 0; }}"
+                )
+                self._out(
+                    f"static inline bool {name}_is_full(void) {{ return atomic_load(&_ch_{name}.count) >= {cap}; }}"
+                )
                 # clear
-                self._out(f"static inline void {name}_clear(void) {{ atomic_store(&_ch_{name}.head, 0); atomic_store(&_ch_{name}.tail, 0); atomic_store(&_ch_{name}.count, 0); }}")
+                self._out(
+                    f"static inline void {name}_clear(void) {{ atomic_store(&_ch_{name}.head, 0); atomic_store(&_ch_{name}.tail, 0); atomic_store(&_ch_{name}.count, 0); }}"
+                )
                 self._out("")
 
     def _emit_sensor_instances(self, program: Program):
@@ -587,8 +614,9 @@ class CCodeGen:
                 continue  # yielding functions are inlined, not emitted
 
             ret = TYPE_MAP.get(func.return_type, "void")
-            params = ", ".join(f"{TYPE_MAP.get(p.type_name, 'int32_t')} {_c_name(p.name)}"
-                               for p in func.params)
+            params = ", ".join(
+                f"{TYPE_MAP.get(p.type_name, 'int32_t')} {_c_name(p.name)}" for p in func.params
+            )
             self._out(f"static {ret} {_c_name(func.name)}({params or 'void'})")
             self._out("{")
             self.indent += 1
@@ -619,8 +647,11 @@ class CCodeGen:
             self._out(f"{ctx_type} *ctx = &_{task.name}_ctx;")
 
         self._out("VOLT_TASK_BEGIN(_vt);")
-        self._emit_stmts(task.body, ctx_prefix="ctx->" if has_ctx else None,
-                          crossing_vars=task.crossing_vars or [])
+        self._emit_stmts(
+            task.body,
+            ctx_prefix="ctx->" if has_ctx else None,
+            crossing_vars=task.crossing_vars or [],
+        )
         self._out("VOLT_TASK_END(_vt);")
 
         self.indent -= 1
@@ -794,7 +825,11 @@ class CCodeGen:
 
             # Timed transitions (after N -> target)
             for timed in s.timed_transitions:
-                ms = timed.duration.milliseconds if isinstance(timed.duration, DurationLiteral) else 0
+                ms = (
+                    timed.duration.milliseconds
+                    if isinstance(timed.duration, DurationLiteral)
+                    else 0
+                )
                 guard = ""
                 if timed.guard:
                     guard_str = self._emit_expr_str(timed.guard, "ctx->", machine_vars)
@@ -895,19 +930,33 @@ class CCodeGen:
 
             # Bus initialization (I2C and SPI) — chip-aware defaults
             chip = self._chip_family
-            i2c_defaults = {"esp32": ("21", "22"), "esp8266": ("4", "5"),
-                            "rp2040": ("4", "5"), "stm32": ("7", "6")}
-            spi_defaults = {"esp32": ("23", "19", "18"), "esp8266": ("13", "12", "14"),
-                            "rp2040": ("19", "16", "18"), "stm32": ("7", "6", "5")}
-            uart_defaults = {"esp32": ("1", "3"), "esp8266": ("1", "3"),
-                             "rp2040": ("0", "1"), "stm32": ("2", "3")}
+            i2c_defaults = {
+                "esp32": ("21", "22"),
+                "esp8266": ("4", "5"),
+                "rp2040": ("4", "5"),
+                "stm32": ("7", "6"),
+            }
+            spi_defaults = {
+                "esp32": ("23", "19", "18"),
+                "esp8266": ("13", "12", "14"),
+                "rp2040": ("19", "16", "18"),
+                "stm32": ("7", "6", "5"),
+            }
+            uart_defaults = {
+                "esp32": ("1", "3"),
+                "esp8266": ("1", "3"),
+                "rp2040": ("0", "1"),
+                "stm32": ("2", "3"),
+            }
             for bus in program.hardware.buses:
                 params = bus.params
                 if bus.bus_type == "i2c":
                     d_sda, d_scl = i2c_defaults.get(chip, ("21", "22"))
                     sda = self._emit_expr_str(params.get("sda")) if "sda" in params else d_sda
                     scl = self._emit_expr_str(params.get("scl")) if "scl" in params else d_scl
-                    speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "400000"
+                    speed = (
+                        self._emit_expr_str(params.get("speed")) if "speed" in params else "400000"
+                    )
                     self._out(f"// I2C bus: {bus.name}")
                     self._out(f"volt_i2c_init(0, {sda}, {scl}, {speed});")
                 elif bus.bus_type == "spi":
@@ -915,7 +964,9 @@ class CCodeGen:
                     mosi = self._emit_expr_str(params.get("mosi")) if "mosi" in params else d_mosi
                     miso = self._emit_expr_str(params.get("miso")) if "miso" in params else d_miso
                     clk = self._emit_expr_str(params.get("clk")) if "clk" in params else d_clk
-                    speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "1000000"
+                    speed = (
+                        self._emit_expr_str(params.get("speed")) if "speed" in params else "1000000"
+                    )
                     self._out(f"// SPI bus: {bus.name}")
                     self._out(f"volt_spi_init(0, {mosi}, {miso}, {clk}, {speed});")
                 elif bus.bus_type in ("uart", "serial"):
@@ -939,9 +990,13 @@ class CCodeGen:
                 self._out(f"// Device: {sensor.name} ({sensor.sensor_type})")
                 if bus_type == "spi":
                     # SPI devices: third arg is CS pin, not I2C address
-                    self._out(f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // cs_pin={sensor.address}")
+                    self._out(
+                        f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // cs_pin={sensor.address}"
+                    )
                 else:
-                    self._out(f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // i2c_addr=0x{sensor.address:02x}")
+                    self._out(
+                        f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // i2c_addr=0x{sensor.address:02x}"
+                    )
             if program.hardware.sensors:
                 self._out("")
 
@@ -949,11 +1004,13 @@ class CCodeGen:
         for sv in program.storage_vars:
             default = self._emit_expr_str(sv.default_value) if sv.default_value else "0"
             if sv.type_name == "float":
-                self._out(f"{_c_name(sv.name)} = storage_load_float(\"{sv.name}\", {default});")
+                self._out(f'{_c_name(sv.name)} = storage_load_float("{sv.name}", {default});')
             elif sv.type_name == "string":
-                self._out(f"storage_load_str(\"{sv.name}\", {_c_name(sv.name)}, sizeof({_c_name(sv.name)}), {default});")
+                self._out(
+                    f'storage_load_str("{sv.name}", {_c_name(sv.name)}, sizeof({_c_name(sv.name)}), {default});'
+                )
             else:
-                self._out(f"{_c_name(sv.name)} = storage_load_int(\"{sv.name}\", {default});")
+                self._out(f'{_c_name(sv.name)} = storage_load_int("{sv.name}", {default});')
 
         # Setup block — runs once before tasks start
         if program.setup:
@@ -966,13 +1023,25 @@ class CCodeGen:
             if task.tier == "critical":
                 for stmt in task.body:
                     if isinstance(stmt, EveryBlock) and stmt.strict:
-                        us = stmt.interval.microseconds if isinstance(stmt.interval, DurationLiteral) else (stmt.interval.value * 1000 if isinstance(stmt.interval, IntLiteral) else 1000)
-                        self._out(f'volt_critical_create("{task.name}", {task.name}_isr, {us}, NULL);')
+                        us = (
+                            stmt.interval.microseconds
+                            if isinstance(stmt.interval, DurationLiteral)
+                            else (
+                                stmt.interval.value * 1000
+                                if isinstance(stmt.interval, IntLiteral)
+                                else 1000
+                            )
+                        )
+                        self._out(
+                            f'volt_critical_create("{task.name}", {task.name}_isr, {us}, NULL);'
+                        )
 
         # Priority tasks (after main block — WiFi/MQTT already initialized)
         for task in program.tasks:
             if task.tier == "priority":
-                self._out(f'volt_rt_create("{task.name}", {task.name}_run, 4096, NULL, VOLT_PRIORITY_NORMAL, -1);')
+                self._out(
+                    f'volt_rt_create("{task.name}", {task.name}_run, 4096, NULL, VOLT_PRIORITY_NORMAL, -1);'
+                )
 
         # Background task table (includes state machines as protothread tasks)
         bg_tasks = [t for t in program.tasks if t.tier == "background"]
@@ -1010,13 +1079,23 @@ class CCodeGen:
     # Statement emission
     # ============================================================
 
-    def _emit_stmts(self, stmts: list, ctx_prefix: str = None, crossing_vars: list = None,
-                     use_freertos_delay: bool = False):
+    def _emit_stmts(
+        self,
+        stmts: list,
+        ctx_prefix: str = None,
+        crossing_vars: list = None,
+        use_freertos_delay: bool = False,
+    ):
         for stmt in stmts:
             self._emit_stmt(stmt, ctx_prefix, crossing_vars or [], use_freertos_delay)
 
-    def _emit_stmt(self, stmt, ctx_prefix: str = None, crossing_vars: list = None,
-                    use_freertos_delay: bool = False):
+    def _emit_stmt(
+        self,
+        stmt,
+        ctx_prefix: str = None,
+        crossing_vars: list = None,
+        use_freertos_delay: bool = False,
+    ):
         if stmt is None:
             return
         cv = crossing_vars or []
@@ -1058,7 +1137,9 @@ class CCodeGen:
                     self._out(f"{atomic_op}(&{target}, {val});")
                 else:
                     # For *=, /=, %=, <<=, >>= — no single atomic, use load-op-store
-                    self._out(f"{{ {TYPE_MAP.get(self._var_types.get(var_name, 'int'), 'int32_t')} _tmp = atomic_load(&{target}); _tmp {stmt.op} {val}; atomic_store(&{target}, _tmp); }}")
+                    self._out(
+                        f"{{ {TYPE_MAP.get(self._var_types.get(var_name, 'int'), 'int32_t')} _tmp = atomic_load(&{target}); _tmp {stmt.op} {val}; atomic_store(&{target}, _tmp); }}"
+                    )
             else:
                 self._out(f"{target} {stmt.op} {val};")
 
@@ -1073,11 +1154,15 @@ class CCodeGen:
             expr_str = self._emit_expr_str(stmt.expr, ctx_prefix, cv)
             # Sleep — yield in protothreads, blocking delay in main/priority
             if isinstance(stmt.expr, FuncCall) and stmt.expr.name == "sleep":
-                ms = self._emit_expr_str(stmt.expr.args[0], ctx_prefix, cv) if stmt.expr.args else "0"
+                ms = (
+                    self._emit_expr_str(stmt.expr.args[0], ctx_prefix, cv)
+                    if stmt.expr.args
+                    else "0"
+                )
                 if use_freertos_delay:
                     self._out(f"volt_delay_ms({ms});")
                 else:
-                    label = getattr(stmt, '_yield_label', 0)
+                    label = getattr(stmt, "_yield_label", 0)
                     self._out(f"VOLT_YIELD_LABEL(_vt, {label}, {ms});")
             else:
                 self._out(f"{expr_str};")
@@ -1129,10 +1214,13 @@ class CCodeGen:
             if stmt.step:
                 step_val = self._emit_expr_str(stmt.step, ctx_prefix, cv)
                 # Detect negative literal step for correct loop direction
-                is_negative = (isinstance(stmt.step, UnaryExpr) and stmt.step.op == "-") or \
-                              (isinstance(stmt.step, IntLiteral) and stmt.step.value < 0)
+                is_negative = (isinstance(stmt.step, UnaryExpr) and stmt.step.op == "-") or (
+                    isinstance(stmt.step, IntLiteral) and stmt.step.value < 0
+                )
                 cmp = ">" if is_negative else "<"
-                self._out(f"for (int32_t {var} = {start}; {var} {cmp} {end}; {var} += {step_val}) {{")
+                self._out(
+                    f"for (int32_t {var} = {start}; {var} {cmp} {end}; {var} += {step_val}) {{"
+                )
             else:
                 self._out(f"for (int32_t {var} = {start}; {var} < {end}; {var}++) {{")
             self.indent += 1
@@ -1161,9 +1249,26 @@ class CCodeGen:
             self._out(f"// on {event_str}")
             self._out(f"VOLT_WAIT_LABEL(_vt, {stmt.yield_label}, {event_str});")
             if stmt.debounce:
-                deb_ms = stmt.debounce.milliseconds if isinstance(stmt.debounce, DurationLiteral) else 50
+                deb_ms = (
+                    stmt.debounce.milliseconds if isinstance(stmt.debounce, DurationLiteral) else 50
+                )
                 self._out(f"VOLT_YIELD_LABEL(_vt, {stmt.debounce_label}, {deb_ms}); // debounce")
             self._emit_stmts(stmt.body, ctx_prefix, cv)
+
+        elif isinstance(stmt, TimeoutBlock):
+            self._line_directive(stmt)
+            ms = stmt.duration.milliseconds if isinstance(stmt.duration, DurationLiteral) else 0
+            self._out("{")
+            self.indent += 1
+            self._out("uint32_t _timeout_start = volt_tick_ms();")
+            self._emit_stmts(stmt.try_body, ctx_prefix, cv, use_freertos_delay)
+            self._out(f"if ((int32_t)(volt_tick_ms() - _timeout_start - {ms}) >= 0) {{")
+            self.indent += 1
+            self._emit_stmts(stmt.fallback_body, ctx_prefix, cv, use_freertos_delay)
+            self.indent -= 1
+            self._out("}")
+            self.indent -= 1
+            self._out("}")
 
     # ============================================================
     # Expression emission
@@ -1185,7 +1290,7 @@ class CCodeGen:
 
         if isinstance(expr, StringLiteral):
             # Check for string interpolation: "text {expr} more"
-            if '{' in expr.value and '}' in expr.value:
+            if "{" in expr.value and "}" in expr.value:
                 return self._emit_interpolated_string(expr.value, ctx_prefix, cv)
             return f'"{expr.value}"'
 
@@ -1256,9 +1361,10 @@ class CCodeGen:
                 # Storage.save/load — dispatch by value type
                 if type_name == "Storage" and expr.method == "save" and len(expr.args) == 2:
                     val = expr.args[1]
-                    if isinstance(val, FloatLiteral) or (isinstance(val, VarRef) and self._var_type(val.name) == "float"):
+                    inferred_type = self._infer_value_type(val)
+                    if inferred_type == "float":
                         return f"storage_save_float({args_str})"
-                    elif isinstance(val, StringLiteral) or (isinstance(val, VarRef) and self._var_type(val.name) == "string"):
+                    elif inferred_type == "string":
                         return f"storage_save_str({args_str})"
                     else:
                         return f"storage_save_int({args_str})"
@@ -1275,8 +1381,9 @@ class CCodeGen:
                 key = (sensor_type, expr.method)
                 if key in METHOD_MAP:
                     sensor_ref = f"&_{obj_name}"
-                    return METHOD_MAP[key].format(sensor=sensor_ref, args=args_str,
-                                                  bus_id="0", addr="0")
+                    return METHOD_MAP[key].format(
+                        sensor=sensor_ref, args=args_str, bus_id="0", addr="0"
+                    )
 
             # Generic method call fallback
             obj_str = self._emit_expr_str(expr.obj, ctx_prefix, cv)
@@ -1296,14 +1403,86 @@ class CCodeGen:
         self.lines.append("    " * self.indent + text)
 
     def _line_directive(self, node):
-        if hasattr(node, 'region') and node.region.start_line > 0:
+        if hasattr(node, "region") and node.region.start_line > 0:
             # Escape quotes in filename to prevent malformed #line directives
-            safe_file = self.source_file.replace('\\', '\\\\').replace('"', '\\"')
+            safe_file = self.source_file.replace("\\", "\\\\").replace('"', '\\"')
             self.lines.append(f'#line {node.region.start_line} "{safe_file}"')
 
     def _var_type(self, name: str) -> str:
         """Look up variable type from the var_types map built during codegen."""
         return self._var_types.get(name, "int")
+
+    def _infer_value_type(self, expr) -> str:
+        """Infer the Volt type of any expression for storage.dispatch."""
+        from .ast_nodes import (
+            IntLiteral,
+            FloatLiteral,
+            StringLiteral,
+            BoolLiteral,
+            VarRef,
+            FuncCall,
+            MethodCall,
+            BinaryExpr,
+            UnaryExpr,
+            DurationLiteral,
+        )
+
+        if isinstance(expr, IntLiteral):
+            return "int"
+        if isinstance(expr, FloatLiteral):
+            return "float"
+        if isinstance(expr, StringLiteral):
+            return "string"
+        if isinstance(expr, BoolLiteral):
+            return "bool"
+        if isinstance(expr, DurationLiteral):
+            return "int"
+
+        if isinstance(expr, VarRef):
+            return self._var_type(expr.name)
+
+        if isinstance(expr, MethodCall):
+            obj_name = expr.obj.name if isinstance(expr.obj, VarRef) else None
+            if obj_name and obj_name in self.sensor_map:
+                sensor_type = self.sensor_map[obj_name]
+                key = (sensor_type, expr.method)
+                if key in METHOD_MAP:
+                    result_type = METHOD_MAP[key]
+                    if (
+                        "float" in result_type.lower()
+                        or "lux" in result_type.lower()
+                        or "temperature" in result_type.lower()
+                    ):
+                        return "float"
+            if obj_name and obj_name in self.pin_map:
+                gpio, mode = self.pin_map[obj_name]
+                if mode == "Analog":
+                    return "int"
+            if obj_name and obj_name in self.builtin_types:
+                type_name = self.builtin_types[obj_name]
+                key = (type_name, expr.method)
+                if key in METHOD_MAP:
+                    result_type = METHOD_MAP[key]
+                    if "float" in result_type.lower():
+                        return "float"
+            return "int"
+
+        if isinstance(expr, FuncCall):
+            return self._func_return_types.get(expr.name, "int")
+
+        if isinstance(expr, BinaryExpr):
+            left_type = self._infer_value_type(expr.left)
+            right_type = self._infer_value_type(expr.right)
+            if left_type == "float" or right_type == "float":
+                return "float"
+            if left_type == "string" or right_type == "string":
+                return "string"
+            return "int"
+
+        if isinstance(expr, UnaryExpr):
+            return self._infer_value_type(expr.operand)
+
+        return "int"
 
     def _all_stmts(self, prog):
         """Collect all statements from tasks + functions + machines + setup + loop."""
@@ -1335,11 +1514,12 @@ class CCodeGen:
         return any(True for _ in _find_calls(self._all_stmts(prog), "http"))
 
     def _uses_storage(self, prog):
-        return bool(prog.storage_vars) or any(True for _ in _find_calls(self._all_stmts(prog), "storage"))
+        return bool(prog.storage_vars) or any(
+            True for _ in _find_calls(self._all_stmts(prog), "storage")
+        )
 
     def _uses_ble(self, prog):
         return any(True for _ in _find_calls(self._all_stmts(prog), "ble"))
-
 
     # ---- String concatenation with non-string types ----
 
@@ -1359,10 +1539,68 @@ class CCodeGen:
             return self._flatten_concat(expr.left) + self._flatten_concat(expr.right)
         return [expr]
 
+    def _infer_interp_type(self, expr_str: str) -> str:
+        """Infer the type of an expression in string interpolation for format specifier."""
+        from .ast_nodes import VarRef, MethodCall, FuncCall
+
+        if any(
+            m in expr_str
+            for m in [".read()", ".free_heap()", ".uptime()", ".id()", "_count()", ".count()"]
+        ):
+            return "int"
+        if any(
+            m in expr_str
+            for m in [
+                ".is_connected()",
+                ".is_on()",
+                ".is_pressed()",
+                ".is_empty()",
+                ".is_full()",
+                ".is_finger_present()",
+                ".is_fault()",
+            ]
+        ):
+            return "bool"
+        if any(
+            m in expr_str
+            for m in [
+                ".temperature()",
+                ".humidity()",
+                ".pressure()",
+                ".lux()",
+                ".voltage()",
+                ".current()",
+                ".power()",
+                ".altitude()",
+                ".accel_x()",
+                ".accel_y()",
+                ".accel_z()",
+                ".gyro_x()",
+                ".gyro_y()",
+                ".gyro_z()",
+                ".ambient()",
+                ".object()",
+                ".gas()",
+                ".uv()",
+            ]
+        ):
+            return "float"
+
+        if expr_str.replace("_", "").replace(".", "").isalpha():
+            name = expr_str.replace("_", "").replace(".", "")
+            if name in ("true", "false"):
+                return "bool"
+            inferred = self._var_type(name)
+            if inferred != "int":
+                return inferred
+
+        return "int"
+
     def _emit_interpolated_string(self, text: str, ctx_prefix, cv) -> str:
         """Generate snprintf for "text {expr} more" interpolation."""
         import re
-        parts = re.split(r'\{([^}]+)\}', text)
+
+        parts = re.split(r"\{([^}]+)\}", text)
         # parts = ["text ", "expr", " more"] — alternating text and expressions
 
         if len(parts) <= 1:
@@ -1379,31 +1617,21 @@ class CCodeGen:
                 expr_str = part.strip()
                 # Resolve the expression through a mini-parse
                 c_expr = self._resolve_interp_expr(expr_str, ctx_prefix, cv)
-                # Detect type for format specifier
-                if any(m in expr_str for m in [".read()", ".free_heap()", ".uptime()", ".id()", "_count()", ".count()"]):
-                    fmt_parts.append("%ld")
-                    args.append(f"(long)({c_expr})")
-                elif any(m in expr_str for m in [".is_connected()", ".is_on()", ".is_pressed()", ".is_empty()", ".is_full()", ".is_finger_present()", ".is_fault()"]):
-                    fmt_parts.append("%s")
-                    args.append(f'({c_expr} ? "true" : "false")')
-                elif any(m in expr_str for m in [".temperature()", ".humidity()", ".pressure()", ".lux()",
-                        ".voltage()", ".current()", ".power()", ".altitude()",
-                        ".accel_x()", ".accel_y()", ".accel_z()",
-                        ".gyro_x()", ".gyro_y()", ".gyro_z()",
-                        ".ambient()", ".object()", ".gas()", ".uv()"]):
+                # Try to infer type from the expression
+                inferred_type = self._infer_interp_type(expr_str)
+                if inferred_type == "float":
                     fmt_parts.append("%.2f")
                     args.append(f"(double)({c_expr})")
-                elif expr_str.replace("_", "").replace(".", "").isalpha():
-                    # Simple variable — assume int
-                    fmt_parts.append("%ld")
-                    args.append(f"(long)({c_expr})")
+                elif inferred_type == "bool":
+                    fmt_parts.append("%s")
+                    args.append(f'({c_expr} ? "true" : "false")')
                 else:
                     # Default — assume int
                     fmt_parts.append("%ld")
                     args.append(f"(long)({c_expr})")
 
         self._needs_sprintf_buf = True
-        buf_idx = getattr(self, '_sprintf_buf_idx', 0)
+        buf_idx = getattr(self, "_sprintf_buf_idx", 0)
         self._sprintf_buf_idx = (buf_idx + 1) % 16
         fmt = "".join(fmt_parts)
         args_str = ", ".join(args)
@@ -1415,11 +1643,11 @@ class CCodeGen:
     def _resolve_interp_expr(self, expr_str: str, ctx_prefix, cv) -> str:
         """Resolve a string interpolation expression to C code."""
         # Handle method calls: obj.method()
-        if '.' in expr_str and '(' in expr_str:
-            parts = expr_str.split('.', 1)
+        if "." in expr_str and "(" in expr_str:
+            parts = expr_str.split(".", 1)
             obj = parts[0].strip()
             rest = parts[1].strip()
-            method = rest.rstrip('()')
+            method = rest.rstrip("()")
 
             # Check builtins
             if obj in self.builtin_types:
@@ -1475,10 +1703,24 @@ class CCodeGen:
                 # Variable or expression — infer type from context
                 c_expr = self._emit_expr_str(part, ctx_prefix, cv)
                 # Check if it's a method call that returns bool
-                if isinstance(part, MethodCall) and part.method in ("is_connected", "is_on", "is_pressed", "is_empty", "is_full", "is_finger_present", "is_fault"):
+                if isinstance(part, MethodCall) and part.method in (
+                    "is_connected",
+                    "is_on",
+                    "is_pressed",
+                    "is_empty",
+                    "is_full",
+                    "is_finger_present",
+                    "is_fault",
+                ):
                     fmt_parts.append("%s")
                     args.append(f'({c_expr} ? "true" : "false")')
-                elif isinstance(part, MethodCall) and part.method in ("free_heap", "read", "list_count", "uptime", "id"):
+                elif isinstance(part, MethodCall) and part.method in (
+                    "free_heap",
+                    "read",
+                    "list_count",
+                    "uptime",
+                    "id",
+                ):
                     fmt_parts.append("%ld")
                     args.append(f"(long){c_expr}")
                 elif isinstance(part, BinaryExpr):
@@ -1492,7 +1734,7 @@ class CCodeGen:
 
         # Use a static buffer (volt_sprintf_buf) — declared in volt.h or generated
         self._needs_sprintf_buf = True
-        buf_idx = getattr(self, '_sprintf_buf_idx', 0)
+        buf_idx = getattr(self, "_sprintf_buf_idx", 0)
         self._sprintf_buf_idx = (buf_idx + 1) % 16
         fmt = "".join(fmt_parts)
         args_str = ", ".join(args)
@@ -1504,6 +1746,7 @@ class CCodeGen:
 # ============================================================
 # Public API
 # ============================================================
+
 
 def generate(program: Program, source_file: str = "main.volt") -> str:
     """Generate C source code from a transformed Volt AST."""
