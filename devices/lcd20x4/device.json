@@ -1,0 +1,15 @@
+{
+  "name": "LCD20x4",
+  "category": "display",
+  "interface": "i2c",
+  "default_address": "0x27",
+  "description": "20x4 character LCD display (I2C backpack)",
+  "c_prefix": "hd44780",
+  "c_source": "",
+  "methods": {
+    "clear":      { "returns": "void", "params": [], "description": "Clear the display" },
+    "print":      { "returns": "void", "params": [{"name":"text","type":"string"}], "description": "Print text at cursor" },
+    "set_cursor": { "returns": "void", "params": [{"name":"col","type":"int"},{"name":"row","type":"int"}], "description": "Move cursor (col 0-19, row 0-3)" },
+    "backlight":  { "returns": "void", "params": [{"name":"on","type":"int"}], "description": "Toggle backlight on/off" }
+  }
+}
