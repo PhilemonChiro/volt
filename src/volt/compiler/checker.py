@@ -63,6 +63,17 @@ METHOD_TYPES = {
     "Analog": {
         "read": (INT, []),
     },
+    "Servo": {
+        "move":         (VOID, [("angle", INT)]),
+        "move_us":      (VOID, [("microseconds", INT)]),
+        "angle":        (FLOAT, []),
+        "ease_to":      (VOID, [("angle", INT), ("duration", DURATION)]),
+        "ease_to_with": (VOID, [("angle", INT), ("duration", DURATION), ("easing", INT)]),
+        "sweep":        (VOID, [("from", INT), ("to", INT), ("duration", DURATION)]),
+        "sweep_ease":   (VOID, [("from", INT), ("to", INT), ("duration", DURATION), ("easing", INT)]),
+        "detach":       (VOID, []),
+        "set_max_angle": (VOID, [("max_angle", INT)]),
+    },
     "PWM": {
         "write":         (VOID, [("value", INT)]),
         "set_pwm":       (VOID, [("value", INT)]),

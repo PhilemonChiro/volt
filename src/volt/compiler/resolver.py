@@ -29,6 +29,23 @@ BUILTINS = {
     "light_sleep": Symbol("light_sleep", "builtin", "func", Region()),
     "true":       Symbol("true", "builtin", "bool", Region()),
     "false":      Symbol("false", "builtin", "bool", Region()),
+    # Type conversion builtins
+    "float":      Symbol("float", "builtin", "func", Region()),
+    "int":        Symbol("int", "builtin", "func", Region()),
+    # Servo easing constants
+    "linear":          Symbol("linear", "builtin", "int", Region()),
+    "ease_in":         Symbol("ease_in", "builtin", "int", Region()),
+    "ease_out":        Symbol("ease_out", "builtin", "int", Region()),
+    "ease_in_out":     Symbol("ease_in_out", "builtin", "int", Region()),
+    "ease_in_cubic":   Symbol("ease_in_cubic", "builtin", "int", Region()),
+    "ease_out_cubic":  Symbol("ease_out_cubic", "builtin", "int", Region()),
+    "ease_in_out_cubic": Symbol("ease_in_out_cubic", "builtin", "int", Region()),
+    "ease_in_sine":    Symbol("ease_in_sine", "builtin", "int", Region()),
+    "ease_out_sine":   Symbol("ease_out_sine", "builtin", "int", Region()),
+    "ease_in_out_sine": Symbol("ease_in_out_sine", "builtin", "int", Region()),
+    "ease_bounce":     Symbol("ease_bounce", "builtin", "int", Region()),
+    "ease_back":       Symbol("ease_back", "builtin", "int", Region()),
+    "ease_elastic":    Symbol("ease_elastic", "builtin", "int", Region()),
 }
 
 

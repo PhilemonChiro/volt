@@ -40,6 +40,17 @@ METHOD_MAP = {
     ("PullDownInput", "read"):        "pin_read({gpio})",
     ("PullDownInput", "is_pressed"): "(pin_read({gpio}) == HIGH)",
     ("Analog", "read"):    "pin_read({gpio})",
+    # Servo
+    ("Servo", "move"):          "servo_write({gpio}, {args})",
+    ("Servo", "move_us"):       "servo_write_us({gpio}, {args})",
+    ("Servo", "angle"):         "servo_read({gpio})",
+    ("Servo", "ease_to"):       "servo_ease_to({gpio}, {args}, SERVO_EASE_IN_OUT)",
+    ("Servo", "ease_to_with"):  "servo_ease_to({gpio}, {args})",
+    ("Servo", "sweep"):         "servo_sweep({gpio}, {args})",
+    ("Servo", "sweep_ease"):    "servo_sweep_ease({gpio}, {args})",
+    ("Servo", "detach"):        "servo_detach({gpio})",
+    ("Servo", "set_max_angle"): "servo_set_max_angle({gpio}, {args})",
+    # PWM
     ("PWM", "set_pwm"):    "pin_pwm_write({gpio}, {args})",
     ("PWM", "write"):      "pin_pwm_write({gpio}, {args})",
     ("PWM", "tone"):          "pin_tone({gpio}, {args})",
@@ -192,6 +203,22 @@ BUILTIN_MAP = {
     "int":         "(int32_t)({args})",
 }
 
+# Servo easing constants — Volt names → C macros
+_EASING_CONSTANTS = {
+    "linear":          "SERVO_LINEAR",
+    "ease_in":         "SERVO_EASE_IN",
+    "ease_out":        "SERVO_EASE_OUT",
+    "ease_in_out":     "SERVO_EASE_IN_OUT",
+    "ease_in_cubic":   "SERVO_EASE_IN_CUBIC",
+    "ease_out_cubic":  "SERVO_EASE_OUT_CUBIC",
+    "ease_in_out_cubic": "SERVO_EASE_IN_OUT_CUBIC",
+    "ease_in_sine":    "SERVO_EASE_IN_SINE",
+    "ease_out_sine":   "SERVO_EASE_OUT_SINE",
+    "ease_in_out_sine": "SERVO_EASE_IN_OUT_SINE",
+    "ease_bounce":     "SERVO_EASE_BOUNCE",
+    "ease_back":       "SERVO_EASE_BACK",
+    "ease_elastic":    "SERVO_EASE_ELASTIC",
+}
 
 
 # Load device registry — merge device methods into METHOD_MAP
@@ -349,6 +376,8 @@ class CCodeGen:
                 self._out('#include "volt/spi.h"')
             if "uart" in bus_types:
                 self._out('#include "volt/uart.h"')
+        if program.hardware and any(p.mode == "Servo" for p in program.hardware.pins):
+            self._out('#include "volt/servo.h"')
         if program.hardware and program.hardware.sensors:
             self._out('#include "volt/sensor.h"')
             # Check if any SPI devices are used
@@ -826,6 +855,8 @@ class CCodeGen:
                     pass  # ADC pins don't need explicit init
                 elif pin.mode == "PWM":
                     self._out(f"pin_set_pwm({pin.gpio});")
+                elif pin.mode == "Servo":
+                    self._out(f"servo_attach({pin.gpio});")
             self._out("")
 
             # Bus initialization (I2C and SPI) — chip-aware defaults
@@ -1124,6 +1155,10 @@ class CCodeGen:
             return str(expr.milliseconds)
 
         if isinstance(expr, VarRef):
+            # Servo easing constants — map Volt names to C macros
+            easing = _EASING_CONSTANTS.get(expr.name)
+            if easing is not None:
+                return easing
             name = _c_name(expr.name)
             if ctx_prefix and expr.name in cv:
                 return f"{ctx_prefix}{name}"
