@@ -144,10 +144,6 @@ METHOD_TYPES = {
         "text":   (VOID, [("x", INT), ("y", INT), ("text", STRING)]),
         "show":   (VOID, []),
     },
-    "SX1262": {
-        "send":       (BOOL, [("data", STRING)]),
-        "on_receive": (VOID, []),
-    },
     # Additional I2C devices
     "BMP180": {
         "temperature": (FLOAT, []),
@@ -273,8 +269,7 @@ METHOD_TYPES = {
         "free_heap": (INT, []),
     },
     "OTA": {
-        "enable": (VOID, []),
-        "check":  (VOID, []),
+        "enable": (VOID, []),  # stub — driver not yet implemented
     },
     "UART": {
         "print":     (VOID, [("text", STRING)]),

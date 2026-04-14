@@ -1272,12 +1272,19 @@ class CCodeGen:
         return self._var_types.get(name, "int")
 
     def _all_stmts(self, prog):
-        """Collect all statements from tasks + functions + setup + loop."""
+        """Collect all statements from tasks + functions + machines + setup + loop."""
         stmts = []
         for t in prog.tasks:
             stmts.extend(t.body)
         for f in prog.functions:
             stmts.extend(f.body)
+        for m in prog.machines:
+            for state in m.states:
+                stmts.extend(state.enter_body)
+                stmts.extend(state.exit_body)
+                stmts.extend(state.body)
+                for trans in state.transitions:
+                    stmts.extend(trans.action)
         if prog.setup:
             stmts.extend(prog.setup.body)
         if prog.loop:
@@ -1388,6 +1395,14 @@ class CCodeGen:
                 key = (mode.split(".")[0], method)
                 if key in METHOD_MAP:
                     return METHOD_MAP[key].format(gpio=gpio, args="")
+            # Check sensors/devices
+            if obj in self.sensor_map:
+                stype = self.sensor_map[obj]
+                key = (stype, method)
+                if key in METHOD_MAP:
+                    return METHOD_MAP[key].format(sensor=f"&_{obj}", args="")
+                # Fallback: use c_prefix from sensor type
+                return f"{stype.lower()}_{method}(&_{obj})"
             return f"{obj}_{method}()"
 
         # Handle simple variable reference with ctx prefix

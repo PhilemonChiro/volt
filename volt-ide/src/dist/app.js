@@ -469,10 +469,6 @@
             { label: "text", detail: "(x: int, y: int, text: string) -> void", insert: "text(${1:0}, ${2:0}, \"${3:hello}\")" },
             { label: "show", detail: "() -> void — flush to display", insert: "show()" },
         ],
-        SX1262: [
-            { label: "send", detail: "(data: string) -> bool", insert: "send(\"${1:data}\")" },
-            { label: "on_receive", detail: "event source", insert: "on_receive" },
-        ],
     };
 
     // -- Types for type annotations --
@@ -540,7 +536,7 @@
             var line = model.getLineContent(i);
             var pm = line.match(/\bpin\s+(\w+)\s*:\s*(Output|PullUpInput|PullDownInput|Input|Analog|PWM|Servo)/);
             if (pm) pins[pm[1]] = pm[2];
-            var sm = line.match(/\bdevice\s+(\w+)\s*:\s*(BME280|AHT20|SHT31|DHT22|MPU6050|INA219|DS3231|BH1750|VEML7700|SSD1306|SX1262)/);
+            var sm = line.match(/\bdevice\s+(\w+)\s*:\s*(BME280|AHT20|SHT31|DHT22|MPU6050|INA219|DS3231|BH1750|VEML7700|SSD1306)/);
             if (sm) sensors[sm[1]] = sm[2];
         }
         return { pins: pins, sensors: sensors };
