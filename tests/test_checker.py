@@ -105,9 +105,17 @@ setup {
     let x = 1 + 3.14
 }
 """)
-check("int + float (no implicit)", errs.has_errors)
-check("hint about conversion", any(e.hint and "float" in e.hint for e in errs.errors),
-      f"hints: {[e.hint for e in errs.errors]}")
+check("int + float auto-promotes to float", not errs.has_errors)
+
+errs = type_check("""
+setup {
+    var temp: float = 25.5
+    if temp > 30 {
+        log("hot", "yes")
+    }
+}
+""")
+check("float > int auto-promotes", not errs.has_errors)
 
 
 # ============================================================

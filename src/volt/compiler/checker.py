@@ -351,6 +351,29 @@ BINARY_OP_TYPES = {
     (FLOAT, ">", FLOAT): BOOL,
     (FLOAT, "<=", FLOAT): BOOL,
     (FLOAT, ">=", FLOAT): BOOL,
+
+    # Mixed int/float — auto-promotes int to float (matches C behavior)
+    (INT, "+", FLOAT): FLOAT,
+    (FLOAT, "+", INT): FLOAT,
+    (INT, "-", FLOAT): FLOAT,
+    (FLOAT, "-", INT): FLOAT,
+    (INT, "*", FLOAT): FLOAT,
+    (FLOAT, "*", INT): FLOAT,
+    (INT, "/", FLOAT): FLOAT,
+    (FLOAT, "/", INT): FLOAT,
+    (INT, "==", FLOAT): BOOL,
+    (FLOAT, "==", INT): BOOL,
+    (INT, "!=", FLOAT): BOOL,
+    (FLOAT, "!=", INT): BOOL,
+    (INT, "<", FLOAT): BOOL,
+    (FLOAT, "<", INT): BOOL,
+    (INT, ">", FLOAT): BOOL,
+    (FLOAT, ">", INT): BOOL,
+    (INT, "<=", FLOAT): BOOL,
+    (FLOAT, "<=", INT): BOOL,
+    (INT, ">=", FLOAT): BOOL,
+    (FLOAT, ">=", INT): BOOL,
+
     (STRING, "==", STRING): BOOL,
     (STRING, "!=", STRING): BOOL,
     (BOOL, "==", BOOL): BOOL,
@@ -692,18 +715,10 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
 
         result = BINARY_OP_TYPES.get((left_type, expr.op, right_type))
         if result is None:
-            # Check for common mistake: int + float
-            if {left_type, right_type} == {INT, FLOAT} and expr.op in {"+", "-", "*", "/"}:
-                errors.error(
-                    expr.region, "TYPE MISMATCH",
-                    f"Cannot use `{expr.op}` between `{left_type}` and `{right_type}`.",
-                    hint=f"Convert explicitly: float({left_type}) or int({right_type}).",
-                )
-            else:
-                errors.error(
-                    expr.region, "TYPE MISMATCH",
-                    f"Cannot use `{expr.op}` between `{left_type}` and `{right_type}`.",
-                )
+            errors.error(
+                expr.region, "TYPE MISMATCH",
+                f"Cannot use `{expr.op}` between `{left_type}` and `{right_type}`.",
+            )
             return ERROR_TYPE
 
         expr.result_type = result

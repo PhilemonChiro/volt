@@ -390,7 +390,7 @@ print("\n=== ERROR: Type Mismatch ===\n")
 # ============================================================
 
 compile_fail("int = string", 'setup {\n    let x: int = "hello"\n}\n', "declared as")
-compile_fail("int + float", "setup {\n    let x = 1 + 3.14\n}\n", "cannot")
+c = compile_ok("int + float auto-promote", "setup {\n    let x = 1 + 3.14\n}\n")
 compile_fail("if int", "setup {\n    if 42 {\n        log(\"no\")\n    }\n}\n", "bool")
 compile_fail("wrong arg type", """
 func add(a: int, b: int) -> int {
