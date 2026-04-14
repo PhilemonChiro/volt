@@ -40,6 +40,10 @@ METHOD_MAP = {
     ("PullDownInput", "read"):        "pin_read({gpio})",
     ("PullDownInput", "is_pressed"): "(pin_read({gpio}) == HIGH)",
     ("Analog", "read"):    "pin_read({gpio})",
+    # DAC
+    ("DAC", "write"):      "pin_dac_write({gpio}, {args})",
+    ("DAC", "voltage"):    "pin_dac_voltage({gpio}, {args})",
+    ("DAC", "read"):       "pin_dac_read({gpio})",
     # Servo
     ("Servo", "move"):          "servo_write({gpio}, {args})",
     ("Servo", "move_us"):       "servo_write_us({gpio}, {args})",
@@ -857,6 +861,8 @@ class CCodeGen:
                     self._out(f"pin_set_pwm({pin.gpio});")
                 elif pin.mode == "Servo":
                     self._out(f"servo_attach({pin.gpio});")
+                elif pin.mode == "DAC":
+                    self._out(f"pin_set_dac({pin.gpio});")
             self._out("")
 
             # Bus initialization (I2C and SPI) — chip-aware defaults

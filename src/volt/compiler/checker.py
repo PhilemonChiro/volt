@@ -63,6 +63,11 @@ METHOD_TYPES = {
     "Analog": {
         "read": (INT, []),
     },
+    "DAC": {
+        "write":   (VOID, [("value", INT)]),
+        "voltage": (VOID, [("volts", FLOAT)]),
+        "read":    (INT, []),
+    },
     "Servo": {
         "move":         (VOID, [("angle", INT)]),
         "move_us":      (VOID, [("microseconds", INT)]),

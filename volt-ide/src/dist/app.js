@@ -83,7 +83,7 @@
         var_keywords: ["let", "var", "storage"],
         modifiers: ["strict", "initial", "debounce", "throttle"],
         lifecycle: ["enter", "exit", "after"],
-        pin_modes: ["Output", "Input", "PullUpInput", "PullDownInput", "Analog", "PWM", "Servo"],
+        pin_modes: ["Output", "Input", "PullUpInput", "PullDownInput", "Analog", "PWM", "Servo", "DAC"],
         primitives: ["int", "float", "bool", "string", "void", "Duration", "u8", "u16", "u32", "i8", "i16"],
         builtins: ["wifi", "mqtt", "http", "system", "ota"],
         builtin_fns: ["log", "sleep", "deep_sleep", "light_sleep", "float", "int"],
@@ -254,7 +254,7 @@
     // -- Snippet templates for top-level declarations --
     var SNIPPETS = [
         { label: "chip", detail: "Declare target chip", insert: "chip ${1|esp32,esp8266,rp2040,stm32f103|}", kind: Kind.Keyword },
-        { label: "hardware", detail: "Hardware pin block", insert: "hardware {\n\tpin ${1:name}: ${2|Output,Input,PullUpInput,PullDownInput,Analog,PWM,Servo|} = ${3:pin_number}\n}", kind: Kind.Keyword },
+        { label: "hardware", detail: "Hardware pin block", insert: "hardware {\n\tpin ${1:name}: ${2|Output,Input,PullUpInput,PullDownInput,Analog,PWM,Servo,DAC|} = ${3:pin_number}\n}", kind: Kind.Keyword },
         { label: "setup", detail: "Runs once at boot", insert: "setup {\n\t$0\n}", kind: Kind.Keyword },
         { label: "loop", detail: "Super-loop, runs forever", insert: "loop {\n\t$0\n}", kind: Kind.Keyword },
         { label: "include", detail: "Include another .volt file", insert: "include \"${0:file.volt}\"", kind: Kind.Keyword },
@@ -297,6 +297,7 @@
         { label: "pin Analog", detail: "Analog input (ADC)", insert: "pin ${1:sensor}: Analog = ${0:34}", kind: Kind.Property },
         { label: "pin PWM", detail: "PWM output", insert: "pin ${1:motor}: PWM = ${0:25}", kind: Kind.Property },
         { label: "pin Servo", detail: "Servo motor (0-180\u00B0)", insert: "pin ${1:arm}: Servo = ${0:13}", kind: Kind.Property },
+        { label: "pin DAC", detail: "Analog output (ESP32: GPIO 25/26)", insert: "pin ${1:dac}: DAC = ${0:25}", kind: Kind.Property },
         { label: "bus I2C", detail: "I2C bus declaration", insert: "bus ${1:sensors}: I2C(sda: ${2:21}, scl: ${3:22})", kind: Kind.Property },
         { label: "device BME280", detail: "Temp/humidity/pressure", insert: "device ${1:bme}: BME280 on ${2:sensors} at ${0:0x76}", kind: Kind.Property },
         { label: "device AHT20", detail: "Temp/humidity", insert: "device ${1:aht}: AHT20 on ${2:sensors} at ${0:0x38}", kind: Kind.Property },
@@ -412,6 +413,11 @@
             { label: "detach", detail: "() -> void — release servo (goes limp)", insert: "detach()" },
             { label: "set_max_angle", detail: "(angle: int) -> void — for 270\u00B0 servos", insert: "set_max_angle(${1:270})" },
         ],
+        DAC: [
+            { label: "write", detail: "(value: int) -> void — raw 0-255", insert: "write(${1:128})" },
+            { label: "voltage", detail: "(volts: float) -> void — 0.0-3.3V", insert: "voltage(${1:1.65})" },
+            { label: "read", detail: "() -> int — current DAC value 0-255", insert: "read()" },
+        ],
     };
 
     // -- Methods on device types --
@@ -486,6 +492,7 @@
         { label: "Analog", detail: "ADC analog input" },
         { label: "PWM", detail: "PWM output" },
         { label: "Servo", detail: "Servo motor control (0-180\u00B0, 50Hz PWM)" },
+        { label: "DAC", detail: "Analog voltage output (ESP32: GPIO 25/26 only)" },
     ];
 
     // -- Chip names (after "chip ") --
@@ -534,7 +541,7 @@
         var lines = model.getLineCount();
         for (var i = 1; i <= lines; i++) {
             var line = model.getLineContent(i);
-            var pm = line.match(/\bpin\s+(\w+)\s*:\s*(Output|PullUpInput|PullDownInput|Input|Analog|PWM|Servo)/);
+            var pm = line.match(/\bpin\s+(\w+)\s*:\s*(Output|PullUpInput|PullDownInput|Input|Analog|PWM|Servo|DAC)/);
             if (pm) pins[pm[1]] = pm[2];
             var sm = line.match(/\bdevice\s+(\w+)\s*:\s*(BME280|AHT20|SHT31|DHT22|MPU6050|INA219|DS3231|BH1750|VEML7700|SSD1306)/);
             if (sm) sensors[sm[1]] = sm[2];
@@ -1073,6 +1080,7 @@
         "PullDownInput":{ desc: "Input with internal pull-down resistor", detail: "Methods: `read()`, `is_pressed()`, `press` (event for `on` blocks)" },
         Analog:        { desc: "ADC analog input", detail: "Returns 0-4095 (12-bit). On ESP32: ADC2 pins are blocked during WiFi — use ADC1 (GPIO 32-39)." },
         PWM:           { desc: "Pulse-width modulation output", detail: "Methods: `write(value)`, `set_pwm(value)` — duty cycle 0-255\nTone: `tone(freq)`, `tone_ms(freq, dur)`, `no_tone()`\nPatterns: `click()`, `beep_success()`, `beep_error()`, `beep_warning()`, `beep_startup()`, `beep_shutdown()`, `beep_notify()`, `beep_alarm()`, `beep_keypad(digit)`" },
+        DAC:           { desc: "Digital-to-Analog Converter — true analog voltage output", detail: "ESP32 only: GPIO 25 (ch0) and GPIO 26 (ch1). 8-bit resolution (0-255 = 0-3.3V).\nOutputs a real analog voltage, not PWM. No filtering needed.\n\nMethods:\n- `write(value)` \u2014 raw 0-255\n- `voltage(volts)` \u2014 set exact voltage (0.0-3.3V)\n- `read()` \u2014 current DAC value\n\nRP2040/STM32: no internal DAC. Use MCP4725 (I2C) instead." },
         Servo:         { desc: "Servo motor control (50Hz PWM)", detail: "Works with SG90, MG90S, MG996R, DS3218, and any hobby servo.\n\nMethods:\n- `move(angle)` — instant position (0-180\u00B0)\n- `ease_to(angle, duration)` — smooth movement\n- `ease_to_with(angle, duration, easing)` — with curve\n- `sweep(from, to, duration)` — linear sweep\n- `sweep_ease(from, to, duration, easing)` — eased sweep\n- `angle()` — read current position\n- `detach()` — release (servo goes limp)\n- `set_max_angle(270)` — for 270\u00B0 servos\n\nEasing: `linear`, `ease_in`, `ease_out`, `ease_in_out`, `ease_bounce`, `ease_back`, `ease_elastic`" },
         int:           { desc: "32-bit signed integer (-2B to +2B)", detail: "Arithmetic: `+`, `-`, `*`, `/`, `%`\nConvert to float: `float(x)`" },
         float:         { desc: "32-bit floating point", detail: "Arithmetic: `+`, `-`, `*`, `/`\nConvert to int: `int(x)`\nNote: no `%` for floats" },
@@ -1242,6 +1250,10 @@
         "tone_ms":       { label: "tone_ms(frequency: int, duration: int)", params: [{ label: "frequency: int", doc: "Frequency in Hz" }, { label: "duration: int", doc: "Duration in ms" }] },
         "beep_keypad":   { label: "beep_keypad(digit: int)", params: [{ label: "digit: int", doc: "Digit 0-9 for DTMF-like beep" }] },
         // Servo methods
+        // DAC methods (shared names — context-dependent)
+        "dac_write":     { label: "write(value: int)", params: [{ label: "value: int", doc: "DAC value 0-255 (0V to 3.3V)" }] },
+        "voltage":       { label: "voltage(volts: float)", params: [{ label: "volts: float", doc: "Output voltage 0.0 to 3.3V" }] },
+        // Servo methods
         "move":          { label: "move(angle: int)", params: [{ label: "angle: int", doc: "Target angle 0-180 degrees" }] },
         "move_us":       { label: "move_us(microseconds: int)", params: [{ label: "microseconds: int", doc: "Pulse width in \u00B5s (500-2500)" }] },
         "ease_to":       { label: "ease_to(angle: int, duration: Duration)", params: [{ label: "angle: int", doc: "Target angle 0-180\u00B0" }, { label: "duration: Duration", doc: "Move time (e.g. 500ms, 1s)" }] },
@@ -1317,6 +1329,11 @@
         "PWM.beep_notify":   { sig: ".beep_notify() -> void", desc: "Gentle double beep for notifications.", detail: "Use case: New message, event fired, threshold reached." },
         "PWM.beep_alarm":    { sig: ".beep_alarm() -> void", desc: "Urgent siren pattern (repeats 3x).", detail: "Use case: Intrusion detected, critical temperature, emergency stop." },
         "PWM.beep_keypad":   { sig: ".beep_keypad(digit: int) -> void", desc: "DTMF-like beep for digits 0-9.", detail: "Use case: Keypad input feedback, phone dialing simulation." },
+        // Servo
+        // DAC
+        "DAC.write":          { sig: ".write(value: int) -> void", desc: "Set DAC output (0-255).", detail: "0 = 0V, 128 = ~1.65V, 255 = 3.3V.\n\nUse case: Audio waveform generation, analog control signals, bias voltage for sensors.\n\nExample: `dac.write(128)` \u2014 output ~1.65V" },
+        "DAC.voltage":        { sig: ".voltage(volts: float) -> void", desc: "Set DAC to an exact voltage (0.0-3.3V).", detail: "Internally mapped to 0-255 range.\n\nUse case: Precision voltage reference, sensor calibration, threshold setting.\n\nExample: `dac.voltage(1.5)` \u2014 output exactly 1.5V" },
+        "DAC.read":           { sig: ".read() -> int", desc: "Read the current DAC value (0-255).", detail: "Returns the last value written, not a hardware readback.\n\nExample: `var level: int = dac.read()`" },
         // Servo
         "Servo.move":         { sig: ".move(angle: int) -> void", desc: "Move to angle instantly (0-180\u00B0).", detail: "Use case: Set a position immediately. No interpolation \u2014 the servo jumps.\n\nExample: `arm.move(90)` \u2014 center position" },
         "Servo.move_us":      { sig: ".move_us(microseconds: int) -> void", desc: "Set exact pulse width in microseconds.", detail: "Bypasses angle mapping. Standard range: 500-2500\u00B5s.\n\nUse case: Fine-tuning when you know your servo's exact pulse range.\n\nExample: `arm.move_us(1500)` \u2014 center for most servos" },

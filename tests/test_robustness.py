@@ -368,6 +368,57 @@ setup {
 
 
 # ============================================================
+print("\n=== DAC Pin Mode ===\n")
+# ============================================================
+
+c = compile_ok("dac_basic", """
+chip esp32
+hardware {
+    pin audio: DAC = 25
+}
+setup {
+    audio.write(128)
+}
+""")
+c_has(c, "pin_set_dac(25)", "DAC init")
+c_has(c, "pin_dac_write(25,", "DAC write")
+
+c = compile_ok("dac_voltage", """
+chip esp32
+hardware {
+    pin ref: DAC = 26
+}
+setup {
+    ref.voltage(1.65)
+}
+""")
+c_has(c, "pin_dac_voltage(26,", "DAC voltage")
+
+c = compile_ok("dac_read", """
+chip esp32
+hardware {
+    pin dac: DAC = 25
+}
+setup {
+    var level: int = dac.read()
+}
+""")
+c_has(c, "pin_dac_read(25)", "DAC read")
+
+c = compile_ok("dac_rp2040", """
+chip rp2040
+hardware {
+    pin dac: DAC = 15
+}
+setup {
+    dac.write(100)
+}
+""")
+c_has(c, "pin_set_dac(15)", "DAC compiles on rp2040")
+c_has(c, "int main(void)", "rp2040 entry point with DAC")
+
+
+# ============================================================
 # Summary
 # ============================================================
 

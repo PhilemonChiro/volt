@@ -96,4 +96,22 @@ void pin_blink(uint8_t pin, uint32_t interval_ms);
 // Turn on for duration_ms, then turn off.
 void pin_blink_once(uint8_t pin, uint32_t duration_ms);
 
+// ---- DAC (Digital-to-Analog Converter) ----
+// ESP32: 8-bit hardware DAC on GPIO 25 (ch0) and GPIO 26 (ch1).
+// Outputs a true analog voltage (0 to 3.3V), not PWM.
+// RP2040/STM32: no internal DAC — use an external I2C DAC (MCP4725).
+
+// Configure a pin as DAC output. Only GPIO 25 and 26 on ESP32.
+volt_error_t pin_set_dac(uint8_t pin);
+
+// Set DAC raw value (0-255). 0 = 0V, 255 = 3.3V.
+volt_error_t pin_dac_write(uint8_t pin, uint8_t value);
+
+// Set DAC output to a specific voltage (0.0 - 3.3V).
+// Internally maps to 0-255 range.
+volt_error_t pin_dac_voltage(uint8_t pin, float voltage);
+
+// Read the current DAC value (0-255).
+uint8_t pin_dac_read(uint8_t pin);
+
 #endif // VOLT_PIN_H

@@ -304,3 +304,27 @@ void pin_blink_once(uint8_t pin, uint32_t duration_ms)
     sleep_ms(duration_ms);
     pin_write(pin, LOW);
 }
+
+// ---- DAC ----
+// RP2040 has no hardware DAC. These return VOLT_ERR_NOT_SUPPORTED.
+// Use an external I2C DAC (MCP4725) or PWM with an RC filter instead.
+
+volt_error_t pin_set_dac(uint8_t pin)
+{
+    return VOLT_ERR_NOT_SUPPORTED;
+}
+
+volt_error_t pin_dac_write(uint8_t pin, uint8_t value)
+{
+    return VOLT_ERR_NOT_SUPPORTED;
+}
+
+volt_error_t pin_dac_voltage(uint8_t pin, float voltage)
+{
+    return VOLT_ERR_NOT_SUPPORTED;
+}
+
+uint8_t pin_dac_read(uint8_t pin)
+{
+    return 0;
+}

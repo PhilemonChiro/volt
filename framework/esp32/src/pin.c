@@ -4,6 +4,7 @@
 #include "volt/log.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "driver/dac.h"
 #include "esp_attr.h"
 
 // Track the mode of each pin so we can validate operations
@@ -14,6 +15,7 @@ typedef enum {
     PIN_MODE_INPUT_PULLUP,
     PIN_MODE_INPUT_PULLDOWN,
     PIN_MODE_PWM,
+    PIN_MODE_DAC,
 } pin_mode_t;
 
 // ESP32 has GPIO 0-39 (40 pins total)
@@ -423,4 +425,67 @@ void pin_blink_once(uint8_t pin, uint32_t duration_ms)
     pin_write(pin, HIGH);
     vTaskDelay(duration_ms / portTICK_PERIOD_MS);
     pin_write(pin, LOW);
+}
+
+// ---- DAC ----
+// ESP32 has 2 hardware DAC channels:
+//   GPIO 25 → DAC channel 0
+//   GPIO 26 → DAC channel 1
+
+static uint8_t dac_values[PIN_COUNT];
+
+static dac_channel_t pin_to_dac_channel(uint8_t pin)
+{
+    if (pin == 25) return DAC_CHANNEL_1;  // ESP-IDF: DAC_CHANNEL_1 = GPIO25
+    if (pin == 26) return DAC_CHANNEL_2;  // ESP-IDF: DAC_CHANNEL_2 = GPIO26
+    return -1;
+}
+
+volt_error_t pin_set_dac(uint8_t pin)
+{
+    if (pin != 25 && pin != 26) {
+        log_error("pin", "GPIO %d has no DAC — only GPIO 25 and 26", pin);
+        return VOLT_ERR_NOT_SUPPORTED;
+    }
+    if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
+
+    dac_channel_t ch = pin_to_dac_channel(pin);
+    esp_err_t err = dac_output_enable(ch);
+    if (err != ESP_OK) {
+        log_error("pin", "DAC enable failed on GPIO %d (esp_err=%d)", pin, err);
+        return VOLT_ERR_PIN_CONFIG_FAILED;
+    }
+
+    dac_output_voltage(ch, 0);
+    dac_values[pin] = 0;
+    pin_modes[pin] = PIN_MODE_DAC;
+    log_debug("pin", "GPIO %d configured as DAC output", pin);
+    return VOLT_OK;
+}
+
+volt_error_t pin_dac_write(uint8_t pin, uint8_t value)
+{
+    if (pin >= PIN_COUNT) return VOLT_ERR_INVALID_PIN;
+    if (pin_modes[pin] != PIN_MODE_DAC) return VOLT_ERR_WRONG_PIN_MODE;
+
+    dac_channel_t ch = pin_to_dac_channel(pin);
+    dac_output_voltage(ch, value);
+    dac_values[pin] = value;
+    return VOLT_OK;
+}
+
+volt_error_t pin_dac_voltage(uint8_t pin, float voltage)
+{
+    if (voltage < 0.0f) voltage = 0.0f;
+    if (voltage > 3.3f) voltage = 3.3f;
+
+    uint8_t raw = (uint8_t)(voltage / 3.3f * 255.0f);
+    return pin_dac_write(pin, raw);
+}
+
+uint8_t pin_dac_read(uint8_t pin)
+{
+    if (pin >= PIN_COUNT) return 0;
+    if (pin_modes[pin] != PIN_MODE_DAC) return 0;
+    return dac_values[pin];
 }
