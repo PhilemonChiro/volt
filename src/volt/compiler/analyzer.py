@@ -162,7 +162,17 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
     for fname, body in all_bodies:
         _validate_break_continue(body, False, fname, errors)
 
-    # 12. Warn about unused channels
+    # 12. Warn about non-void functions with no return statement
+    for func in program.functions:
+        if func.return_type and func.return_type != "void":
+            if not _has_return(func.body):
+                errors.warning(
+                    func.region, "MISSING RETURN",
+                    f"Function `{func.name}` declares return type `{func.return_type}` "
+                    f"but may not return a value on all paths.",
+                )
+
+    # 13. Warn about unused channels
     if program.channels:
         _warn_unused_channels(program, errors)
 
@@ -266,6 +276,27 @@ def _find_crossing_vars(stmts: list, yield_points: list[Region]) -> list[str]:
 def _has_yield(stmts: list) -> bool:
     """Check if a statement list contains any yield point."""
     return len(_find_yield_points(stmts)) > 0
+
+
+def _has_return(stmts: list) -> bool:
+    """Check if a statement list has a return statement (any nesting level)."""
+    for stmt in stmts:
+        if isinstance(stmt, ReturnStmt):
+            return True
+        if isinstance(stmt, IfStmt):
+            if _has_return(stmt.then_body):
+                return True
+            if isinstance(stmt.else_body, list) and _has_return(stmt.else_body):
+                return True
+            if isinstance(stmt.else_body, IfStmt) and _has_return([stmt.else_body]):
+                return True
+        if isinstance(stmt, (WhileStmt, ForStmt)):
+            if _has_return(stmt.body):
+                return True
+        if isinstance(stmt, EveryBlock):
+            if _has_return(stmt.body):
+                return True
+    return False
 
 
 # ============================================================

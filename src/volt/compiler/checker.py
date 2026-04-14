@@ -539,6 +539,13 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
         ))
 
     elif isinstance(stmt, AssignExpr):
+        # Validate target is an l-value (variable or field, not a literal)
+        if not isinstance(stmt.target, (VarRef, DotAccess)):
+            errors.error(stmt.region, "SYNTAX ERROR",
+                         "Cannot assign to this expression — left side must be a variable.",
+                         hint="Use `var name = value` to declare, or assign to an existing variable.")
+            return
+
         target_type = _infer(stmt.target, scope, errors)
         val_type = _infer(stmt.value, scope, errors)
 

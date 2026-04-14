@@ -243,11 +243,16 @@ def _resolve_stmt(stmt, scope: Scope, errors: CompilerErrors):
         # Resolve the value expression first (before declaring the var)
         if stmt.value:
             _resolve_expr(stmt.value, scope, errors)
-        # Declare the variable in current scope
-        scope.declare(Symbol(
+        # Declare the variable in current scope (check for duplicates)
+        existing = scope.declare(Symbol(
             stmt.name, "var", stmt.type_name or "unknown", stmt.region,
             mutable=stmt.mutable,
         ))
+        if existing is not None:
+            errors.error(stmt.region, "NAME ERROR",
+                         f"Variable `{stmt.name}` is already declared in this scope.",
+                         hint=f"First declared at line {existing.region.start_line}."
+                              if existing.region else None)
 
     elif isinstance(stmt, AssignExpr):
         _resolve_expr(stmt.target, scope, errors)

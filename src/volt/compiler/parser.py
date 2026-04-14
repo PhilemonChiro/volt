@@ -93,6 +93,8 @@ class ASTBuilder(Transformer):
             if child is None:
                 continue
             elif isinstance(child, ChipDecl):
+                if prog.chip is not None:
+                    raise ValueError(f"Multiple chip declarations — already declared '{prog.chip.target}' (line {prog.chip.region.start_line})")
                 prog.chip = child
             elif isinstance(child, HardwareBlock):
                 prog.hardware = child
