@@ -152,6 +152,18 @@ METHOD_TYPES = {
         "write":       (VOID, [("value", INT)]),
         "set_voltage": (VOID, [("voltage", FLOAT), ("vref", FLOAT)]),
     },
+    "MAX30102": {
+        "red":               (INT, []),
+        "ir":                (INT, []),
+        "temperature":       (FLOAT, []),
+        "is_finger_present": (INT, []),
+    },
+    "MAX30100": {
+        "red":               (INT, []),
+        "ir":                (INT, []),
+        "temperature":       (FLOAT, []),
+        "is_finger_present": (INT, []),
+    },
     # SPI devices
     "MAX31855": {
         "temperature": (FLOAT, []),

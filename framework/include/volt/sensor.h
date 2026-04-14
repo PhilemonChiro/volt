@@ -206,4 +206,32 @@ volt_error_t mcp4725_init(mcp4725_t *dev, uint8_t bus_id, uint8_t addr);
 void mcp4725_write(mcp4725_t *dev, uint16_t value);
 void mcp4725_set_voltage(mcp4725_t *dev, float voltage, float vref);
 
+// ============================================================
+// MAX30102 — Pulse Oximeter + Heart Rate (addr: 0x57)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+    uint32_t ir_value, red_value;
+    float temperature;
+} max30102_t;
+volt_error_t max30102_init(max30102_t *dev, uint8_t bus_id, uint8_t addr);
+int max30102_red(max30102_t *dev);
+int max30102_ir(max30102_t *dev);
+float max30102_temperature(max30102_t *dev);
+int max30102_is_finger_present(max30102_t *dev);
+
+// ============================================================
+// MAX30100 — Pulse Oximeter (older, 16-bit, addr: 0x57)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+    uint16_t ir_value, red_value;
+    float temperature;
+} max30100_t;
+volt_error_t max30100_init(max30100_t *dev, uint8_t bus_id, uint8_t addr);
+int max30100_red(max30100_t *dev);
+int max30100_ir(max30100_t *dev);
+float max30100_temperature(max30100_t *dev);
+int max30100_is_finger_present(max30100_t *dev);
+
 #endif // VOLT_SENSOR_H

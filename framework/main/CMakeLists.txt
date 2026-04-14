@@ -31,5 +31,7 @@ idf_component_register(
          "../src/sensor_pcf8574.c"
          "../src/sensor_mlx90614.c"
          "../src/sensor_mcp4725.c"
+         "../src/sensor_max30102.c"
+         "../src/sensor_max30100.c"
     INCLUDE_DIRS "../include"
 )
