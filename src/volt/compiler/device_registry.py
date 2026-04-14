@@ -87,7 +87,8 @@ class DeviceRegistry:
                         dev = DeviceInfo(data)
                         self.devices[dev.name] = dev
                     except (json.JSONDecodeError, KeyError) as e:
-                        pass  # skip malformed files silently
+                        import sys
+                        print(f"Warning: skipping malformed device file {path}: {e}", file=sys.stderr)
 
         self._loaded = True
 
