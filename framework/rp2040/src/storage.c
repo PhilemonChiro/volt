@@ -38,6 +38,9 @@
 #define MAX_KEY_LEN         15
 #define MAX_STR_LEN         255
 
+// Spinlock for protecting flash operations between cores
+static spin_lock_t *s_flash_lock = NULL;
+
 // Entry types
 #define ENTRY_INT   1
 #define ENTRY_FLOAT 2
@@ -292,11 +295,14 @@ static void flash_commit_all(void)
         s_dirty[i].active = false;
     }
 
-    // Write to flash — must disable interrupts during flash operations
+    // Write to flash — protect against concurrent access from other core
     uint32_t target = inactive_sector();
     uint32_t ints = save_and_disable_interrupts();
+    uint32_t lock_num = spin_lock_get_num(s_flash_lock);
+    spin_lock_blocking(s_flash_lock);
     flash_range_erase(target, FLASH_SECTOR_SIZE);
     flash_range_program(target, page_buf, FLASH_SECTOR_SIZE);
+    spin_unlock(s_flash_lock, lock_num);
     restore_interrupts(ints);
 }
 
@@ -333,6 +339,9 @@ static bool flush_timer_callback(repeating_timer_t *t)
 volt_error_t storage_init(void)
 {
     if (s_initialized) return VOLT_OK;
+
+    // Claim an unused spinlock for flash protection between cores
+    s_flash_lock = spin_lock_claim_unused(true);
 
     memset(s_dirty, 0, sizeof(s_dirty));
     memset(s_lists, 0, sizeof(s_lists));

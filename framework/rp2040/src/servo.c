@@ -212,8 +212,28 @@ volt_error_t servo_detach(uint8_t pin)
     int idx = find_servo(pin);
     if (idx < 0) return VOLT_ERR_INVALID_PIN;
 
-    pwm_set_chan_level(servos[idx].slice, servos[idx].channel, 0);
-    pwm_set_enabled(servos[idx].slice, false);
+    uint slice = servos[idx].slice;
+    uint channel = servos[idx].channel;
+
+    // Set channel level to 0 (stop PWM on this channel)
+    pwm_set_chan_level(slice, channel, 0);
+
+    // Check if any other servo on this slice is using the other channel
+    bool other_channel_in_use = false;
+    for (int i = 0; i < MAX_SERVOS; i++) {
+        if (i != idx && servos[i].attached &&
+            servos[i].slice == slice &&
+            servos[i].channel != channel) {
+            other_channel_in_use = true;
+            break;
+        }
+    }
+
+    // Only disable the entire slice if no other servo uses the other channel
+    if (!other_channel_in_use) {
+        pwm_set_enabled(slice, false);
+    }
+
     gpio_deinit(pin);
     servos[idx].attached = false;
 
