@@ -415,7 +415,7 @@ class CCodeGen:
             if any(s.sensor_type in spi_types for s in program.hardware.sensors):
                 self._out('#include "volt/spi_devices.h"')
         self._out("")
-        # String interpolation buffers (used by string + int concat)
+        # String interpolation buffers (used by string concat, log interpolation, UART read_line)
         self._out("static char _volt_strbuf[16][128];")
         self._out("")
 
@@ -1339,6 +1339,7 @@ class CCodeGen:
 
     def _uses_ble(self, prog):
         return any(True for _ in _find_calls(self._all_stmts(prog), "ble"))
+
 
     # ---- String concatenation with non-string types ----
 
