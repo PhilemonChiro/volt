@@ -22,4 +22,19 @@ void system_deep_sleep(uint64_t duration_us);
 // Light sleep — RAM preserved, faster wake.
 void system_light_sleep(void);
 
+// ---- Watchdog Timer ----
+// Reboots the device if the program hangs or crashes.
+// Call watchdog_feed() periodically to prove the code is still running.
+// If feed() is not called within the timeout, the chip resets.
+
+// Enable watchdog with timeout in milliseconds. Typical: 5000-30000ms.
+void volt_wdt_enable(uint32_t timeout_ms);
+
+// Feed (kick) the watchdog — resets the countdown timer.
+// Must be called regularly to prevent a watchdog reset.
+void volt_wdt_feed(void);
+
+// Disable the watchdog timer.
+void volt_wdt_disable(void);
+
 #endif // VOLT_SYSTEM_H

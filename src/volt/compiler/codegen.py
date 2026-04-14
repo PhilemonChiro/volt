@@ -92,10 +92,13 @@ METHOD_MAP = {
     ("Storage", "list_count"): "storage_list_count({args})",
     ("Storage", "list_clear"): "storage_list_clear({args})",
     # System — portable names (implemented per-chip)
-    ("System", "restart"):     "system_restart()",
-    ("System", "free_heap"):   "system_free_heap()",
-    ("System", "uptime"):      "system_uptime()",
-    ("System", "id"):          "system_id()",
+    ("System", "restart"):          "system_restart()",
+    ("System", "free_heap"):        "system_free_heap()",
+    ("System", "uptime"):           "system_uptime()",
+    ("System", "id"):               "system_id()",
+    ("System", "watchdog_enable"):  "volt_wdt_enable({args})",
+    ("System", "watchdog_feed"):    "volt_wdt_feed()",
+    ("System", "watchdog_disable"): "volt_wdt_disable()",
     # UART / Serial (both keywords accepted)
     ("UART", "print"):     "volt_uart_print(0, {args})",
     ("UART", "read_byte"): "volt_uart_read_byte(0)",

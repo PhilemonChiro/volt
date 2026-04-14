@@ -45,3 +45,32 @@ void system_light_sleep(void)
     // Light sleep — use WFI (Wait For Interrupt)
     __wfi();
 }
+
+// ---- Watchdog ----
+
+static bool wdt_enabled = false;
+
+// Pico SDK has its own watchdog_enable() with different signature.
+// We use volt_ prefix internally, aliased via the header.
+void volt_wdt_enable(uint32_t timeout_ms)
+{
+    if (wdt_enabled) return;
+    // RP2040 watchdog max is ~8.3 seconds (8388ms)
+    if (timeout_ms > 8388) timeout_ms = 8388;
+    watchdog_enable(timeout_ms, true);  // Pico SDK call, true = pause on debug
+    wdt_enabled = true;
+}
+
+void volt_wdt_feed(void)
+{
+    if (wdt_enabled) {
+        watchdog_update();
+    }
+}
+
+void volt_wdt_disable(void)
+{
+    // RP2040 watchdog cannot be disabled once enabled — only reset stops it.
+    // This is a hardware limitation. Feed continuously instead.
+    wdt_enabled = false;
+}

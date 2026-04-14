@@ -268,10 +268,13 @@ METHOD_TYPES = {
         "list_clear": (VOID, [("list_name", STRING)]),
     },
     "System": {
-        "restart":   (VOID, []),
-        "id":        (INT, []),
-        "uptime":    (INT, []),
-        "free_heap": (INT, []),
+        "restart":          (VOID, []),
+        "id":               (INT, []),
+        "uptime":           (INT, []),
+        "free_heap":        (INT, []),
+        "watchdog_enable":  (VOID, [("timeout_ms", INT)]),
+        "watchdog_feed":    (VOID, []),
+        "watchdog_disable": (VOID, []),
     },
     "OTA": {
         "enable": (VOID, []),  # stub — driver not yet implemented
