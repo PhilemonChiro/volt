@@ -254,6 +254,20 @@ METHOD_TYPES = {
         "enable": (VOID, []),
         "check":  (VOID, []),
     },
+    "UART": {
+        "print":     (VOID, [("text", STRING)]),
+        "read_byte": (INT, []),
+        "read_line": (STRING, []),
+        "available": (INT, []),
+        "flush":     (VOID, []),
+    },
+    "SERIAL": {
+        "print":     (VOID, [("text", STRING)]),
+        "read_byte": (INT, []),
+        "read_line": (STRING, []),
+        "available": (INT, []),
+        "flush":     (VOID, []),
+    },
     "Channel": {
         "send":      (VOID, [("value", None)]),   # any type
         "receive":   (INT, []),                     # returns elem_type
@@ -682,7 +696,7 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
             return ERROR_TYPE
         # Look up field in struct definitions or method tables
         # Normalize channel<T> → Channel for method lookup
-        lookup_type = "Channel" if obj_type.startswith("channel<") else obj_type
+        lookup_type = "Channel" if obj_type.startswith("channel<") else obj_type.upper() if obj_type in ("uart", "serial") else obj_type
         methods = METHOD_TYPES.get(lookup_type, {})
         if expr.field_name in methods:
             return methods[expr.field_name][0]
@@ -730,7 +744,7 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
         if obj_type == ERROR_TYPE:
             return ERROR_TYPE
 
-        lookup_type = "Channel" if obj_type.startswith("channel<") else obj_type
+        lookup_type = "Channel" if obj_type.startswith("channel<") else obj_type.upper() if obj_type in ("uart", "serial") else obj_type
         methods = METHOD_TYPES.get(lookup_type, {})
         if expr.method not in methods:
             known_methods = list(methods.keys())

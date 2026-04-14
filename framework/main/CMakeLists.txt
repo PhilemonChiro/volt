@@ -13,6 +13,7 @@ set(CORE_SRCS
     "../src/system.c"
     "../src/i2c.c"
     "../src/spi.c"
+    "../src/uart.c"
 )
 
 # Auto-discover all device drivers from devices/*/driver.c

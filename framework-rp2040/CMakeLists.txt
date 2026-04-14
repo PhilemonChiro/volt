@@ -21,6 +21,7 @@ add_executable(volt-rp2040
     src/storage.c
     src/i2c.c
     src/spi.c
+    src/uart.c
     ${DEVICE_DRIVERS}
 )
 
@@ -36,6 +37,7 @@ target_link_libraries(volt-rp2040
     hardware_pwm
     hardware_i2c
     hardware_spi
+    hardware_uart
     hardware_timer
     hardware_adc
     hardware_watchdog

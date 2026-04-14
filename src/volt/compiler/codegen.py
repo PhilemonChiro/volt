@@ -69,6 +69,17 @@ METHOD_MAP = {
     ("System", "free_heap"):   "system_free_heap()",
     ("System", "uptime"):      "system_uptime()",
     ("System", "id"):          "system_id()",
+    # UART / Serial (both keywords accepted)
+    ("UART", "print"):     "volt_uart_print(0, {args})",
+    ("UART", "read_byte"): "volt_uart_read_byte(0)",
+    ("UART", "read_line"): "volt_uart_read_line(0, _volt_strbuf[0], 128)",
+    ("UART", "available"): "volt_uart_available(0)",
+    ("UART", "flush"):     "volt_uart_flush(0)",
+    ("SERIAL", "print"):     "volt_uart_print(0, {args})",
+    ("SERIAL", "read_byte"): "volt_uart_read_byte(0)",
+    ("SERIAL", "read_line"): "volt_uart_read_line(0, _volt_strbuf[0], 128)",
+    ("SERIAL", "available"): "volt_uart_available(0)",
+    ("SERIAL", "flush"):     "volt_uart_flush(0)",
     # OTA
     ("OTA", "enable"): "ota_enable()",
     # Sensors — {sensor} is replaced with &_sensorname
@@ -259,6 +270,12 @@ class CCodeGen:
         for ch in program.channels:
             self.builtin_types[ch.name] = "Channel"
 
+        # Register UART/Serial buses as builtin types
+        if program.hardware:
+            for bus in program.hardware.buses:
+                if bus.bus_type in ("uart", "serial"):
+                    self.builtin_types[bus.name] = "UART"
+
         # Track variable types for dispatch
         for sv in program.storage_vars:
             self._var_types[sv.name] = sv.type_name
@@ -315,6 +332,8 @@ class CCodeGen:
                 self._out('#include "volt/i2c.h"')
             if "spi" in bus_types:
                 self._out('#include "volt/spi.h"')
+            if "uart" in bus_types:
+                self._out('#include "volt/uart.h"')
         if program.hardware and program.hardware.sensors:
             self._out('#include "volt/sensor.h"')
             # Check if any SPI devices are used
@@ -804,6 +823,12 @@ class CCodeGen:
                     speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "1000000"
                     self._out(f"// SPI bus: {bus.name}")
                     self._out(f"volt_spi_init(0, {mosi}, {miso}, {clk}, {speed});")
+                elif bus.bus_type in ("uart", "serial"):
+                    tx = self._emit_expr_str(params.get("tx")) if "tx" in params else "1"
+                    rx = self._emit_expr_str(params.get("rx")) if "rx" in params else "3"
+                    baud = self._emit_expr_str(params.get("baud")) if "baud" in params else "9600"
+                    self._out(f"// UART/Serial: {bus.name}")
+                    self._out(f"volt_uart_init(0, {tx}, {rx}, {baud});")
             if program.hardware.buses:
                 self._out("")
 
