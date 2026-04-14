@@ -41,5 +41,10 @@ idf_component_register(
          "../src/sensor_htu21d.c"
          "../src/sensor_ms5611.c"
          "../src/spi_max7219.c"
+         "../src/spi_mfrc522.c"
+         "../src/spi_nrf24l01.c"
+         "../src/gpio_dht.c"
+         "../src/gpio_hcsr04.c"
+         "../src/gpio_neopixel.c"
     INCLUDE_DIRS "../include"
 )

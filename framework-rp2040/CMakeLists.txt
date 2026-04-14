@@ -45,6 +45,11 @@ add_executable(volt-rp2040
     ../framework/src/sensor_htu21d.c
     ../framework/src/sensor_ms5611.c
     ../framework/src/spi_max7219.c
+    ../framework/src/spi_mfrc522.c
+    ../framework/src/spi_nrf24l01.c
+    ../framework/src/gpio_dht.c
+    ../framework/src/gpio_hcsr04.c
+    ../framework/src/gpio_neopixel.c
 )
 
 # Include the shared Volt headers
