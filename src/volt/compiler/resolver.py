@@ -279,6 +279,8 @@ def _resolve_stmt(stmt, scope: Scope, errors: CompilerErrors):
     elif isinstance(stmt, ForStmt):
         _resolve_expr(stmt.start, scope, errors)
         _resolve_expr(stmt.end, scope, errors)
+        if stmt.step:
+            _resolve_expr(stmt.step, scope, errors)
         # Declare loop variable in a child scope
         for_scope = scope.child(f"for:{stmt.var_name}")
         for_scope.declare(Symbol(

@@ -1094,7 +1094,11 @@ class CCodeGen:
             var = _c_name(stmt.var_name)
             if stmt.step:
                 step_val = self._emit_expr_str(stmt.step, ctx_prefix, cv)
-                self._out(f"for (int32_t {var} = {start}; {var} < {end}; {var} += {step_val}) {{")
+                # Detect negative literal step for correct loop direction
+                is_negative = (isinstance(stmt.step, UnaryExpr) and stmt.step.op == "-") or \
+                              (isinstance(stmt.step, IntLiteral) and stmt.step.value < 0)
+                cmp = ">" if is_negative else "<"
+                self._out(f"for (int32_t {var} = {start}; {var} {cmp} {end}; {var} += {step_val}) {{")
             else:
                 self._out(f"for (int32_t {var} = {start}; {var} < {end}; {var}++) {{")
             self.indent += 1
@@ -1268,10 +1272,12 @@ class CCodeGen:
         return self._var_types.get(name, "int")
 
     def _all_stmts(self, prog):
-        """Collect all statements from tasks + setup + loop."""
+        """Collect all statements from tasks + functions + setup + loop."""
         stmts = []
         for t in prog.tasks:
             stmts.extend(t.body)
+        for f in prog.functions:
+            stmts.extend(f.body)
         if prog.setup:
             stmts.extend(prog.setup.body)
         if prog.loop:

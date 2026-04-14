@@ -116,24 +116,41 @@ def collect_expr_refs(expr) -> set:
     return names
 
 
+def _sub_bodies(stmt):
+    """Yield all child statement lists from a compound statement."""
+    if isinstance(stmt, EveryBlock):
+        yield stmt.body
+    elif isinstance(stmt, OnBlock):
+        yield stmt.body
+    elif isinstance(stmt, IfStmt):
+        yield stmt.then_body
+        if isinstance(stmt.else_body, list):
+            yield stmt.else_body
+        elif isinstance(stmt.else_body, IfStmt):
+            yield [stmt.else_body]
+    elif isinstance(stmt, WhileStmt):
+        yield stmt.body
+    elif isinstance(stmt, ForStmt):
+        yield stmt.body
+    elif isinstance(stmt, TimeoutBlock):
+        yield stmt.try_body
+        yield stmt.fallback_body
+
+
 def find_var_decls_by_name(stmts: list, names: list):
-    """Find VarDecl nodes with specific names in a statement list."""
+    """Find VarDecl nodes with specific names in a statement list (recursive)."""
     for stmt in stmts:
         if isinstance(stmt, VarDecl) and stmt.name in names:
             yield stmt
-        if isinstance(stmt, EveryBlock):
-            yield from find_var_decls_by_name(stmt.body, names)
-        if isinstance(stmt, OnBlock):
-            yield from find_var_decls_by_name(stmt.body, names)
+        for body in _sub_bodies(stmt):
+            yield from find_var_decls_by_name(body, names)
 
 
 def find_calls(stmts: list, obj_name: str):
-    """Find method calls on a specific object in a statement list."""
+    """Find method calls on a specific object in a statement list (recursive)."""
     for stmt in stmts:
         if isinstance(stmt, ExprStmt) and isinstance(stmt.expr, MethodCall):
             if isinstance(stmt.expr.obj, VarRef) and stmt.expr.obj.name == obj_name:
                 yield stmt
-        if isinstance(stmt, EveryBlock):
-            yield from find_calls(stmt.body, obj_name)
-        if isinstance(stmt, OnBlock):
-            yield from find_calls(stmt.body, obj_name)
+        for body in _sub_bodies(stmt):
+            yield from find_calls(body, obj_name)

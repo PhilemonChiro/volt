@@ -52,7 +52,7 @@ class CompilerErrors:
     def report(self, filename: str = "<stdin>") -> str:
         """Format all errors with source context, sorted by line."""
         parts = []
-        for err in sorted(self.errors, key=lambda e: e.region.start_line):
+        for err in sorted(self.errors, key=lambda e: e.region.start_line if e.region else 0):
             parts.append(self._format_one(err, filename))
         return "\n".join(parts)
 

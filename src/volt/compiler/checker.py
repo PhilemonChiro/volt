@@ -594,6 +594,11 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
         if end_type != ERROR_TYPE and end_type != INT:
             errors.error(stmt.end.region, "TYPE MISMATCH",
                          f"For range end must be `int`, got `{end_type}`.")
+        if stmt.step:
+            step_type = _infer(stmt.step, scope, errors)
+            if step_type != ERROR_TYPE and step_type != INT:
+                errors.error(stmt.step.region, "TYPE MISMATCH",
+                             f"For step must be `int`, got `{step_type}`.")
         for_scope = scope.child(f"for:{stmt.var_name}")
         for_scope.declare(Symbol(stmt.var_name, "var", INT, stmt.region))
         _check_stmts(stmt.body, for_scope, errors, expected_return)

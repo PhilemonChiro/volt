@@ -153,6 +153,8 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
 
     # 11. Validate break/continue only inside loops
     all_bodies = [(t.name, t.body) for t in program.tasks]
+    for func in program.functions:
+        all_bodies.append((func.name, func.body))
     if program.setup:
         all_bodies.append(("setup", program.setup.body))
     if program.loop:
@@ -734,6 +736,11 @@ def _validate_break_continue(stmts: list, in_loop: bool, context: str, errors: C
                 _validate_break_continue([stmt.else_body], in_loop, context, errors)
         elif isinstance(stmt, EveryBlock):
             _validate_break_continue(stmt.body, True, context, errors)
+        elif isinstance(stmt, OnBlock):
+            _validate_break_continue(stmt.body, in_loop, context, errors)
+        elif isinstance(stmt, TimeoutBlock):
+            _validate_break_continue(stmt.try_body, in_loop, context, errors)
+            _validate_break_continue(stmt.fallback_body, in_loop, context, errors)
 
 
 def _warn_code_after_run(stmts: list, errors: CompilerErrors):
