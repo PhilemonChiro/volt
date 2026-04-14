@@ -22,6 +22,7 @@ BUILTINS = {
     "storage":    Symbol("storage", "builtin", "Storage", Region()),
     "system":     Symbol("system", "builtin", "System", Region()),
     "ota":        Symbol("ota", "builtin", "OTA", Region()),
+    "ble":        Symbol("ble", "builtin", "BLE", Region()),
     "log":        Symbol("log", "builtin", "func", Region()),
     "run":        Symbol("run", "builtin", "func", Region()),
     "sleep":      Symbol("sleep", "builtin", "func", Region()),

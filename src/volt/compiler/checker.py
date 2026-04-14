@@ -286,6 +286,20 @@ METHOD_TYPES = {
     "OTA": {
         "enable": (VOID, []),  # stub — driver not yet implemented
     },
+    "BLE": {
+        "advertise":     (VOID, [("name", STRING)]),
+        "stop":          (VOID, []),
+        "is_connected":  (BOOL, []),
+        "expose_int":    (INT, [("name", STRING), ("value", INT)]),
+        "expose_float":  (INT, [("name", STRING), ("value", FLOAT)]),
+        "expose_string": (INT, [("name", STRING), ("value", STRING)]),
+        "update_int":    (VOID, [("id", INT), ("value", INT)]),
+        "update_float":  (VOID, [("id", INT), ("value", FLOAT)]),
+        "update_string": (VOID, [("id", INT), ("value", STRING)]),
+        "scan":          (INT, [("duration", DURATION)]),
+        "scan_name":     (STRING, [("index", INT)]),
+        "scan_rssi":     (INT, [("index", INT)]),
+    },
     "UART": {
         "print":     (VOID, [("text", STRING)]),
         "read_byte": (INT, []),

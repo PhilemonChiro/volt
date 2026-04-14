@@ -104,6 +104,19 @@ METHOD_MAP = {
     ("System", "watchdog_enable"):  "volt_wdt_enable({args})",
     ("System", "watchdog_feed"):    "volt_wdt_feed()",
     ("System", "watchdog_disable"): "volt_wdt_disable()",
+    # BLE
+    ("BLE", "advertise"):     "ble_advertise({args})",
+    ("BLE", "stop"):          "ble_stop()",
+    ("BLE", "is_connected"):  "ble_is_connected()",
+    ("BLE", "expose_int"):    "ble_expose_int({args})",
+    ("BLE", "expose_float"):  "ble_expose_float({args})",
+    ("BLE", "expose_string"): "ble_expose_string({args})",
+    ("BLE", "update_int"):    "ble_update_int({args})",
+    ("BLE", "update_float"):  "ble_update_float({args})",
+    ("BLE", "update_string"): "ble_update_string({args})",
+    ("BLE", "scan"):          "ble_scan({args})",
+    ("BLE", "scan_name"):     "ble_scan_name({args})",
+    ("BLE", "scan_rssi"):     "ble_scan_rssi({args})",
     # UART / Serial (both keywords accepted)
     ("UART", "print"):     "volt_uart_print(0, {args})",
     ("UART", "read_byte"): "volt_uart_read_byte(0)",
@@ -380,6 +393,8 @@ class CCodeGen:
             self._out('#include "volt/http.h"')
         if self._uses_storage(program):
             self._out('#include "volt/storage.h"')
+        if self._uses_ble(program):
+            self._out('#include "volt/ble.h"')
         if program.hardware and program.hardware.buses:
             bus_types = {b.bus_type for b in program.hardware.buses}
             if "i2c" in bus_types:
@@ -1320,6 +1335,9 @@ class CCodeGen:
 
     def _uses_storage(self, prog):
         return bool(prog.storage_vars) or any(True for _ in _find_calls(self._all_stmts(prog), "storage"))
+
+    def _uses_ble(self, prog):
+        return any(True for _ in _find_calls(self._all_stmts(prog), "ble"))
 
     # ---- String concatenation with non-string types ----
 
