@@ -136,4 +136,74 @@ void ssd1306_clear(ssd1306_t *dev);
 void ssd1306_text(ssd1306_t *dev, int x, int y, const char *text);
 void ssd1306_show(ssd1306_t *dev);
 
+
+// ============================================================
+// BMP180 — Barometric Pressure + Temperature (addr: 0x77)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+    int16_t AC1, AC2, AC3;
+    uint16_t AC4, AC5, AC6;
+    int16_t B1, B2, MB, MC, MD;
+    int32_t B5;
+} bmp180_t;
+volt_error_t bmp180_init(bmp180_t *dev, uint8_t bus_id, uint8_t addr);
+float bmp180_temperature(bmp180_t *dev);
+float bmp180_pressure(bmp180_t *dev);
+
+// ============================================================
+// ADS1115 — 16-bit 4-channel ADC (addr: 0x48-0x4B)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+    float gain_voltage;
+} ads1115_t;
+volt_error_t ads1115_init(ads1115_t *dev, uint8_t bus_id, uint8_t addr);
+int ads1115_read_raw(ads1115_t *dev, uint8_t channel);
+float ads1115_voltage(ads1115_t *dev, uint8_t channel);
+
+// ============================================================
+// PCA9685 — 16-channel PWM/Servo controller (addr: 0x40)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+    float frequency;
+} pca9685_t;
+volt_error_t pca9685_init(pca9685_t *dev, uint8_t bus_id, uint8_t addr);
+void pca9685_set_pwm(pca9685_t *dev, uint8_t channel, uint16_t on, uint16_t off);
+void pca9685_set_servo(pca9685_t *dev, uint8_t channel, int angle);
+void pca9685_set_duty(pca9685_t *dev, uint8_t channel, uint8_t duty);
+
+// ============================================================
+// PCF8574 — I2C GPIO Expander (addr: 0x20-0x27)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+    uint8_t state;
+} pcf8574_t;
+volt_error_t pcf8574_init(pcf8574_t *dev, uint8_t bus_id, uint8_t addr);
+void pcf8574_write(pcf8574_t *dev, uint8_t value);
+uint8_t pcf8574_read(pcf8574_t *dev);
+void pcf8574_set_pin(pcf8574_t *dev, uint8_t pin, uint8_t level);
+
+// ============================================================
+// MLX90614 — Non-contact IR Temperature (addr: 0x5A)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+} mlx90614_t;
+volt_error_t mlx90614_init(mlx90614_t *dev, uint8_t bus_id, uint8_t addr);
+float mlx90614_ambient(mlx90614_t *dev);
+float mlx90614_object(mlx90614_t *dev);
+
+// ============================================================
+// MCP4725 — 12-bit DAC (addr: 0x60/0x61)
+// ============================================================
+typedef struct {
+    uint8_t bus_id, addr;
+} mcp4725_t;
+volt_error_t mcp4725_init(mcp4725_t *dev, uint8_t bus_id, uint8_t addr);
+void mcp4725_write(mcp4725_t *dev, uint16_t value);
+void mcp4725_set_voltage(mcp4725_t *dev, float voltage, float vref);
+
 #endif // VOLT_SENSOR_H

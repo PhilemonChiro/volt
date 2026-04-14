@@ -25,5 +25,11 @@ idf_component_register(
          "../src/sensor_ds3231.c"
          "../src/sensor_bh1750.c"
          "../src/sensor_veml7700.c"
+         "../src/sensor_bmp180.c"
+         "../src/sensor_ads1115.c"
+         "../src/sensor_pca9685.c"
+         "../src/sensor_pcf8574.c"
+         "../src/sensor_mlx90614.c"
+         "../src/sensor_mcp4725.c"
     INCLUDE_DIRS "../include"
 )

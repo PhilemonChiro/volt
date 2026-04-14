@@ -126,6 +126,32 @@ METHOD_TYPES = {
         "send":       (BOOL, [("data", STRING)]),
         "on_receive": (VOID, []),
     },
+    # Additional I2C devices
+    "BMP180": {
+        "temperature": (FLOAT, []),
+        "pressure":    (FLOAT, []),
+    },
+    "ADS1115": {
+        "read_raw": (INT, [("channel", INT)]),
+        "voltage":  (FLOAT, [("channel", INT)]),
+    },
+    "PCA9685": {
+        "set_servo": (VOID, [("channel", INT), ("angle", INT)]),
+        "set_duty":  (VOID, [("channel", INT), ("duty", INT)]),
+    },
+    "PCF8574": {
+        "write":   (VOID, [("value", INT)]),
+        "read":    (INT, []),
+        "set_pin": (VOID, [("pin", INT), ("level", INT)]),
+    },
+    "MLX90614": {
+        "ambient": (FLOAT, []),
+        "object":  (FLOAT, []),
+    },
+    "MCP4725": {
+        "write":       (VOID, [("value", INT)]),
+        "set_voltage": (VOID, [("voltage", FLOAT), ("vref", FLOAT)]),
+    },
     # SPI devices
     "MAX31855": {
         "temperature": (FLOAT, []),
