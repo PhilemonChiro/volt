@@ -1,0 +1,21 @@
+{
+  "name": "BMP180",
+  "category": "sensor",
+  "interface": "i2c",
+  "default_address": "0x77",
+  "description": "Barometric pressure and temperature",
+  "c_prefix": "bmp180",
+  "c_source": "sensor_bmp180.c",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Temperature in \u00b0C"
+    },
+    "pressure": {
+      "returns": "float",
+      "params": [],
+      "description": "Pressure in hPa"
+    }
+  }
+}

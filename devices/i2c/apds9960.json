@@ -1,0 +1,31 @@
+{
+  "name": "APDS9960",
+  "category": "light",
+  "interface": "i2c",
+  "default_address": "0x39",
+  "description": "Gesture, proximity, RGB color sensor",
+  "c_prefix": "apds9960",
+  "c_source": "sensor_apds9960.c",
+  "methods": {
+    "proximity": {
+      "returns": "int",
+      "params": [],
+      "description": "Proximity value 0-255"
+    },
+    "red": {
+      "returns": "int",
+      "params": [],
+      "description": "Red channel"
+    },
+    "green": {
+      "returns": "int",
+      "params": [],
+      "description": "Green channel"
+    },
+    "blue": {
+      "returns": "int",
+      "params": [],
+      "description": "Blue channel"
+    }
+  }
+}

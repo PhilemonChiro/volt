@@ -1,0 +1,26 @@
+{
+  "name": "MAX31855",
+  "category": "temperature",
+  "interface": "spi",
+  "default_address": "",
+  "description": "Thermocouple-to-digital converter",
+  "c_prefix": "max31855",
+  "c_source": "spi_max31855.c",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Thermocouple temperature \u00b0C"
+    },
+    "internal": {
+      "returns": "float",
+      "params": [],
+      "description": "Cold junction temperature \u00b0C"
+    },
+    "is_fault": {
+      "returns": "int",
+      "params": [],
+      "description": "1 if fault detected"
+    }
+  }
+}

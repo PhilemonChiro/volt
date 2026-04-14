@@ -1,0 +1,31 @@
+{
+  "name": "MAX30100",
+  "category": "health",
+  "interface": "i2c",
+  "default_address": "0x57",
+  "description": "Pulse oximeter and heart rate (16-bit)",
+  "c_prefix": "max30100",
+  "c_source": "sensor_max30100.c",
+  "methods": {
+    "red": {
+      "returns": "int",
+      "params": [],
+      "description": "Red LED raw value"
+    },
+    "ir": {
+      "returns": "int",
+      "params": [],
+      "description": "IR LED raw value"
+    },
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Die temperature \u00b0C"
+    },
+    "is_finger_present": {
+      "returns": "int",
+      "params": [],
+      "description": "1 if finger detected"
+    }
+  }
+}

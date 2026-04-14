@@ -1,0 +1,31 @@
+{
+  "name": "ADS1115",
+  "category": "analog",
+  "interface": "i2c",
+  "default_address": "0x48",
+  "description": "16-bit 4-channel ADC",
+  "c_prefix": "ads1115",
+  "c_source": "sensor_ads1115.c",
+  "methods": {
+    "read_raw": {
+      "returns": "int",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int"
+        }
+      ],
+      "description": "Raw ADC value"
+    },
+    "voltage": {
+      "returns": "float",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int"
+        }
+      ],
+      "description": "Voltage in V"
+    }
+  }
+}

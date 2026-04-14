@@ -1,0 +1,21 @@
+{
+  "name": "HTU21D",
+  "category": "sensor",
+  "interface": "i2c",
+  "default_address": "0x40",
+  "description": "Temperature and humidity",
+  "c_prefix": "htu21d",
+  "c_source": "sensor_htu21d.c",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Temperature in \u00b0C"
+    },
+    "humidity": {
+      "returns": "float",
+      "params": [],
+      "description": "Humidity %"
+    }
+  }
+}

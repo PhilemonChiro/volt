@@ -1,0 +1,21 @@
+{
+  "name": "MFRC522",
+  "category": "communication",
+  "interface": "spi",
+  "default_address": "",
+  "description": "13.56MHz RFID reader",
+  "c_prefix": "mfrc522",
+  "c_source": "spi_mfrc522.c",
+  "methods": {
+    "is_card_present": {
+      "returns": "int",
+      "params": [],
+      "description": "1 if RFID card detected"
+    },
+    "read_uid": {
+      "returns": "int",
+      "params": [],
+      "description": "Read card UID, returns length"
+    }
+  }
+}

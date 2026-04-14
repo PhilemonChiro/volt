@@ -1,0 +1,35 @@
+{
+  "name": "MCP4725",
+  "category": "analog",
+  "interface": "i2c",
+  "default_address": "0x60",
+  "description": "12-bit DAC analog output",
+  "c_prefix": "mcp4725",
+  "c_source": "sensor_mcp4725.c",
+  "methods": {
+    "write": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "value",
+          "type": "int"
+        }
+      ],
+      "description": "Set DAC value 0-4095"
+    },
+    "set_voltage": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "voltage",
+          "type": "float"
+        },
+        {
+          "name": "vref",
+          "type": "float"
+        }
+      ],
+      "description": "Set output voltage"
+    }
+  }
+}

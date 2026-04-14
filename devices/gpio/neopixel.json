@@ -1,0 +1,71 @@
+{
+  "name": "NeoPixel",
+  "category": "display",
+  "interface": "gpio",
+  "default_address": "",
+  "description": "WS2812B addressable RGB LEDs",
+  "c_prefix": "neopixel",
+  "c_source": "gpio_neopixel.c",
+  "methods": {
+    "set": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "index",
+          "type": "int"
+        },
+        {
+          "name": "r",
+          "type": "int"
+        },
+        {
+          "name": "g",
+          "type": "int"
+        },
+        {
+          "name": "b",
+          "type": "int"
+        }
+      ],
+      "description": "Set pixel color"
+    },
+    "clear": {
+      "returns": "void",
+      "params": [],
+      "description": "All pixels off"
+    },
+    "fill": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "r",
+          "type": "int"
+        },
+        {
+          "name": "g",
+          "type": "int"
+        },
+        {
+          "name": "b",
+          "type": "int"
+        }
+      ],
+      "description": "Fill all pixels"
+    },
+    "show": {
+      "returns": "void",
+      "params": [],
+      "description": "Update LED strip"
+    },
+    "set_brightness": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "brightness",
+          "type": "int"
+        }
+      ],
+      "description": "Global brightness 0-255"
+    }
+  }
+}

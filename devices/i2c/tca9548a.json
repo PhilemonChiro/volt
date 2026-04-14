@@ -1,0 +1,26 @@
+{
+  "name": "TCA9548A",
+  "category": "control",
+  "interface": "i2c",
+  "default_address": "0x70",
+  "description": "I2C multiplexer (8 channels)",
+  "c_prefix": "tca9548a",
+  "c_source": "sensor_tca9548a.c",
+  "methods": {
+    "select": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int"
+        }
+      ],
+      "description": "Select I2C channel 0-7"
+    },
+    "disable": {
+      "returns": "void",
+      "params": [],
+      "description": "Disable all channels"
+    }
+  }
+}

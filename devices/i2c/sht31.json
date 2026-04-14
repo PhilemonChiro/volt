@@ -1,0 +1,21 @@
+{
+  "name": "SHT31",
+  "category": "sensor",
+  "interface": "i2c",
+  "default_address": "0x44",
+  "description": "High-accuracy temperature and humidity",
+  "c_prefix": "sht31",
+  "c_source": "sensor_sht31.c",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Precision temperature in \u00b0C"
+    },
+    "humidity": {
+      "returns": "float",
+      "params": [],
+      "description": "Precision humidity %"
+    }
+  }
+}

@@ -346,6 +346,13 @@ BINARY_OP_TYPES = {
 def check_types(program: Program, scope: Scope, errors: CompilerErrors):
     """Run type checking on the entire program."""
 
+    # Load device registry — merge into METHOD_TYPES
+    from .device_registry import get_registry
+    registry = get_registry()
+    for dev_name, methods in registry.get_method_types().items():
+        if dev_name not in METHOD_TYPES:
+            METHOD_TYPES[dev_name] = methods
+
     # Check functions
     for func in program.functions:
         func_scope = scope.child(f"func:{func.name}")

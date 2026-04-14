@@ -1,0 +1,21 @@
+{
+  "name": "MLX90614",
+  "category": "temperature",
+  "interface": "i2c",
+  "default_address": "0x5A",
+  "description": "Non-contact IR thermometer",
+  "c_prefix": "mlx90614",
+  "c_source": "sensor_mlx90614.c",
+  "methods": {
+    "ambient": {
+      "returns": "float",
+      "params": [],
+      "description": "Ambient temperature \u00b0C"
+    },
+    "object": {
+      "returns": "float",
+      "params": [],
+      "description": "Object surface temperature \u00b0C"
+    }
+  }
+}

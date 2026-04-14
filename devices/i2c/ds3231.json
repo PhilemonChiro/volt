@@ -1,0 +1,46 @@
+{
+  "name": "DS3231",
+  "category": "time",
+  "interface": "i2c",
+  "default_address": "0x68",
+  "description": "Real-time clock with battery backup",
+  "c_prefix": "ds3231",
+  "c_source": "sensor_ds3231.c",
+  "methods": {
+    "hours": {
+      "returns": "int",
+      "params": [],
+      "description": "Hour 0-23"
+    },
+    "minutes": {
+      "returns": "int",
+      "params": [],
+      "description": "Minute 0-59"
+    },
+    "seconds": {
+      "returns": "int",
+      "params": [],
+      "description": "Second 0-59"
+    },
+    "year": {
+      "returns": "int",
+      "params": [],
+      "description": "Year 2000-2099"
+    },
+    "month": {
+      "returns": "int",
+      "params": [],
+      "description": "Month 1-12"
+    },
+    "date": {
+      "returns": "int",
+      "params": [],
+      "description": "Day 1-31"
+    },
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "RTC temperature \u00b0C"
+    }
+  }
+}

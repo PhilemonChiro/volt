@@ -1,0 +1,58 @@
+{
+  "name": "MAX7219",
+  "category": "display",
+  "interface": "spi",
+  "default_address": "",
+  "description": "LED dot matrix / 7-segment driver",
+  "c_prefix": "max7219",
+  "c_source": "spi_max7219.c",
+  "methods": {
+    "set_row": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "row",
+          "type": "int"
+        },
+        {
+          "name": "data",
+          "type": "int"
+        }
+      ],
+      "description": "Set matrix row"
+    },
+    "set_intensity": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "level",
+          "type": "int"
+        }
+      ],
+      "description": "Brightness 0-15"
+    },
+    "clear": {
+      "returns": "void",
+      "params": [],
+      "description": "Clear all"
+    },
+    "set_digit": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "pos",
+          "type": "int"
+        },
+        {
+          "name": "value",
+          "type": "int"
+        },
+        {
+          "name": "dp",
+          "type": "int"
+        }
+      ],
+      "description": "Set 7-seg digit"
+    }
+  }
+}

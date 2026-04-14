@@ -1,0 +1,21 @@
+{
+  "name": "MCP3008",
+  "category": "analog",
+  "interface": "spi",
+  "default_address": "",
+  "description": "8-channel 10-bit ADC",
+  "c_prefix": "mcp3008",
+  "c_source": "spi_mcp3008.c",
+  "methods": {
+    "read": {
+      "returns": "int",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int"
+        }
+      ],
+      "description": "ADC value 0-1023"
+    }
+  }
+}

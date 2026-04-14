@@ -169,6 +169,16 @@ BUILTIN_MAP = {
 
 
 
+# Load device registry — merge device methods into METHOD_MAP
+def _load_device_registry():
+    from .device_registry import get_registry
+    registry = get_registry()
+    for key, value in registry.get_method_map().items():
+        if key not in METHOD_MAP:
+            METHOD_MAP[key] = value
+
+_load_device_registry()
+
 # _collect_var_refs, _collect_expr_refs → imported from codegen_utils
 
 

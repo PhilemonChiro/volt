@@ -1,0 +1,40 @@
+{
+  "name": "PCF8574",
+  "category": "control",
+  "interface": "i2c",
+  "default_address": "0x27",
+  "description": "I2C GPIO expander (8 pins)",
+  "c_prefix": "pcf8574",
+  "c_source": "sensor_pcf8574.c",
+  "methods": {
+    "write": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "value",
+          "type": "int"
+        }
+      ],
+      "description": "Write all 8 pins"
+    },
+    "read": {
+      "returns": "int",
+      "params": [],
+      "description": "Read all 8 pins"
+    },
+    "set_pin": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "pin",
+          "type": "int"
+        },
+        {
+          "name": "level",
+          "type": "int"
+        }
+      ],
+      "description": "Set one pin"
+    }
+  }
+}

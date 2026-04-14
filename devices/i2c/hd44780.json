@@ -1,0 +1,50 @@
+{
+  "name": "HD44780",
+  "category": "display",
+  "interface": "i2c",
+  "default_address": "0x27",
+  "description": "16x2/20x4 character LCD",
+  "c_prefix": "hd44780",
+  "c_source": "display_hd44780.c",
+  "methods": {
+    "clear": {
+      "returns": "void",
+      "params": [],
+      "description": "Clear display"
+    },
+    "print": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "description": "Print text"
+    },
+    "set_cursor": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "col",
+          "type": "int"
+        },
+        {
+          "name": "row",
+          "type": "int"
+        }
+      ],
+      "description": "Move cursor"
+    },
+    "backlight": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "on",
+          "type": "int"
+        }
+      ],
+      "description": "Toggle backlight"
+    }
+  }
+}

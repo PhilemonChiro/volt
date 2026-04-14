@@ -1,0 +1,21 @@
+{
+  "name": "AHT20",
+  "category": "sensor",
+  "interface": "i2c",
+  "default_address": "0x38",
+  "description": "Temperature and humidity",
+  "c_prefix": "aht20",
+  "c_source": "sensor_aht20.c",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Temperature in \u00b0C"
+    },
+    "humidity": {
+      "returns": "float",
+      "params": [],
+      "description": "Relative humidity %"
+    }
+  }
+}

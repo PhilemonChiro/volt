@@ -1,0 +1,39 @@
+{
+  "name": "PCA9685",
+  "category": "control",
+  "interface": "i2c",
+  "default_address": "0x40",
+  "description": "16-channel PWM/servo controller",
+  "c_prefix": "pca9685",
+  "c_source": "sensor_pca9685.c",
+  "methods": {
+    "set_servo": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int"
+        },
+        {
+          "name": "angle",
+          "type": "int"
+        }
+      ],
+      "description": "Set servo angle 0-180"
+    },
+    "set_duty": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int"
+        },
+        {
+          "name": "duty",
+          "type": "int"
+        }
+      ],
+      "description": "Set PWM duty 0-255"
+    }
+  }
+}

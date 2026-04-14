@@ -1,0 +1,46 @@
+{
+  "name": "MPU6050",
+  "category": "motion",
+  "interface": "i2c",
+  "default_address": "0x68",
+  "description": "6-axis accelerometer and gyroscope",
+  "c_prefix": "mpu6050",
+  "c_source": "sensor_mpu6050.c",
+  "methods": {
+    "accel_x": {
+      "returns": "float",
+      "params": [],
+      "description": "X acceleration in g"
+    },
+    "accel_y": {
+      "returns": "float",
+      "params": [],
+      "description": "Y acceleration in g"
+    },
+    "accel_z": {
+      "returns": "float",
+      "params": [],
+      "description": "Z acceleration in g"
+    },
+    "gyro_x": {
+      "returns": "float",
+      "params": [],
+      "description": "X rotation \u00b0/s"
+    },
+    "gyro_y": {
+      "returns": "float",
+      "params": [],
+      "description": "Y rotation \u00b0/s"
+    },
+    "gyro_z": {
+      "returns": "float",
+      "params": [],
+      "description": "Z rotation \u00b0/s"
+    },
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Die temperature in \u00b0C"
+    }
+  }
+}

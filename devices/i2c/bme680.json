@@ -1,0 +1,31 @@
+{
+  "name": "BME680",
+  "category": "sensor",
+  "interface": "i2c",
+  "default_address": "0x76",
+  "description": "Gas, temperature, humidity, pressure",
+  "c_prefix": "bme680",
+  "c_source": "sensor_bme680.c",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Temperature in \u00b0C"
+    },
+    "humidity": {
+      "returns": "float",
+      "params": [],
+      "description": "Humidity %"
+    },
+    "pressure": {
+      "returns": "float",
+      "params": [],
+      "description": "Pressure in hPa"
+    },
+    "gas": {
+      "returns": "int",
+      "params": [],
+      "description": "Gas resistance"
+    }
+  }
+}

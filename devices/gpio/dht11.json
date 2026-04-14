@@ -1,0 +1,21 @@
+{
+  "name": "DHT11",
+  "category": "sensor",
+  "interface": "gpio",
+  "default_address": "",
+  "description": "Basic temperature and humidity",
+  "c_prefix": "dht",
+  "c_source": "gpio_dht.c",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Temperature in \u00b0C"
+    },
+    "humidity": {
+      "returns": "float",
+      "params": [],
+      "description": "Humidity %"
+    }
+  }
+}

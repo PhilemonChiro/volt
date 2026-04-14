@@ -1,0 +1,31 @@
+{
+  "name": "INA219",
+  "category": "power",
+  "interface": "i2c",
+  "default_address": "0x40",
+  "description": "Voltage, current, and power monitor",
+  "c_prefix": "ina219",
+  "c_source": "sensor_ina219.c",
+  "methods": {
+    "voltage": {
+      "returns": "float",
+      "params": [],
+      "description": "Bus voltage in V"
+    },
+    "current": {
+      "returns": "float",
+      "params": [],
+      "description": "Current in A"
+    },
+    "power": {
+      "returns": "float",
+      "params": [],
+      "description": "Power in W"
+    },
+    "shunt_voltage": {
+      "returns": "float",
+      "params": [],
+      "description": "Shunt voltage in V"
+    }
+  }
+}

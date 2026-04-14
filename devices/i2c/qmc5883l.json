@@ -1,0 +1,31 @@
+{
+  "name": "QMC5883L",
+  "category": "motion",
+  "interface": "i2c",
+  "default_address": "0x0D",
+  "description": "Digital compass / magnetometer",
+  "c_prefix": "qmc5883l",
+  "c_source": "sensor_qmc5883l.c",
+  "methods": {
+    "x": {
+      "returns": "float",
+      "params": [],
+      "description": "X magnetic field (gauss)"
+    },
+    "y": {
+      "returns": "float",
+      "params": [],
+      "description": "Y magnetic field"
+    },
+    "z": {
+      "returns": "float",
+      "params": [],
+      "description": "Z magnetic field"
+    },
+    "heading": {
+      "returns": "float",
+      "params": [],
+      "description": "Compass heading in degrees"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "SSD1306",
+  "category": "display",
+  "interface": "i2c",
+  "default_address": "0x3C",
+  "description": "128x64 OLED display",
+  "c_prefix": "ssd1306",
+  "c_source": "sensor_ssd1306.c",
+  "methods": {
+    "clear": {
+      "returns": "void",
+      "params": [],
+      "description": "Clear display"
+    },
+    "text": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "x",
+          "type": "int"
+        },
+        {
+          "name": "y",
+          "type": "int"
+        },
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "description": "Draw text"
+    },
+    "show": {
+      "returns": "void",
+      "params": [],
+      "description": "Flush to display"
+    }
+  }
+}
