@@ -151,10 +151,21 @@ raw_block: "raw" "{" ESCAPED_STRING "}"
 
 // --- Block ---
 
-block: "{" (_NL | statement)* "}"
+block: "{" (_NL | statement)* _inline_stmt? "}"
+
+// Single statement on same line as braces: { stmt }
+// These don't require a trailing _NL before the }
+_inline_stmt: var_decl
+    | return_stmt
+    | assign_stmt
+    | expr_stmt
+    | break_stmt
+    | continue_stmt
 
 
 // --- Statements ---
+// _NL is required between consecutive statements.
+// _NL? at the end allows single-line blocks: { stmt }
 
 ?statement: var_decl _NL
     | return_stmt _NL
