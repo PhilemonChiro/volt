@@ -61,7 +61,6 @@ METHOD_MAP = {
     ("HTTP", "post"): "http_post({args}, NULL, NULL, 0, NULL)",
     # Storage — save/load dispatch handled in _emit_method_call
     ("Storage", "push"):       "storage_push({args})",
-    ("Storage", "push"):       "storage_push({args})",
     ("Storage", "drain"):      "storage_drain({args})",
     ("Storage", "list_count"): "storage_list_count({args})",
     ("Storage", "list_clear"): "storage_list_clear({args})",

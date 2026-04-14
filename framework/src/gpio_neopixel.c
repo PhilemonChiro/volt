@@ -50,9 +50,12 @@ void neopixel_show(neopixel_t *dev)
     uint8_t gpio = dev->gpio;
     uint16_t total_bytes = dev->num_leds * 3;
 
-    // Disable interrupts for timing-critical section
-    // Platform-specific: ESP32 uses portDISABLE_INTERRUPTS
-    // RP2040: __asm volatile("cpsid i")
+    // Disable interrupts — WS2812B timing is corrupted by any ISR
+#if defined(ESP_PLATFORM)
+    portDISABLE_INTERRUPTS();
+#elif defined(PICO_BOARD)
+    uint32_t _irq_state = save_and_disable_interrupts();
+#endif
 
     for (uint16_t i = 0; i < total_bytes; i++) {
         uint8_t byte = dev->pixels[i];
@@ -74,6 +77,11 @@ void neopixel_show(neopixel_t *dev)
     }
 
     // Re-enable interrupts
+#if defined(ESP_PLATFORM)
+    portENABLE_INTERRUPTS();
+#elif defined(PICO_BOARD)
+    restore_interrupts(_irq_state);
+#endif
     // Latch: hold data line low for >50us (automatic — we're done sending)
 }
 

@@ -30,17 +30,16 @@ float hcsr04_distance_cm(hcsr04_t *dev)
     for (volatile int i = 0; i < 100; i++);  // ~10us at typical MCU speeds
     pin_write(dev->trig_pin, 0);
 
-    // Wait for echo to go high
+    // Wait for echo to go high (wrapping-safe timeout)
     uint32_t start = volt_tick_us();
-    uint32_t timeout = start + 30000;  // 30ms max
     while (pin_read(dev->echo_pin) == 0) {
-        if (volt_tick_us() > timeout) return -1.0f;
+        if ((volt_tick_us() - start) > 30000) return -1.0f;
     }
 
     // Measure echo high duration
     uint32_t echo_start = volt_tick_us();
     while (pin_read(dev->echo_pin) == 1) {
-        if (volt_tick_us() > timeout) return -1.0f;
+        if ((volt_tick_us() - echo_start) > 30000) return -1.0f;
     }
     uint32_t echo_end = volt_tick_us();
 
