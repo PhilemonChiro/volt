@@ -247,8 +247,13 @@ class CCodeGen:
             self._out('#include "volt/http.h"')
         if self._uses_storage(program):
             self._out('#include "volt/storage.h"')
+        if program.hardware and program.hardware.buses:
+            bus_types = {b.bus_type for b in program.hardware.buses}
+            if "i2c" in bus_types:
+                self._out('#include "volt/i2c.h"')
+            if "spi" in bus_types:
+                self._out('#include "volt/spi.h"')
         if program.hardware and program.hardware.sensors:
-            self._out('#include "volt/i2c.h"')
             self._out('#include "volt/sensor.h"')
         self._out("")
         # String interpolation buffers (used by string + int concat)
@@ -717,14 +722,22 @@ class CCodeGen:
                     self._out(f"pin_set_pwm({pin.gpio});")
             self._out("")
 
-            # I2C bus initialization
+            # Bus initialization (I2C and SPI)
             for bus in program.hardware.buses:
                 params = bus.params
-                sda = self._emit_expr_str(params.get("sda")) if "sda" in params else "21"
-                scl = self._emit_expr_str(params.get("scl")) if "scl" in params else "22"
-                speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "400000"
-                self._out(f"// I2C bus: {bus.name}")
-                self._out(f"volt_i2c_init(0, {sda}, {scl}, {speed});")
+                if bus.bus_type == "i2c":
+                    sda = self._emit_expr_str(params.get("sda")) if "sda" in params else "21"
+                    scl = self._emit_expr_str(params.get("scl")) if "scl" in params else "22"
+                    speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "400000"
+                    self._out(f"// I2C bus: {bus.name}")
+                    self._out(f"volt_i2c_init(0, {sda}, {scl}, {speed});")
+                elif bus.bus_type == "spi":
+                    mosi = self._emit_expr_str(params.get("mosi")) if "mosi" in params else "23"
+                    miso = self._emit_expr_str(params.get("miso")) if "miso" in params else "19"
+                    clk = self._emit_expr_str(params.get("clk")) if "clk" in params else "18"
+                    speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "1000000"
+                    self._out(f"// SPI bus: {bus.name}")
+                    self._out(f"volt_spi_init(0, {mosi}, {miso}, {clk}, {speed});")
             if program.hardware.buses:
                 self._out("")
 

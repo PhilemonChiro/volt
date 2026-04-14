@@ -17,6 +17,7 @@ add_executable(volt-rp2040
     src/system.c
     src/storage.c
     src/i2c.c
+    src/spi.c
     ../framework/src/sensor_bme280.c
     ../framework/src/sensor_aht20.c
     ../framework/src/sensor_sht31.c
@@ -38,6 +39,7 @@ target_link_libraries(volt-rp2040
     hardware_gpio
     hardware_pwm
     hardware_i2c
+    hardware_spi
     hardware_timer
     hardware_adc
     hardware_watchdog
