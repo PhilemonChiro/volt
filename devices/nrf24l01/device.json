@@ -1,0 +1,13 @@
+{
+  "name": "NRF24L01",
+  "category": "communication",
+  "interface": "spi",
+  "default_address": "",
+  "description": "2.4GHz wireless transceiver",
+  "c_prefix": "nrf24l01",
+  "c_source": "driver.c",
+  "methods": {
+    "send": { "returns": "int", "params": [{"name":"data","type":"string"}], "description": "Send data, returns 1 on success" },
+    "available": { "returns": "int", "params": [], "description": "1 if data waiting" }
+  }
+}

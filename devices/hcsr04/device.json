@@ -1,0 +1,12 @@
+{
+  "name": "HCSR04",
+  "category": "distance",
+  "interface": "gpio",
+  "default_address": "",
+  "description": "Ultrasonic distance sensor (2-400cm)",
+  "c_prefix": "hcsr04",
+  "c_source": "driver.c",
+  "methods": {
+    "distance_cm": { "returns": "float", "params": [], "description": "Distance in centimeters" }
+  }
+}
