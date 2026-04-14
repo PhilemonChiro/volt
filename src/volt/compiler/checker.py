@@ -126,6 +126,15 @@ METHOD_TYPES = {
         "send":       (BOOL, [("data", STRING)]),
         "on_receive": (VOID, []),
     },
+    # SPI devices
+    "MAX31855": {
+        "temperature": (FLOAT, []),
+        "internal":    (FLOAT, []),
+        "is_fault":    (INT, []),
+    },
+    "MCP3008": {
+        "read": (INT, [("channel", INT)]),
+    },
     # Builtins
     "WiFi": {
         "connect":      (VOID, [("ssid", STRING), ("password", STRING)]),

@@ -104,6 +104,11 @@ METHOD_MAP = {
     ("SSD1306", "clear"):      "ssd1306_clear({sensor})",
     ("SSD1306", "text"):       "ssd1306_text({sensor}, {args})",
     ("SSD1306", "show"):       "ssd1306_show({sensor})",
+    # SPI devices
+    ("MAX31855", "temperature"): "max31855_temperature({sensor})",
+    ("MAX31855", "internal"):    "max31855_internal({sensor})",
+    ("MAX31855", "is_fault"):    "max31855_is_fault({sensor})",
+    ("MCP3008", "read"):         "mcp3008_read({sensor}, {args})",
 }
 
 # Builtin function → C function
@@ -255,6 +260,10 @@ class CCodeGen:
                 self._out('#include "volt/spi.h"')
         if program.hardware and program.hardware.sensors:
             self._out('#include "volt/sensor.h"')
+            # Check if any SPI devices are used
+            spi_types = {"MAX31855", "MCP3008", "W25Q"}
+            if any(s.sensor_type in spi_types for s in program.hardware.sensors):
+                self._out('#include "volt/spi_devices.h"')
         self._out("")
         # String interpolation buffers (used by string + int concat)
         self._out("static char _volt_strbuf[16][128];")

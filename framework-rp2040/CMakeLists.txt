@@ -18,6 +18,9 @@ add_executable(volt-rp2040
     src/storage.c
     src/i2c.c
     src/spi.c
+    ../framework/src/spi_w25q.c
+    ../framework/src/spi_max31855.c
+    ../framework/src/spi_mcp3008.c
     ../framework/src/sensor_bme280.c
     ../framework/src/sensor_aht20.c
     ../framework/src/sensor_sht31.c
