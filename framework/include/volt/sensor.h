@@ -234,4 +234,81 @@ int max30100_ir(max30100_t *dev);
 float max30100_temperature(max30100_t *dev);
 int max30100_is_finger_present(max30100_t *dev);
 
+// (inserted before #endif by removing it first and re-adding)
+
+// ============================================================
+// HD44780 LCD 16x2/20x4 via I2C (addr: 0x27)
+// ============================================================
+typedef struct { uint8_t bus_id, addr, cols, rows, backlight; } hd44780_t;
+volt_error_t hd44780_init(hd44780_t *dev, uint8_t bus_id, uint8_t addr, uint8_t cols, uint8_t rows);
+void hd44780_clear(hd44780_t *dev);
+void hd44780_set_cursor(hd44780_t *dev, uint8_t col, uint8_t row);
+void hd44780_print(hd44780_t *dev, const char *text);
+void hd44780_backlight(hd44780_t *dev, uint8_t on);
+
+// ============================================================
+// BME680 — Gas + Temp + Humidity + Pressure (addr: 0x76/0x77)
+// ============================================================
+typedef struct { uint8_t bus_id, addr; float last_temp, last_hum, last_pres; uint32_t last_gas; } bme680_t;
+volt_error_t bme680_init(bme680_t *dev, uint8_t bus_id, uint8_t addr);
+float bme680_temperature(bme680_t *dev);
+float bme680_humidity(bme680_t *dev);
+float bme680_pressure(bme680_t *dev);
+int bme680_gas(bme680_t *dev);
+
+// ============================================================
+// APDS9960 — Gesture/Proximity/RGB (addr: 0x39)
+// ============================================================
+typedef struct { uint8_t bus_id, addr; } apds9960_t;
+volt_error_t apds9960_init(apds9960_t *dev, uint8_t bus_id, uint8_t addr);
+int apds9960_proximity(apds9960_t *dev);
+int apds9960_red(apds9960_t *dev);
+int apds9960_green(apds9960_t *dev);
+int apds9960_blue(apds9960_t *dev);
+int apds9960_clear(apds9960_t *dev);
+
+// ============================================================
+// QMC5883L — Compass/Magnetometer (addr: 0x0D)
+// ============================================================
+typedef struct { uint8_t bus_id, addr; float x, y, z; } qmc5883l_t;
+volt_error_t qmc5883l_init(qmc5883l_t *dev, uint8_t bus_id, uint8_t addr);
+float qmc5883l_x(qmc5883l_t *dev);
+float qmc5883l_y(qmc5883l_t *dev);
+float qmc5883l_z(qmc5883l_t *dev);
+float qmc5883l_heading(qmc5883l_t *dev);
+
+// ============================================================
+// TCA9548A — I2C Multiplexer (addr: 0x70)
+// ============================================================
+typedef struct { uint8_t bus_id, addr, current_channel; } tca9548a_t;
+volt_error_t tca9548a_init(tca9548a_t *dev, uint8_t bus_id, uint8_t addr);
+void tca9548a_select(tca9548a_t *dev, uint8_t channel);
+void tca9548a_disable(tca9548a_t *dev);
+
+// ============================================================
+// HTU21D — Temperature + Humidity (addr: 0x40)
+// ============================================================
+typedef struct { uint8_t bus_id, addr; } htu21d_t;
+volt_error_t htu21d_init(htu21d_t *dev, uint8_t bus_id, uint8_t addr);
+float htu21d_temperature(htu21d_t *dev);
+float htu21d_humidity(htu21d_t *dev);
+
+// ============================================================
+// MS5611 — High-res Barometric Pressure (addr: 0x77)
+// ============================================================
+typedef struct { uint8_t bus_id, addr; uint16_t C[7]; int32_t dT, TEMP; } ms5611_t;
+volt_error_t ms5611_init(ms5611_t *dev, uint8_t bus_id, uint8_t addr);
+float ms5611_temperature(ms5611_t *dev);
+float ms5611_pressure(ms5611_t *dev);
+
+// ============================================================
+// MAX7219 — LED Matrix/7-Segment (SPI)
+// ============================================================
+typedef struct { uint8_t bus_id, cs_pin, num_devices; } max7219_t;
+volt_error_t max7219_init(max7219_t *dev, uint8_t bus_id, uint8_t cs_pin);
+void max7219_set_row(max7219_t *dev, uint8_t row, uint8_t data);
+void max7219_set_intensity(max7219_t *dev, uint8_t level);
+void max7219_clear(max7219_t *dev);
+void max7219_set_digit(max7219_t *dev, uint8_t pos, uint8_t value, uint8_t dp);
+
 #endif // VOLT_SENSOR_H

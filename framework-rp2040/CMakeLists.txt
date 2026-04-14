@@ -37,6 +37,14 @@ add_executable(volt-rp2040
     ../framework/src/sensor_mcp4725.c
     ../framework/src/sensor_max30102.c
     ../framework/src/sensor_max30100.c
+    ../framework/src/display_hd44780.c
+    ../framework/src/sensor_bme680.c
+    ../framework/src/sensor_apds9960.c
+    ../framework/src/sensor_qmc5883l.c
+    ../framework/src/sensor_tca9548a.c
+    ../framework/src/sensor_htu21d.c
+    ../framework/src/sensor_ms5611.c
+    ../framework/src/spi_max7219.c
 )
 
 # Include the shared Volt headers

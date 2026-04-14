@@ -158,6 +158,48 @@ METHOD_TYPES = {
         "temperature":       (FLOAT, []),
         "is_finger_present": (INT, []),
     },
+    "HD44780": {
+        "clear":      (VOID, []),
+        "print":      (VOID, [("text", STRING)]),
+        "set_cursor": (VOID, [("col", INT), ("row", INT)]),
+        "backlight":  (VOID, [("on", INT)]),
+    },
+    "BME680": {
+        "temperature": (FLOAT, []),
+        "humidity":    (FLOAT, []),
+        "pressure":    (FLOAT, []),
+        "gas":         (INT, []),
+    },
+    "APDS9960": {
+        "proximity": (INT, []),
+        "red":       (INT, []),
+        "green":     (INT, []),
+        "blue":      (INT, []),
+    },
+    "QMC5883L": {
+        "x":       (FLOAT, []),
+        "y":       (FLOAT, []),
+        "z":       (FLOAT, []),
+        "heading": (FLOAT, []),
+    },
+    "TCA9548A": {
+        "select":  (VOID, [("channel", INT)]),
+        "disable": (VOID, []),
+    },
+    "HTU21D": {
+        "temperature": (FLOAT, []),
+        "humidity":    (FLOAT, []),
+    },
+    "MS5611": {
+        "temperature": (FLOAT, []),
+        "pressure":    (FLOAT, []),
+    },
+    "MAX7219": {
+        "set_row":       (VOID, [("row", INT), ("data", INT)]),
+        "set_intensity": (VOID, [("level", INT)]),
+        "clear":         (VOID, []),
+        "set_digit":     (VOID, [("pos", INT), ("value", INT), ("dp", INT)]),
+    },
     "MAX30100": {
         "red":               (INT, []),
         "ir":                (INT, []),

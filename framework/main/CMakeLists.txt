@@ -33,5 +33,13 @@ idf_component_register(
          "../src/sensor_mcp4725.c"
          "../src/sensor_max30102.c"
          "../src/sensor_max30100.c"
+         "../src/display_hd44780.c"
+         "../src/sensor_bme680.c"
+         "../src/sensor_apds9960.c"
+         "../src/sensor_qmc5883l.c"
+         "../src/sensor_tca9548a.c"
+         "../src/sensor_htu21d.c"
+         "../src/sensor_ms5611.c"
+         "../src/spi_max7219.c"
     INCLUDE_DIRS "../include"
 )
