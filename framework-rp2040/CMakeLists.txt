@@ -16,6 +16,9 @@ add_executable(volt-rp2040
     src/error.c
     src/system.c
     src/storage.c
+    src/i2c.c
+    ../framework/src/sensor_bme280.c
+    ../framework/src/sensor_bh1750.c
 )
 
 # Include the shared Volt headers
@@ -28,6 +31,7 @@ target_link_libraries(volt-rp2040
     pico_stdlib
     hardware_gpio
     hardware_pwm
+    hardware_i2c
     hardware_timer
     hardware_adc
     hardware_watchdog

@@ -1,15 +1,15 @@
 /* ============================================================
-   Smart LED Controller — Raspberry Pi Pico
+Smart LED Controller — Raspberry Pi Pico
 
-   A multi-mode LED controller with button cycling.
-   Demonstrates: tasks, state machines, PWM, channels,
-   shared vars, string interpolation.
+A multi-mode LED controller with button cycling.
+Demonstrates: tasks, state machines, PWM, channels,
+shared vars, string interpolation.
 
-   Hardware:
-     GP25 = onboard LED (PWM breathing)
-     GP15 = button (cycle modes)
-     GP0  = status indicator
-   ============================================================ */
+Hardware:
+GP25 = onboard LED (PWM breathing)
+GP15 = button (cycle modes)
+GP0  = status indicator
+============================================================ */
 
 chip rp2040
 

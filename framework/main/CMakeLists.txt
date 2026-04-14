@@ -12,5 +12,8 @@ idf_component_register(
          "../src/storage.c"
          "../src/http.c"
          "../src/system.c"
+         "../src/i2c.c"
+         "../src/sensor_bme280.c"
+         "../src/sensor_bh1750.c"
     INCLUDE_DIRS "../include"
 )

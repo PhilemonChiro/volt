@@ -54,7 +54,7 @@ pin_decl: "pin" NAME ":" pin_mode "=" expr
 
 pin_mode: NAME ("." NAME)*
 
-bus_decl: NAME NAME "=" NAME "(" named_args ")"
+bus_decl: "bus" NAME ":" NAME "(" named_args ")"
 
 sensor_decl: "sensor" NAME ":" NAME "on" NAME "at" expr
 

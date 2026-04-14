@@ -427,7 +427,7 @@ compile_fail("invalid gpio", "hardware {\n    pin x: Output = 50\n}\n", "does no
 compile_fail("non-analog pin", "hardware {\n    pin x: Analog = 21\n}\n", "adc")
 compile_fail("i2c addr conflict", """
 hardware {
-    i2c bus = i2c(sda: 21, scl: 22)
+    bus bus: I2C(sda: 21, scl: 22)
     sensor a: BME280 on bus at 0x76
     sensor b: BME280 on bus at 0x76
 }

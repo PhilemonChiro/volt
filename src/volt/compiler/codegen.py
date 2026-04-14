@@ -72,6 +72,15 @@ METHOD_MAP = {
     ("System", "id"):          "system_id()",
     # OTA
     ("OTA", "enable"): "ota_enable()",
+    # Sensors — {sensor} is replaced with &_sensorname
+    ("BME280", "temperature"): "bme280_temperature({sensor})",
+    ("BME280", "humidity"):    "bme280_humidity({sensor})",
+    ("BME280", "pressure"):    "bme280_pressure({sensor})",
+    ("BME280", "init"):        "bme280_init({sensor}, {bus_id}, {addr})",
+    ("BH1750", "lux"):         "bh1750_lux({sensor})",
+    ("SSD1306", "clear"):      "ssd1306_clear({sensor})",
+    ("SSD1306", "text"):       "ssd1306_text({sensor}, {args})",
+    ("SSD1306", "show"):       "ssd1306_show({sensor})",
 }
 
 # Builtin function → C function
@@ -126,6 +135,9 @@ class CCodeGen:
 
         # Section 4c: Channels
         self._emit_channels(program)
+
+        # Section 4d: Sensor instances
+        self._emit_sensor_instances(program)
 
         # Section 5: User functions (non-yielding)
         self._emit_functions(program)
@@ -212,6 +224,9 @@ class CCodeGen:
             self._out('#include "volt/http.h"')
         if self._uses_storage(program):
             self._out('#include "volt/storage.h"')
+        if program.hardware and program.hardware.sensors:
+            self._out('#include "volt/i2c.h"')
+            self._out('#include "volt/sensor.h"')
         self._out("")
         # String interpolation buffers (used by string + int concat)
         self._out("static char _volt_strbuf[16][128];")
@@ -366,6 +381,14 @@ class CCodeGen:
                 # clear
                 self._out(f"static inline void {name}_clear(void) {{ _ch_{name}.head = 0; _ch_{name}.tail = 0; _ch_{name}.count = 0; }}")
                 self._out("")
+
+    def _emit_sensor_instances(self, program: Program):
+        if program.hardware and program.hardware.sensors:
+            self._out("// Sensor instances")
+            for sensor in program.hardware.sensors:
+                stype = sensor.sensor_type.lower()
+                self._out(f"static {stype}_t _{sensor.name} = {{0}};")
+            self._out("")
 
     def _emit_functions(self, program: Program):
         for func in program.functions:
@@ -670,6 +693,25 @@ class CCodeGen:
                 elif pin.mode == "PWM":
                     self._out(f"pin_set_pwm({pin.gpio});")
             self._out("")
+
+            # I2C bus initialization
+            for bus in program.hardware.buses:
+                params = bus.params
+                sda = self._emit_expr_str(params.get("sda")) if "sda" in params else "21"
+                scl = self._emit_expr_str(params.get("scl")) if "scl" in params else "22"
+                speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "400000"
+                self._out(f"// I2C bus: {bus.name}")
+                self._out(f"volt_i2c_init(0, {sda}, {scl}, {speed});")
+            if program.hardware.buses:
+                self._out("")
+
+            # Sensor initialization
+            for sensor in program.hardware.sensors:
+                stype = sensor.sensor_type.lower()
+                self._out(f"// Sensor: {sensor.name} ({sensor.sensor_type})")
+                self._out(f"{stype}_init(&_{sensor.name}, 0, {sensor.address});")
+            if program.hardware.sensors:
+                self._out("")
 
         # Storage variable loading — restore from flash with defaults
         for sv in program.storage_vars:
@@ -982,6 +1024,15 @@ class CCodeGen:
                 key = (type_name, expr.method)
                 if key in METHOD_MAP:
                     return METHOD_MAP[key].format(args=args_str)
+
+            # Sensor methods (bme.temperature() → bme280_temperature(&_bme))
+            if obj_name and obj_name in self.sensor_map:
+                sensor_type = self.sensor_map[obj_name]
+                key = (sensor_type, expr.method)
+                if key in METHOD_MAP:
+                    sensor_ref = f"&_{obj_name}"
+                    return METHOD_MAP[key].format(sensor=sensor_ref, args=args_str,
+                                                  bus_id="0", addr="0")
 
             # Generic method call fallback
             obj_str = self._emit_expr_str(expr.obj, ctx_prefix, cv)

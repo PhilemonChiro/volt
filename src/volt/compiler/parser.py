@@ -169,9 +169,10 @@ class ASTBuilder(Transformer):
         return ".".join(str(c) for c in children)
 
     def bus_decl(self, children):
-        bus_type = str(children[0])
-        name = str(children[1])
-        constructor = str(children[2])
+        # bus name: Type(params)
+        name = str(children[0])
+        bus_type = str(children[1]).lower()
+        constructor = bus_type
         params = children[3] if len(children) > 3 else {}
         return BusDecl(
             bus_type=bus_type, name=name, params=params,
