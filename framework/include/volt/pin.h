@@ -59,6 +59,35 @@ void pin_tone_ms(uint8_t pin, uint32_t frequency_hz, uint32_t duration_ms);
 // Stop any tone playing on this pin (set duty to 0).
 void pin_no_tone(uint8_t pin);
 
+// ---- Built-in tone patterns for HMI / interface feedback ----
+
+// Quick click — button press feedback (short 2kHz tick)
+void pin_tone_click(uint8_t pin);
+
+// Success — two rising beeps (confirmation, save OK, connected)
+void pin_tone_success(uint8_t pin);
+
+// Error — three low buzzes (wrong input, failed, denied)
+void pin_tone_error(uint8_t pin);
+
+// Warning — two-tone alert (low battery, timeout approaching)
+void pin_tone_warning(uint8_t pin);
+
+// Startup chime — ascending three-note melody (boot, power on)
+void pin_tone_startup(uint8_t pin);
+
+// Shutdown — descending two-note (power off, sleep)
+void pin_tone_shutdown(uint8_t pin);
+
+// Notification — gentle double beep (message received, event)
+void pin_tone_notify(uint8_t pin);
+
+// Alarm — urgent siren pattern (intrusion, critical alert)
+void pin_tone_alarm(uint8_t pin);
+
+// Keypad — standard DTMF-like beep for each digit (0-9)
+void pin_tone_keypad(uint8_t pin, uint8_t digit);
+
 // Blink an output pin: toggle, wait interval_ms, toggle back.
 // Non-blocking in protothread context (used with yield macros).
 // For simple use in main or one-shot code.

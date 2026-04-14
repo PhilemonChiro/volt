@@ -226,6 +226,71 @@ void pin_no_tone(uint8_t pin)
     pin_tone(pin, 0);
 }
 
+// ---- Built-in tone patterns ----
+
+void pin_tone_click(uint8_t pin)      { pin_tone_ms(pin, 2000, 30); }
+
+void pin_tone_success(uint8_t pin)
+{
+    pin_tone_ms(pin, 880, 100);
+    sleep_ms(30);
+    pin_tone_ms(pin, 1760, 150);
+}
+
+void pin_tone_error(uint8_t pin)
+{
+    pin_tone_ms(pin, 200, 100);
+    sleep_ms(50);
+    pin_tone_ms(pin, 200, 100);
+    sleep_ms(50);
+    pin_tone_ms(pin, 200, 200);
+}
+
+void pin_tone_warning(uint8_t pin)
+{
+    pin_tone_ms(pin, 600, 150);
+    sleep_ms(100);
+    pin_tone_ms(pin, 800, 150);
+}
+
+void pin_tone_startup(uint8_t pin)
+{
+    pin_tone_ms(pin, 523, 100);
+    sleep_ms(30);
+    pin_tone_ms(pin, 659, 100);
+    sleep_ms(30);
+    pin_tone_ms(pin, 784, 200);
+}
+
+void pin_tone_shutdown(uint8_t pin)
+{
+    pin_tone_ms(pin, 784, 100);
+    sleep_ms(30);
+    pin_tone_ms(pin, 523, 200);
+}
+
+void pin_tone_notify(uint8_t pin)
+{
+    pin_tone_ms(pin, 1200, 80);
+    sleep_ms(80);
+    pin_tone_ms(pin, 1200, 80);
+}
+
+void pin_tone_alarm(uint8_t pin)
+{
+    for (int i = 0; i < 3; i++) {
+        pin_tone_ms(pin, 800, 200);
+        pin_tone_ms(pin, 1200, 200);
+    }
+}
+
+void pin_tone_keypad(uint8_t pin, uint8_t digit)
+{
+    static const uint16_t freqs[] = { 941, 697, 697, 697, 770, 770, 770, 852, 852, 852 };
+    if (digit > 9) return;
+    pin_tone_ms(pin, freqs[digit], 100);
+}
+
 void pin_blink(uint8_t pin, uint32_t interval_ms)
 {
     pin_toggle(pin);
