@@ -42,6 +42,9 @@ METHOD_MAP = {
     ("Analog", "read"):    "pin_read({gpio})",
     ("PWM", "set_pwm"):    "pin_pwm_write({gpio}, {args})",
     ("PWM", "write"):      "pin_pwm_write({gpio}, {args})",
+    ("PWM", "tone"):       "pin_tone({gpio}, {args})",
+    ("PWM", "tone_ms"):    "pin_tone_ms({gpio}, {args})",
+    ("PWM", "no_tone"):    "pin_no_tone({gpio})",
     # WiFi
     ("WiFi", "connect"):      "wifi_connect({args})",
     ("WiFi", "disconnect"):   "wifi_disconnect()",

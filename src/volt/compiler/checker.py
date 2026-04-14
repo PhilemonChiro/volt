@@ -67,6 +67,9 @@ METHOD_TYPES = {
     "PWM": {
         "write":   (VOID, [("value", INT)]),
         "set_pwm": (VOID, [("value", INT)]),
+        "tone":    (VOID, [("frequency", INT)]),
+        "tone_ms": (VOID, [("frequency", INT), ("duration", INT)]),
+        "no_tone": (VOID, []),
     },
     # Sensor types
     "BME280": {

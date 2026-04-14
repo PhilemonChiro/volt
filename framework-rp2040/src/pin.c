@@ -186,6 +186,46 @@ volt_error_t pin_pwm_write(uint8_t pin, uint8_t duty)
     return VOLT_OK;
 }
 
+volt_error_t pin_tone(uint8_t pin, uint32_t frequency_hz)
+{
+    if (pin >= PIN_COUNT) return VOLT_ERR_INVALID_PIN;
+    if (pin_modes[pin] != PIN_MODE_PWM) return VOLT_ERR_WRONG_PIN_MODE;
+
+    uint slice = pwm_gpio_to_slice_num(pin);
+
+    if (frequency_hz == 0) {
+        pwm_set_gpio_level(pin, 0);
+    } else {
+        // RP2040: 125MHz system clock
+        // wrap = (125MHz / frequency) - 1, clkdiv = 1
+        uint32_t wrap = (125000000 / frequency_hz) - 1;
+        float clkdiv = 1.0f;
+
+        // If wrap > 65535, increase clock divider
+        while (wrap > 65535 && clkdiv < 256.0f) {
+            clkdiv *= 2.0f;
+            wrap = (uint32_t)(125000000.0f / (clkdiv * frequency_hz)) - 1;
+        }
+
+        pwm_set_clkdiv(slice, clkdiv);
+        pwm_set_wrap(slice, (uint16_t)wrap);
+        pwm_set_gpio_level(pin, wrap / 2);  // 50% duty = square wave
+    }
+    return VOLT_OK;
+}
+
+void pin_tone_ms(uint8_t pin, uint32_t frequency_hz, uint32_t duration_ms)
+{
+    pin_tone(pin, frequency_hz);
+    sleep_ms(duration_ms);
+    pin_tone(pin, 0);
+}
+
+void pin_no_tone(uint8_t pin)
+{
+    pin_tone(pin, 0);
+}
+
 void pin_blink(uint8_t pin, uint32_t interval_ms)
 {
     pin_toggle(pin);

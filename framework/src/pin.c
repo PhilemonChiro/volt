@@ -300,6 +300,37 @@ volt_error_t pin_pwm_write(uint8_t pin, uint8_t duty)
     return VOLT_OK;
 }
 
+volt_error_t pin_tone(uint8_t pin, uint32_t frequency_hz)
+{
+    if (pin >= PIN_COUNT) return VOLT_ERR_INVALID_PIN;
+    if (pin_modes[pin] != PIN_MODE_PWM) return VOLT_ERR_WRONG_PIN_MODE;
+
+    int8_t ch = pwm_channel_map[pin];
+    if (ch < 0) return VOLT_ERR_INTERNAL;
+
+    if (frequency_hz == 0) {
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, ch, 0);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
+    } else {
+        ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, frequency_hz);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, ch, 128); // 50% duty = square wave
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
+    }
+    return VOLT_OK;
+}
+
+void pin_tone_ms(uint8_t pin, uint32_t frequency_hz, uint32_t duration_ms)
+{
+    pin_tone(pin, frequency_hz);
+    vTaskDelay(duration_ms / portTICK_PERIOD_MS);
+    pin_tone(pin, 0);
+}
+
+void pin_no_tone(uint8_t pin)
+{
+    pin_tone(pin, 0);
+}
+
 void pin_blink(uint8_t pin, uint32_t interval_ms)
 {
     pin_toggle(pin);

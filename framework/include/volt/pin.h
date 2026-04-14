@@ -49,6 +49,16 @@ volt_error_t pin_set_pwm(uint8_t pin);
 // Set PWM duty cycle (0-255). Pin must be configured with pin_set_pwm().
 volt_error_t pin_pwm_write(uint8_t pin, uint8_t duty);
 
+// Play a tone at a specific frequency (Hz). Pin must be PWM.
+// Sets 50% duty cycle at the given frequency. 0 = silence.
+volt_error_t pin_tone(uint8_t pin, uint32_t frequency_hz);
+
+// Play a tone for a duration then stop.
+void pin_tone_ms(uint8_t pin, uint32_t frequency_hz, uint32_t duration_ms);
+
+// Stop any tone playing on this pin (set duty to 0).
+void pin_no_tone(uint8_t pin);
+
 // Blink an output pin: toggle, wait interval_ms, toggle back.
 // Non-blocking in protothread context (used with yield macros).
 // For simple use in main or one-shot code.
