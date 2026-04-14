@@ -29,6 +29,7 @@ import re as _re
 def _resolve_includes(source: str, filename: str, errors) -> str:
     """Resolve include "file.volt" directives by inlining file contents."""
     base_dir = Path(filename).parent if filename != "main.volt" else Path(".")
+    project_root = base_dir.resolve()
     seen = {str(Path(filename).resolve())}
     max_depth = 10
 
@@ -40,18 +41,35 @@ def _resolve_includes(source: str, filename: str, errors) -> str:
         for line in lines:
             match = _re.match(r'^\s*include\s+"([^"]+)"\s*$', line)
             if match:
-                inc_path = base / match.group(1)
+                inc_raw = match.group(1)
+                inc_path = base / inc_raw
                 resolved = str(inc_path.resolve())
+
+                # Security: reject absolute paths and traversal outside project
+                if inc_raw.startswith('/') or inc_raw.startswith('\\'):
+                    from .ast_nodes import Region
+                    errors.error(Region(1, 1, 1, 1), "INCLUDE ERROR",
+                                 f"Absolute include paths are not allowed: {inc_raw}")
+                    result.append(line)
+                    continue
+                if not resolved.startswith(str(project_root)):
+                    from .ast_nodes import Region
+                    errors.error(Region(1, 1, 1, 1), "INCLUDE ERROR",
+                                 f"Include path escapes project directory: {inc_raw}",
+                                 hint="Includes must resolve within the project folder.")
+                    result.append(line)
+                    continue
+
                 if resolved in seen:
-                    result.append(f"// include cycle skipped: {match.group(1)}")
+                    result.append(f"// include cycle skipped: {inc_raw}")
                     continue
                 seen.add(resolved)
                 try:
                     inc_source = inc_path.read_text()
                     inc_source = resolve(inc_source, inc_path.parent, depth + 1)
-                    result.append(f"// --- included from {match.group(1)} ---")
+                    result.append(f"// --- included from {inc_raw} ---")
                     result.append(inc_source)
-                    result.append(f"// --- end {match.group(1)} ---")
+                    result.append(f"// --- end {inc_raw} ---")
                 except FileNotFoundError:
                     from .ast_nodes import Region
                     errors.error(Region(1, 1, 1, 1), "INCLUDE ERROR",

@@ -286,6 +286,7 @@ class CCodeGen:
         self._needs_sprintf_buf = False
         self._sprintf_buf_idx = 0
         self._chip_family = self._get_chip_family(program)
+        self._cached_all_stmts = None
 
         # Section 1: Header
         self._emit_header(program)
@@ -544,8 +545,13 @@ class CCodeGen:
                 cap = ch.capacity
                 name = _c_name(ch.name)
                 # Generate a simple ring buffer struct per channel
-                # Use uint16_t for channels with capacity > 255
-                idx_type = "uint16_t" if cap > 255 else "uint8_t"
+                # Index type sized to capacity
+                if cap > 65535:
+                    idx_type = "uint32_t"
+                elif cap > 255:
+                    idx_type = "uint16_t"
+                else:
+                    idx_type = "uint8_t"
                 self._out(f"typedef struct {{")
                 self._out(f"    {c_type} buf[{cap}];")
                 self._out(f"    _Atomic {idx_type} head;")
@@ -1485,7 +1491,10 @@ class CCodeGen:
         return "int"
 
     def _all_stmts(self, prog):
-        """Collect all statements from tasks + functions + machines + setup + loop."""
+        """Collect all statements from tasks + functions + machines + setup + loop.
+        Cached per generate() call — the AST doesn't change after transformation."""
+        if self._cached_all_stmts is not None:
+            return self._cached_all_stmts
         stmts = []
         for t in prog.tasks:
             stmts.extend(t.body)
@@ -1502,6 +1511,7 @@ class CCodeGen:
             stmts.extend(prog.setup.body)
         if prog.loop:
             stmts.extend(prog.loop.body)
+        self._cached_all_stmts = stmts
         return stmts
 
     def _uses_wifi(self, prog):
