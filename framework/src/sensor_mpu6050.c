@@ -3,6 +3,7 @@
 #include "volt/sensor.h"
 #include "volt/i2c.h"
 #include "volt/log.h"
+#include "volt/task.h"  // for volt_tick_ms()
 
 #define MPU6050_REG_PWR_MGMT_1  0x6B
 #define MPU6050_REG_ACCEL_CFG   0x1C
@@ -58,10 +59,21 @@ static void mpu6050_read_all(mpu6050_t *dev)
     dev->temperature = temp_raw / 340.0f + 36.53f;
 }
 
-float mpu6050_accel_x(mpu6050_t *dev)     { mpu6050_read_all(dev); return dev->accel_x; }
-float mpu6050_accel_y(mpu6050_t *dev)     { mpu6050_read_all(dev); return dev->accel_y; }
-float mpu6050_accel_z(mpu6050_t *dev)     { mpu6050_read_all(dev); return dev->accel_z; }
-float mpu6050_gyro_x(mpu6050_t *dev)      { mpu6050_read_all(dev); return dev->gyro_x; }
-float mpu6050_gyro_y(mpu6050_t *dev)      { mpu6050_read_all(dev); return dev->gyro_y; }
-float mpu6050_gyro_z(mpu6050_t *dev)      { mpu6050_read_all(dev); return dev->gyro_z; }
-float mpu6050_temperature(mpu6050_t *dev) { mpu6050_read_all(dev); return dev->temperature; }
+// Cache: only re-read if >2ms since last read (consistent snapshot within a cycle)
+static uint32_t last_read_ms = 0;
+static void mpu6050_read_cached(mpu6050_t *dev)
+{
+    uint32_t now = volt_tick_ms();
+    if (now - last_read_ms >= 2) {
+        mpu6050_read_all(dev);
+        last_read_ms = now;
+    }
+}
+
+float mpu6050_accel_x(mpu6050_t *dev)     { mpu6050_read_cached(dev); return dev->accel_x; }
+float mpu6050_accel_y(mpu6050_t *dev)     { mpu6050_read_cached(dev); return dev->accel_y; }
+float mpu6050_accel_z(mpu6050_t *dev)     { mpu6050_read_cached(dev); return dev->accel_z; }
+float mpu6050_gyro_x(mpu6050_t *dev)      { mpu6050_read_cached(dev); return dev->gyro_x; }
+float mpu6050_gyro_y(mpu6050_t *dev)      { mpu6050_read_cached(dev); return dev->gyro_y; }
+float mpu6050_gyro_z(mpu6050_t *dev)      { mpu6050_read_cached(dev); return dev->gyro_z; }
+float mpu6050_temperature(mpu6050_t *dev) { mpu6050_read_cached(dev); return dev->temperature; }

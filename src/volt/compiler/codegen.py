@@ -396,13 +396,13 @@ class CCodeGen:
                 # try_receive (same as receive for now)
                 self._out(f"static inline {c_type} {name}_try_receive(void) {{ return {name}_receive(); }}")
                 # count
-                self._out(f"static inline int {name}_count(void) {{ return _ch_{name}.count; }}")
+                self._out(f"static inline int {name}_count(void) {{ return atomic_load(&_ch_{name}.count); }}")
                 # has_data / is_empty / is_full
                 self._out(f"static inline bool {name}_has_data(void) {{ return atomic_load(&_ch_{name}.count) > 0; }}")
                 self._out(f"static inline bool {name}_is_empty(void) {{ return atomic_load(&_ch_{name}.count) == 0; }}")
                 self._out(f"static inline bool {name}_is_full(void) {{ return atomic_load(&_ch_{name}.count) >= {cap}; }}")
                 # clear
-                self._out(f"static inline void {name}_clear(void) {{ _ch_{name}.head = 0; _ch_{name}.tail = 0; _ch_{name}.count = 0; }}")
+                self._out(f"static inline void {name}_clear(void) {{ atomic_store(&_ch_{name}.head, 0); atomic_store(&_ch_{name}.tail, 0); atomic_store(&_ch_{name}.count, 0); }}")
                 self._out("")
 
     def _emit_sensor_instances(self, program: Program):

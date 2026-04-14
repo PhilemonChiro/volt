@@ -3,6 +3,7 @@
 #include "volt/sensor.h"
 #include "volt/i2c.h"
 #include "volt/log.h"
+#include "volt/task.h"
 
 volt_error_t sht31_init(sht31_t *dev, uint8_t bus_id, uint8_t addr)
 {
@@ -24,7 +25,7 @@ static void sht31_read_raw(sht31_t *dev)
     volt_i2c_write(dev->bus_id, dev->addr, cmd, 2);
 
     // Wait 15ms for measurement
-    for (volatile int i = 0; i < 15000; i++) { __asm volatile("nop"); }
+    volt_delay_ms(15);
 
     // Read 6 bytes: temp_msb, temp_lsb, temp_crc, hum_msb, hum_lsb, hum_crc
     uint8_t data[6] = {0};
