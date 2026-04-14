@@ -525,13 +525,34 @@ volt_error_t storage_flush(void)
 
     if (!has_dirty && !has_lists) return VOLT_OK;
 
-    // Flush lists into dirty buffer as blob keys
+    // Flush lists into dirty buffer as individual entries with list prefix
     for (int i = 0; i < MAX_LISTS; i++) {
         if (!s_lists[i].active || s_lists[i].count == 0) continue;
-        // Lists are stored as individual push entries — flush to flash
-        // by including them as int entries with list prefix
+
+        // Write each list entry to dirty buffer
+        int start = (s_lists[i].head - s_lists[i].count + STORAGE_LIST_MAX) % STORAGE_LIST_MAX;
+        for (int j = 0; j < s_lists[i].count; j++) {
+            int idx = (start + j) % STORAGE_LIST_MAX;
+            int32_t value = s_lists[i].ring[idx];
+
+            // Build key like "listname_0", "listname_1", etc.
+            char key[24];
+            snprintf(key, sizeof(key), "_list_%s_%d", s_lists[i].name, j);
+
+            dirty_entry_t *slot = find_dirty_slot(key);
+            if (slot) {
+                slot->active = true;
+                slot->type = DIRTY_INT;
+                strncpy(slot->key, key, MAX_KEY_LEN);
+                slot->key[MAX_KEY_LEN] = '\0';
+                slot->value.i = value;
+            }
+        }
+
+        // Clear the list
         s_lists[i].count = 0;
         s_lists[i].head = 0;
+        has_dirty = true;  // Lists were added to dirty buffer
     }
 
     if (has_dirty) {
