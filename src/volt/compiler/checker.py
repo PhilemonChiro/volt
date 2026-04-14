@@ -116,10 +116,7 @@ METHOD_TYPES = {
         "temperature": (FLOAT, []),
         "humidity":    (FLOAT, []),
     },
-    "DHT22": {
-        "temperature": (FLOAT, []),
-        "humidity":    (FLOAT, []),
-    },
+    # DHT22: loaded from devices/dht22/device.json via registry
     "MPU6050": {
         "accel_x":     (FLOAT, []),
         "accel_y":     (FLOAT, []),

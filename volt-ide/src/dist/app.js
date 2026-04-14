@@ -83,9 +83,9 @@
         var_keywords: ["let", "var", "storage"],
         modifiers: ["strict", "initial", "debounce", "throttle"],
         lifecycle: ["enter", "exit", "after"],
-        pin_modes: ["Output", "Input", "PullUpInput", "PullDownInput", "Analog", "PWM", "Servo", "DAC"],
+        pin_modes: ["Output", "Input", "PullUpInput", "PullDownInput", "Analog", "PWM", "Servo", "DAC", "Touch"],
         primitives: ["int", "float", "bool", "string", "void", "Duration", "u8", "u16", "u32", "i8", "i16"],
-        builtins: ["wifi", "mqtt", "http", "system", "ota"],
+        builtins: ["wifi", "mqtt", "http", "system", "ota", "ble", "storage"],
         builtin_fns: ["log", "sleep", "deep_sleep", "light_sleep", "float", "int"],
         constants: ["true", "false", "HIGH", "LOW", "ON", "OFF",
             "linear", "ease_in", "ease_out", "ease_in_out",
@@ -254,7 +254,7 @@
     // -- Snippet templates for top-level declarations --
     var SNIPPETS = [
         { label: "chip", detail: "Declare target chip", insert: "chip ${1|esp32,esp8266,rp2040,stm32f103|}", kind: Kind.Keyword },
-        { label: "hardware", detail: "Hardware pin block", insert: "hardware {\n\tpin ${1:name}: ${2|Output,Input,PullUpInput,PullDownInput,Analog,PWM,Servo,DAC|} = ${3:pin_number}\n}", kind: Kind.Keyword },
+        { label: "hardware", detail: "Hardware pin block", insert: "hardware {\n\tpin ${1:name}: ${2|Output,Input,PullUpInput,PullDownInput,Analog,PWM,Servo,DAC,Touch|} = ${3:pin_number}\n}", kind: Kind.Keyword },
         { label: "setup", detail: "Runs once at boot", insert: "setup {\n\t$0\n}", kind: Kind.Keyword },
         { label: "loop", detail: "Super-loop, runs forever", insert: "loop {\n\t$0\n}", kind: Kind.Keyword },
         { label: "include", detail: "Include another .volt file", insert: "include \"${0:file.volt}\"", kind: Kind.Keyword },
@@ -298,6 +298,7 @@
         { label: "pin PWM", detail: "PWM output", insert: "pin ${1:motor}: PWM = ${0:25}", kind: Kind.Property },
         { label: "pin Servo", detail: "Servo motor (0-180\u00B0)", insert: "pin ${1:arm}: Servo = ${0:13}", kind: Kind.Property },
         { label: "pin DAC", detail: "Analog output (ESP32: GPIO 25/26)", insert: "pin ${1:dac}: DAC = ${0:25}", kind: Kind.Property },
+        { label: "pin Touch", detail: "Capacitive touch (ESP32 only)", insert: "pin ${1:pad}: Touch = ${0:4}", kind: Kind.Property },
         { label: "bus I2C", detail: "I2C bus declaration", insert: "bus ${1:sensors}: I2C(sda: ${2:21}, scl: ${3:22})", kind: Kind.Property },
         { label: "device BME280", detail: "Temp/humidity/pressure", insert: "device ${1:bme}: BME280 on ${2:sensors} at ${0:0x76}", kind: Kind.Property },
         { label: "device AHT20", detail: "Temp/humidity", insert: "device ${1:aht}: AHT20 on ${2:sensors} at ${0:0x38}", kind: Kind.Property },
@@ -418,6 +419,12 @@
             { label: "voltage", detail: "(volts: float) -> void — 0.0-3.3V", insert: "voltage(${1:1.65})" },
             { label: "read", detail: "() -> int — current DAC value 0-255", insert: "read()" },
         ],
+        Touch: [
+            { label: "read", detail: "() -> int — raw capacitance value", insert: "read()" },
+            { label: "is_touched", detail: "() -> bool — below threshold?", insert: "is_touched()" },
+            { label: "set_threshold", detail: "(threshold: int) -> void", insert: "set_threshold(${1:20})" },
+            { label: "release", detail: "() -> void — release touch pin", insert: "release()" },
+        ],
     };
 
     // -- Methods on device types --
@@ -493,6 +500,7 @@
         { label: "PWM", detail: "PWM output" },
         { label: "Servo", detail: "Servo motor control (0-180\u00B0, 50Hz PWM)" },
         { label: "DAC", detail: "Analog voltage output (ESP32: GPIO 25/26 only)" },
+        { label: "Touch", detail: "Capacitive touch sensing (ESP32 only)" },
     ];
 
     // -- Chip names (after "chip ") --
@@ -541,7 +549,7 @@
         var lines = model.getLineCount();
         for (var i = 1; i <= lines; i++) {
             var line = model.getLineContent(i);
-            var pm = line.match(/\bpin\s+(\w+)\s*:\s*(Output|PullUpInput|PullDownInput|Input|Analog|PWM|Servo|DAC)/);
+            var pm = line.match(/\bpin\s+(\w+)\s*:\s*(Output|PullUpInput|PullDownInput|Input|Analog|PWM|Servo|DAC|Touch)/);
             if (pm) pins[pm[1]] = pm[2];
             var sm = line.match(/\bdevice\s+(\w+)\s*:\s*(BME280|AHT20|SHT31|DHT22|MPU6050|INA219|DS3231|BH1750|VEML7700|SSD1306)/);
             if (sm) sensors[sm[1]] = sm[2];
@@ -1080,6 +1088,7 @@
         "PullDownInput":{ desc: "Input with internal pull-down resistor", detail: "Methods: `read()`, `is_pressed()`, `press` (event for `on` blocks)" },
         Analog:        { desc: "ADC analog input", detail: "Returns 0-4095 (12-bit). On ESP32: ADC2 pins are blocked during WiFi — use ADC1 (GPIO 32-39)." },
         PWM:           { desc: "Pulse-width modulation output", detail: "Methods: `write(value)`, `set_pwm(value)` — duty cycle 0-255\nTone: `tone(freq)`, `tone_ms(freq, dur)`, `no_tone()`\nPatterns: `click()`, `beep_success()`, `beep_error()`, `beep_warning()`, `beep_startup()`, `beep_shutdown()`, `beep_notify()`, `beep_alarm()`, `beep_keypad(digit)`" },
+        Touch:         { desc: "Capacitive touch sensing (ESP32 only)", detail: "10 touch pins: GPIO 4,0,2,15,13,12,14,27,33,32.\nDetects finger proximity via capacitance \u2014 no external parts.\nAuto-calibrates on init (70% of untouched baseline).\n\nMethods:\n- `read()` \u2014 raw capacitance (lower = touched)\n- `is_touched()` \u2014 bool based on threshold\n- `set_threshold(value)` \u2014 manual tuning\n- `release()` \u2014 free the pin\n\nRP2040/STM32: no touch hardware." },
         DAC:           { desc: "Digital-to-Analog Converter — true analog voltage output", detail: "ESP32 only: GPIO 25 (ch0) and GPIO 26 (ch1). 8-bit resolution (0-255 = 0-3.3V).\nOutputs a real analog voltage, not PWM. No filtering needed.\n\nMethods:\n- `write(value)` \u2014 raw 0-255\n- `voltage(volts)` \u2014 set exact voltage (0.0-3.3V)\n- `read()` \u2014 current DAC value\n\nRP2040/STM32: no internal DAC. Use MCP4725 (I2C) instead." },
         Servo:         { desc: "Servo motor control (50Hz PWM)", detail: "Works with SG90, MG90S, MG996R, DS3218, and any hobby servo.\n\nMethods:\n- `move(angle)` — instant position (0-180\u00B0)\n- `ease_to(angle, duration)` — smooth movement\n- `ease_to_with(angle, duration, easing)` — with curve\n- `sweep(from, to, duration)` — linear sweep\n- `sweep_ease(from, to, duration, easing)` — eased sweep\n- `angle()` — read current position\n- `detach()` — release (servo goes limp)\n- `set_max_angle(270)` — for 270\u00B0 servos\n\nEasing: `linear`, `ease_in`, `ease_out`, `ease_in_out`, `ease_bounce`, `ease_back`, `ease_elastic`" },
         int:           { desc: "32-bit signed integer (-2B to +2B)", detail: "Arithmetic: `+`, `-`, `*`, `/`, `%`\nConvert to float: `float(x)`" },
@@ -1096,7 +1105,8 @@
         http:    { desc: "HTTP client module", detail: "**Methods:**\n- `get(url)` — HTTP GET, returns response body\n- `post(url, body)` — HTTP POST, returns response body\n\nRequires WiFi. Forces task to Priority tier." },
         storage: { desc: "Persistent flash storage (NVS)", detail: "**Methods:**\n- `save(key, value)` — save to flash (buffered, flushed every 30s)\n- `load(key)` — load from flash\n- `push(list, value)` — append to named list (store-and-forward)\n- `drain(list)` — read and clear all entries\n- `list_count(list)` — count entries\n- `list_clear(list)` — clear without reading\n\nSurvives reboots and power loss." },
         system:  { desc: "System information and control", detail: "**Methods:**\n- `restart()` — reboot the device\n- `free_heap()` — available RAM in bytes\n- `uptime()` — seconds since boot\n- `id()` — chip/device ID" },
-        ota:     { desc: "Over-the-air firmware updates", detail: "**Methods:**\n- `enable()` — start OTA update server\n- `check()` — check for new firmware" },
+        ota:     { desc: "Over-the-air firmware updates", detail: "**Methods:**\n- `enable()` — start OTA update server" },
+        ble:     { desc: "Bluetooth Low Energy", detail: "**Peripheral:**\n- `advertise(name)` — start advertising\n- `expose_int/float/string(name, val)` — expose a value\n- `update_int/float/string(id, val)` — update exposed value\n- `is_connected()` — check if a device is connected\n- `stop()` — stop advertising\n\n**Central (scanning):**\n- `scan(duration)` — scan for nearby devices\n- `scan_name(index)` — get device name\n- `scan_rssi(index)` — get signal strength" },
     };
 
     // Chip documentation
@@ -1330,6 +1340,11 @@
         "PWM.beep_alarm":    { sig: ".beep_alarm() -> void", desc: "Urgent siren pattern (repeats 3x).", detail: "Use case: Intrusion detected, critical temperature, emergency stop." },
         "PWM.beep_keypad":   { sig: ".beep_keypad(digit: int) -> void", desc: "DTMF-like beep for digits 0-9.", detail: "Use case: Keypad input feedback, phone dialing simulation." },
         // Servo
+        // Touch
+        "Touch.read":           { sig: ".read() -> int", desc: "Read raw capacitance value.", detail: "Lower value = more capacitance = finger closer.\nTypical untouched: 50-100. Touched: 5-20." },
+        "Touch.is_touched":     { sig: ".is_touched() -> bool", desc: "Returns true when finger is detected.", detail: "Uses auto-calibrated threshold (70% of baseline). Adjust with `set_threshold()` if needed." },
+        "Touch.set_threshold":  { sig: ".set_threshold(threshold: int) -> void", desc: "Set custom touch detection threshold.", detail: "Values below this threshold = touched. Lower = less sensitive." },
+        "Touch.release":        { sig: ".release() -> void", desc: "Release the touch pin back to unused state." },
         // DAC
         "DAC.write":          { sig: ".write(value: int) -> void", desc: "Set DAC output (0-255).", detail: "0 = 0V, 128 = ~1.65V, 255 = 3.3V.\n\nUse case: Audio waveform generation, analog control signals, bias voltage for sensors.\n\nExample: `dac.write(128)` \u2014 output ~1.65V" },
         "DAC.voltage":        { sig: ".voltage(volts: float) -> void", desc: "Set DAC to an exact voltage (0.0-3.3V).", detail: "Internally mapped to 0-255 range.\n\nUse case: Precision voltage reference, sensor calibration, threshold setting.\n\nExample: `dac.voltage(1.5)` \u2014 output exactly 1.5V" },

@@ -49,6 +49,7 @@ METHOD_MAP = {
     ("Touch", "is_touched"):    "touch_is_touched({gpio})",
     ("Touch", "set_threshold"): "touch_set_threshold({gpio}, {args})",
     ("Touch", "release"):       "touch_release({gpio})",
+    # Note: Touch.touch is an event source sentinel — no METHOD_MAP entry needed
     # Servo
     ("Servo", "move"):          "servo_write({gpio}, {args})",
     ("Servo", "move_us"):       "servo_write_us({gpio}, {args})",
