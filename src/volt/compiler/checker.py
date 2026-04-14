@@ -73,14 +73,49 @@ METHOD_TYPES = {
         "temperature": (FLOAT, []),
         "humidity":    (FLOAT, []),
         "pressure":    (FLOAT, []),
-        "init":        (VOID, []),
+    },
+    "AHT20": {
+        "temperature": (FLOAT, []),
+        "humidity":    (FLOAT, []),
+    },
+    "SHT31": {
+        "temperature": (FLOAT, []),
+        "humidity":    (FLOAT, []),
     },
     "DHT22": {
         "temperature": (FLOAT, []),
         "humidity":    (FLOAT, []),
     },
+    "MPU6050": {
+        "accel_x":     (FLOAT, []),
+        "accel_y":     (FLOAT, []),
+        "accel_z":     (FLOAT, []),
+        "gyro_x":      (FLOAT, []),
+        "gyro_y":      (FLOAT, []),
+        "gyro_z":      (FLOAT, []),
+        "temperature": (FLOAT, []),
+    },
+    "INA219": {
+        "voltage":       (FLOAT, []),
+        "current":       (FLOAT, []),
+        "power":         (FLOAT, []),
+        "shunt_voltage": (FLOAT, []),
+    },
+    "DS3231": {
+        "hours":       (INT, []),
+        "minutes":     (INT, []),
+        "seconds":     (INT, []),
+        "year":        (INT, []),
+        "month":       (INT, []),
+        "date":        (INT, []),
+        "temperature": (FLOAT, []),
+    },
     "BH1750": {
         "lux": (FLOAT, []),
+    },
+    "VEML7700": {
+        "lux":   (FLOAT, []),
+        "white": (FLOAT, []),
     },
     "SSD1306": {
         "clear":  (VOID, []),

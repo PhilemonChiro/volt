@@ -14,6 +14,12 @@ idf_component_register(
          "../src/system.c"
          "../src/i2c.c"
          "../src/sensor_bme280.c"
+         "../src/sensor_aht20.c"
+         "../src/sensor_sht31.c"
+         "../src/sensor_mpu6050.c"
+         "../src/sensor_ina219.c"
+         "../src/sensor_ds3231.c"
          "../src/sensor_bh1750.c"
+         "../src/sensor_veml7700.c"
     INCLUDE_DIRS "../include"
 )
