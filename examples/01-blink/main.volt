@@ -6,21 +6,20 @@ hardware {
     pin yellow: Output = 21
 }
 
-task blink_red() {
+task blink_red {
     every 100ms {
         red.toggle()
     }
 }
-task blink_green() {
+
+task blink_green {
     every 400ms {
         green.toggle()
     }
 }
-task blink_yellow() {
+
+task blink_yellow {
     every 600ms {
         yellow.toggle()
     }
-}
-main {
-    run(blink_red, blink_green, blink_yellow)
 }

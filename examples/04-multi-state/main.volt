@@ -4,47 +4,41 @@ hardware {
     pin led: Output = 2
 }
 
-machine Pattern {
-    var cycle = 0
+machine pattern {
+    var cycle: int = 0
 
     initial state fast {
         enter {
-            log("fast mode")
+            log("mode", "fast")
         }
-        after 3seconds -> slow {
-            cycle = cycle + 1
-        }
+        after 3s -> slow
     }
 
     state slow {
         enter {
-            log("slow mode")
+            log("mode", "slow")
         }
-        after 5seconds -> pulse
+        after 5s -> pulse
     }
 
     state pulse {
         enter {
-            log("pulse mode")
+            log("mode", "pulse")
         }
-        after 2seconds -> fast
+        after 2s -> fast
     }
 }
 
-task blink() {
+task blink {
     every 200ms {
         led.toggle()
     }
 }
 
-task status() {
-    var tick = 0
-    every 1seconds {
+task status {
+    var tick: int = 0
+    every 1s {
         tick = tick + 1
-        log("alive")
+        log("health", "alive")
     }
-}
-
-main {
-    run(blink, status)
 }

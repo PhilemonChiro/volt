@@ -6,26 +6,25 @@ hardware {
     pin battery: Analog = 36
 }
 
-task blink() {
+setup {
+    wifi.connect("MyNetwork", "MyPassword")
+    mqtt.connect("mqtt://broker.local")
+}
+
+task blink {
     every 500ms {
         led.toggle()
     }
 }
 
-task motor_pid() {
+task motor_pid {
     every 1ms strict {
         motor.set_pwm(0)
     }
 }
 
-task telemetry() {
-    every 5seconds {
+task telemetry {
+    every 5s {
         mqtt.send_int("volt/battery", battery.read())
     }
-}
-
-main {
-    wifi.connect("MyNetwork", "MyPassword")
-    mqtt.connect("mqtt://broker.local")
-    run(blink, motor_pid, telemetry)
 }

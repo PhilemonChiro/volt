@@ -5,97 +5,88 @@ hardware {
     pin motor: PWM = 4
 }
 
-machine Sequencer {
-    var step = 0
-    var total_cycles = 0
+machine sequencer {
+    var step: int = 0
+    var total_cycles: int = 0
 
     initial state phase_a {
         enter {
             step = 0
             led.on()
-            log("phase A start")
+            log("seq", "phase A start")
         }
         exit {
             led.off()
         }
-        after 1seconds -> phase_b {
-            step = step + 1
-        }
+        after 1s -> phase_b
     }
 
     state phase_b {
         enter {
-            log("phase B start")
-        }
-        after 800ms -> phase_c {
+            log("seq", "phase B start")
             step = step + 1
         }
+        after 800ms -> phase_c
     }
 
     state phase_c {
         enter {
-            log("phase C start")
-        }
-        after 600ms -> phase_d {
+            log("seq", "phase C start")
             step = step + 1
         }
+        after 600ms -> phase_d
     }
 
     state phase_d {
         enter {
-            log("phase D start")
-        }
-        after 400ms -> phase_e {
+            log("seq", "phase D start")
             step = step + 1
         }
+        after 400ms -> phase_e
     }
 
     state phase_e {
         enter {
-            log("phase E — cycle complete")
+            log("seq", "phase E — cycle complete")
             total_cycles = total_cycles + 1
         }
         after 200ms -> phase_a
     }
 }
 
-machine Watchdog {
-    var checks = 0
+machine watchdog_machine {
+    var checks: int = 0
 
     initial state monitoring {
-        after 2seconds -> checking
+        after 2s -> checking
     }
 
     state checking {
         enter {
             checks = checks + 1
-            log("watchdog check")
+            log("wdt", "check")
         }
         after 100ms -> monitoring
     }
 }
 
-task motor_pid() {
+task motor_pid {
     every 1ms strict {
         motor.set_pwm(0)
     }
 }
 
-task heartbeat() {
-    var beat = 0
+task heartbeat {
+    var beat: int = 0
     every 500ms {
         beat = beat + 1
         led.toggle()
     }
 }
 
-task counter() {
-    var c = 0
+task counter {
+    var c: int = 0
     every 100ms {
         c = c + 1
     }
-}
-
-main {
-    run(heartbeat, counter)
 }

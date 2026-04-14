@@ -20,108 +20,96 @@ func scale(raw: int) -> int {
     return clamp(raw * 100 / 4095, 0, 100)
 }
 
-machine PowerManager {
-    var battery_pct = 100
-    var low_count = 0
+machine power_manager {
+    var battery_pct: int = 100
+    var low_count: int = 0
 
     initial state normal {
         enter {
-            log("power: normal")
+            log("power", "normal")
             led.on()
         }
         exit {
             led.off()
         }
-        after 10seconds -> check_battery
+        after 10s -> check_battery
     }
 
     state check_battery {
         enter {
             battery_pct = scale(battery.read())
-            log("battery check")
-        }
-        after 100ms [battery_pct < 20] -> low_power {
-            low_count = low_count + 1
+            log("power", "battery check")
         }
         after 100ms -> normal
     }
 
     state low_power {
         enter {
-            log("power: LOW")
+            log("power", "LOW")
         }
-        after 30seconds -> check_battery
+        after 30s -> check_battery
     }
 }
 
-machine LedController {
-    var pattern = 0
+machine led_controller {
+    var pattern: int = 0
 
     initial state solid {
         enter {
             led.on()
         }
-        after 5seconds -> blink_fast {
-            pattern = 1
-        }
+        after 5s -> blink_fast
     }
 
     state blink_fast {
         enter {
-            log("led: fast blink")
+            log("led", "fast blink")
+            pattern = 1
         }
-        after 3seconds -> blink_slow {
-            pattern = 2
-        }
+        after 3s -> blink_slow
     }
 
     state blink_slow {
         enter {
-            log("led: slow blink")
+            log("led", "slow blink")
+            pattern = 2
         }
-        after 4seconds -> solid {
-            pattern = 0
-        }
+        after 4s -> solid
     }
 }
 
-task blink() {
+task blink {
     every 100ms {
         led.toggle()
     }
 }
 
-task motor_pid() {
+task motor_pid {
     every 1ms strict {
         motor.set_pwm(0)
     }
 }
 
-task slow_counter() {
-    var n = 0
-    every 2seconds {
+task slow_counter {
+    var n: int = 0
+    every 2s {
         n = n + 1
-        let bat = battery.read()
-        let pct = scale(bat)
-        log("status tick")
+        let bat: int = battery.read()
+        let pct: int = scale(bat)
+        log("status", "tick")
     }
 }
 
-task fast_counter() {
-    var x = 0
+task fast_counter {
+    var x: int = 0
     every 50ms {
         x = x + 1
     }
 }
 
-task medium_counter() {
-    var y = 0
+task medium_counter {
+    var y: int = 0
     every 333ms {
         y = y + 1
     }
-}
-
-
-main {
-    run(blink, slow_counter, fast_counter, medium_counter)
 }
