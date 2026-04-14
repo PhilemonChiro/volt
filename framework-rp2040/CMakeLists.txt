@@ -8,6 +8,9 @@ set(CMAKE_C_STANDARD 11)
 
 pico_sdk_init()
 
+# Auto-discover all device drivers from devices/*/driver.c
+file(GLOB DEVICE_DRIVERS "${CMAKE_CURRENT_SOURCE_DIR}/../devices/*/driver.c")
+
 add_executable(volt-rp2040
     main/main.c
     src/pin.c
@@ -18,38 +21,7 @@ add_executable(volt-rp2040
     src/storage.c
     src/i2c.c
     src/spi.c
-    ../framework/src/spi_w25q.c
-    ../framework/src/spi_max31855.c
-    ../framework/src/spi_mcp3008.c
-    ../framework/src/sensor_bme280.c
-    ../framework/src/sensor_aht20.c
-    ../framework/src/sensor_sht31.c
-    ../framework/src/sensor_mpu6050.c
-    ../framework/src/sensor_ina219.c
-    ../framework/src/sensor_ds3231.c
-    ../framework/src/sensor_bh1750.c
-    ../framework/src/sensor_veml7700.c
-    ../framework/src/sensor_bmp180.c
-    ../framework/src/sensor_ads1115.c
-    ../framework/src/sensor_pca9685.c
-    ../framework/src/sensor_pcf8574.c
-    ../framework/src/sensor_mlx90614.c
-    ../framework/src/sensor_mcp4725.c
-    ../framework/src/sensor_max30102.c
-    ../framework/src/sensor_max30100.c
-    ../framework/src/display_hd44780.c
-    ../framework/src/sensor_bme680.c
-    ../framework/src/sensor_apds9960.c
-    ../framework/src/sensor_qmc5883l.c
-    ../framework/src/sensor_tca9548a.c
-    ../framework/src/sensor_htu21d.c
-    ../framework/src/sensor_ms5611.c
-    ../framework/src/spi_max7219.c
-    ../framework/src/spi_mfrc522.c
-    ../framework/src/spi_nrf24l01.c
-    ../framework/src/gpio_dht.c
-    ../framework/src/gpio_hcsr04.c
-    ../framework/src/gpio_neopixel.c
+    ${DEVICE_DRIVERS}
 )
 
 # Include the shared Volt headers
