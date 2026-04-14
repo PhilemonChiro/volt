@@ -63,7 +63,7 @@ sensor_decl: "device" NAME ":" NAME "on" NAME "at" expr
 
 power_block: "power" "{" (_NL | power_item)* "}"
 
-?power_item: NAME ":" power_value _NL
+power_item: NAME ":" power_value _NL
 
 power_value: NAME "(" arg_list ")"
     | NAME

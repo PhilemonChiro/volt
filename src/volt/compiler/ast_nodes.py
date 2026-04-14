@@ -305,11 +305,12 @@ class WhileStmt(Node):
 
 @dataclass
 class ForStmt(Node):
-    """for i in 0..10 { ... }"""
+    """for i in 0..10 { ... }  or  for i in 0..100 step 5 { ... }"""
     var_name: str = ""
     start: Expr = None
     end: Expr = None
     body: list[Statement] = field(default_factory=list)
+    step: Expr = None
 
 
 @dataclass

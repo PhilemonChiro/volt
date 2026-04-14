@@ -20,6 +20,12 @@ _TYPE_MAP = {
     "bool": "bool",
     "string": "string",
     "void": "void",
+    "u8": "int",
+    "u16": "int",
+    "u32": "int",
+    "i8": "int",
+    "i16": "int",
+    "i32": "int",
 }
 
 

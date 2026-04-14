@@ -188,6 +188,8 @@ BUILTIN_MAP = {
     "deep_sleep":  "system_deep_sleep({args} * 1000)",
     "light_sleep": "system_light_sleep()",
     "run":         None,  # handled in app_main generation
+    "float":       "(float)({args})",
+    "int":         "(int32_t)({args})",
 }
 
 
@@ -225,6 +227,7 @@ class CCodeGen:
         self._build_maps(program)
         self._needs_sprintf_buf = False
         self._sprintf_buf_idx = 0
+        self._chip_family = self._get_chip_family(program)
 
         # Section 1: Header
         self._emit_header(program)
@@ -467,29 +470,33 @@ class CCodeGen:
                 cap = ch.capacity
                 name = _c_name(ch.name)
                 # Generate a simple ring buffer struct per channel
+                # Use uint16_t for channels with capacity > 255
+                idx_type = "uint16_t" if cap > 255 else "uint8_t"
                 self._out(f"typedef struct {{")
                 self._out(f"    {c_type} buf[{cap}];")
-                self._out(f"    _Atomic uint8_t head;")
-                self._out(f"    _Atomic uint8_t tail;")
-                self._out(f"    _Atomic uint8_t count;")
+                self._out(f"    _Atomic {idx_type} head;")
+                self._out(f"    _Atomic {idx_type} tail;")
+                self._out(f"    _Atomic {idx_type} count;")
                 self._out(f"}} _ch_{name}_t;")
                 self._out(f"static _ch_{name}_t _ch_{name} = {{{{0}}, 0, 0, 0}};")
                 self._out(f"")
-                # send function (atomic count for dual-core safety)
+                # send function — single-producer safe via atomic head
                 self._out(f"static inline void {name}_send({c_type} val) {{")
                 self._out(f"    _ch_{name}_t *ch = &_ch_{name};")
                 self._out(f"    if (atomic_load(&ch->count) < {cap}) {{")
-                self._out(f"        ch->buf[ch->head] = val;")
-                self._out(f"        ch->head = (ch->head + 1) % {cap};")
+                self._out(f"        {idx_type} h = atomic_load(&ch->head);")
+                self._out(f"        ch->buf[h] = val;")
+                self._out(f"        atomic_store(&ch->head, (h + 1) % {cap});")
                 self._out(f"        atomic_fetch_add(&ch->count, 1);")
                 self._out(f"    }}")
                 self._out(f"}}")
-                # receive function (atomic count for dual-core safety)
+                # receive function — single-consumer safe via atomic tail
                 self._out(f"static inline {c_type} {name}_receive(void) {{")
                 self._out(f"    _ch_{name}_t *ch = &_ch_{name};")
                 self._out(f"    if (atomic_load(&ch->count) > 0) {{")
-                self._out(f"        {c_type} val = ch->buf[ch->tail];")
-                self._out(f"        ch->tail = (ch->tail + 1) % {cap};")
+                self._out(f"        {idx_type} t = atomic_load(&ch->tail);")
+                self._out(f"        {c_type} val = ch->buf[t];")
+                self._out(f"        atomic_store(&ch->tail, (t + 1) % {cap});")
                 self._out(f"        atomic_fetch_sub(&ch->count, 1);")
                 self._out(f"        return val;")
                 self._out(f"    }}")
@@ -574,7 +581,9 @@ class CCodeGen:
 
     def _emit_critical_task(self, task: TaskDecl):
         self._out(f"// Critical task: {task.name} (hardware timer ISR)")
-        self._out(f"static void IRAM_ATTR {task.name}_isr(void *arg)")
+        # IRAM_ATTR is ESP-IDF only; RP2040/STM32 don't use it
+        isr_attr = "IRAM_ATTR " if self._chip_family in ("esp32", "esp8266") else ""
+        self._out(f"static void {isr_attr}{task.name}_isr(void *arg)")
         self._out("{")
         self.indent += 1
         # Critical tasks only contain the body of their every...strict block
@@ -819,25 +828,35 @@ class CCodeGen:
                     self._out(f"pin_set_pwm({pin.gpio});")
             self._out("")
 
-            # Bus initialization (I2C and SPI)
+            # Bus initialization (I2C and SPI) — chip-aware defaults
+            chip = self._chip_family
+            i2c_defaults = {"esp32": ("21", "22"), "esp8266": ("4", "5"),
+                            "rp2040": ("4", "5"), "stm32": ("7", "6")}
+            spi_defaults = {"esp32": ("23", "19", "18"), "esp8266": ("13", "12", "14"),
+                            "rp2040": ("19", "16", "18"), "stm32": ("7", "6", "5")}
+            uart_defaults = {"esp32": ("1", "3"), "esp8266": ("1", "3"),
+                             "rp2040": ("0", "1"), "stm32": ("2", "3")}
             for bus in program.hardware.buses:
                 params = bus.params
                 if bus.bus_type == "i2c":
-                    sda = self._emit_expr_str(params.get("sda")) if "sda" in params else "21"
-                    scl = self._emit_expr_str(params.get("scl")) if "scl" in params else "22"
+                    d_sda, d_scl = i2c_defaults.get(chip, ("21", "22"))
+                    sda = self._emit_expr_str(params.get("sda")) if "sda" in params else d_sda
+                    scl = self._emit_expr_str(params.get("scl")) if "scl" in params else d_scl
                     speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "400000"
                     self._out(f"// I2C bus: {bus.name}")
                     self._out(f"volt_i2c_init(0, {sda}, {scl}, {speed});")
                 elif bus.bus_type == "spi":
-                    mosi = self._emit_expr_str(params.get("mosi")) if "mosi" in params else "23"
-                    miso = self._emit_expr_str(params.get("miso")) if "miso" in params else "19"
-                    clk = self._emit_expr_str(params.get("clk")) if "clk" in params else "18"
+                    d_mosi, d_miso, d_clk = spi_defaults.get(chip, ("23", "19", "18"))
+                    mosi = self._emit_expr_str(params.get("mosi")) if "mosi" in params else d_mosi
+                    miso = self._emit_expr_str(params.get("miso")) if "miso" in params else d_miso
+                    clk = self._emit_expr_str(params.get("clk")) if "clk" in params else d_clk
                     speed = self._emit_expr_str(params.get("speed")) if "speed" in params else "1000000"
                     self._out(f"// SPI bus: {bus.name}")
                     self._out(f"volt_spi_init(0, {mosi}, {miso}, {clk}, {speed});")
                 elif bus.bus_type in ("uart", "serial"):
-                    tx = self._emit_expr_str(params.get("tx")) if "tx" in params else "1"
-                    rx = self._emit_expr_str(params.get("rx")) if "rx" in params else "3"
+                    d_tx, d_rx = uart_defaults.get(chip, ("1", "3"))
+                    tx = self._emit_expr_str(params.get("tx")) if "tx" in params else d_tx
+                    rx = self._emit_expr_str(params.get("rx")) if "rx" in params else d_rx
                     baud = self._emit_expr_str(params.get("baud")) if "baud" in params else "9600"
                     self._out(f"// UART/Serial: {bus.name}")
                     self._out(f"volt_uart_init(0, {tx}, {rx}, {baud});")
@@ -845,10 +864,19 @@ class CCodeGen:
                 self._out("")
 
             # Sensor initialization
+            # Build bus type lookup for correct init args
+            bus_types = {}
+            for bus in program.hardware.buses:
+                bus_types[bus.name] = bus.bus_type.lower()
             for sensor in program.hardware.sensors:
                 stype = sensor.sensor_type.lower()
-                self._out(f"// Sensor: {sensor.name} ({sensor.sensor_type})")
-                self._out(f"{stype}_init(&_{sensor.name}, 0, {sensor.address});")
+                bus_type = bus_types.get(sensor.bus_name, "i2c")
+                self._out(f"// Device: {sensor.name} ({sensor.sensor_type})")
+                if bus_type == "spi":
+                    # SPI devices: third arg is CS pin, not I2C address
+                    self._out(f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // cs_pin={sensor.address}")
+                else:
+                    self._out(f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // i2c_addr=0x{sensor.address:02x}")
             if program.hardware.sensors:
                 self._out("")
 
@@ -1033,7 +1061,11 @@ class CCodeGen:
             start = self._emit_expr_str(stmt.start, ctx_prefix, cv)
             end = self._emit_expr_str(stmt.end, ctx_prefix, cv)
             var = _c_name(stmt.var_name)
-            self._out(f"for (int32_t {var} = {start}; {var} < {end}; {var}++) {{")
+            if stmt.step:
+                step_val = self._emit_expr_str(stmt.step, ctx_prefix, cv)
+                self._out(f"for (int32_t {var} = {start}; {var} < {end}; {var} += {step_val}) {{")
+            else:
+                self._out(f"for (int32_t {var} = {start}; {var} < {end}; {var}++) {{")
             self.indent += 1
             self._emit_stmts(stmt.body, ctx_prefix, cv, use_freertos_delay)
             self.indent -= 1
@@ -1262,14 +1294,18 @@ class CCodeGen:
                 # Resolve the expression through a mini-parse
                 c_expr = self._resolve_interp_expr(expr_str, ctx_prefix, cv)
                 # Detect type for format specifier
-                if any(m in expr_str for m in [".read()", ".free_heap()", ".uptime()", ".id()", "_count", "count"]):
+                if any(m in expr_str for m in [".read()", ".free_heap()", ".uptime()", ".id()", "_count()", ".count()"]):
                     fmt_parts.append("%ld")
                     args.append(f"(long)({c_expr})")
-                elif any(m in expr_str for m in [".is_connected()", ".is_on()", ".is_pressed()"]):
+                elif any(m in expr_str for m in [".is_connected()", ".is_on()", ".is_pressed()", ".is_empty()", ".is_full()", ".is_finger_present()", ".is_fault()"]):
                     fmt_parts.append("%s")
                     args.append(f'({c_expr} ? "true" : "false")')
-                elif any(m in expr_str for m in [".temperature()", ".humidity()", ".pressure()", ".lux()"]):
-                    fmt_parts.append("%.1f")
+                elif any(m in expr_str for m in [".temperature()", ".humidity()", ".pressure()", ".lux()",
+                        ".voltage()", ".current()", ".power()", ".altitude()",
+                        ".accel_x()", ".accel_y()", ".accel_z()",
+                        ".gyro_x()", ".gyro_y()", ".gyro_z()",
+                        ".ambient()", ".object()", ".gas()", ".uv()"]):
+                    fmt_parts.append("%.2f")
                     args.append(f"(double)({c_expr})")
                 elif expr_str.replace("_", "").replace(".", "").isalpha():
                     # Simple variable — assume int
@@ -1340,12 +1376,12 @@ class CCodeGen:
                 args.append(f"{part.value}f")
             elif isinstance(part, BoolLiteral):
                 fmt_parts.append("%s")
-                args.append(f'{"true" if part.value else "false"}')
+                args.append(f'"{"true" if part.value else "false"}"')
             else:
                 # Variable or expression — infer type from context
                 c_expr = self._emit_expr_str(part, ctx_prefix, cv)
                 # Check if it's a method call that returns bool
-                if isinstance(part, MethodCall) and part.method in ("is_connected", "is_on"):
+                if isinstance(part, MethodCall) and part.method in ("is_connected", "is_on", "is_pressed", "is_empty", "is_full", "is_finger_present", "is_fault"):
                     fmt_parts.append("%s")
                     args.append(f'({c_expr} ? "true" : "false")')
                 elif isinstance(part, MethodCall) and part.method in ("free_heap", "read", "list_count", "uptime", "id"):

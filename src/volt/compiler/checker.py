@@ -49,7 +49,6 @@ METHOD_TYPES = {
     },
     "Input": {
         "read":       (INT, []),
-        "is_pressed": (BOOL, []),
     },
     "PullUpInput": {
         "read":       (INT, []),
@@ -362,6 +361,8 @@ BINARY_OP_TYPES = {
     (DURATION, "!=", DURATION): BOOL,
     (DURATION, "<", DURATION): BOOL,
     (DURATION, ">", DURATION): BOOL,
+    (DURATION, "<=", DURATION): BOOL,
+    (DURATION, ">=", DURATION): BOOL,
 }
 
 
@@ -418,11 +419,17 @@ def check_types(program: Program, scope: Scope, errors: CompilerErrors):
         loop_scope = scope.child("loop")
         _check_stmts(program.loop.body, loop_scope, errors, None)
 
+    # Check global variable declarations
+    for gv in program.global_vars:
+        if gv.value:
+            _infer(gv.value, scope, errors)
+
     # Check storage declarations
     for storage in program.storage_vars:
         if storage.default_value:
             val_type = _infer(storage.default_value, scope, errors)
-            if val_type != ERROR_TYPE and val_type != storage.type_name:
+            normalized = _normalize_type(storage.type_name)
+            if val_type != ERROR_TYPE and val_type != normalized:
                 errors.error(
                     storage.region, "TYPE MISMATCH",
                     f"Storage `{storage.name}` declared as `{storage.type_name}` "
@@ -670,7 +677,7 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
         result = BINARY_OP_TYPES.get((left_type, expr.op, right_type))
         if result is None:
             # Check for common mistake: int + float
-            if {left_type, right_type} == {INT, FLOAT} and expr.op in "+-*/":
+            if {left_type, right_type} == {INT, FLOAT} and expr.op in {"+", "-", "*", "/"}:
                 errors.error(
                     expr.region, "TYPE MISMATCH",
                     f"Cannot use `{expr.op}` between `{left_type}` and `{right_type}`.",

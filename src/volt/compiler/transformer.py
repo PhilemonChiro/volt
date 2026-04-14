@@ -381,10 +381,11 @@ def _assign_yield_labels(stmts: list, counter: YieldCounter) -> list:
             else:
                 result.append(stmt)
         elif isinstance(stmt, TimeoutBlock):
-            stmt._yield_label = counter.next()
-            stmt.try_body = _assign_yield_labels(stmt.try_body, counter)
-            stmt.fallback_body = _assign_yield_labels(stmt.fallback_body, counter)
-            result.append(stmt)
+            new_stmt = replace(stmt,
+                try_body=_assign_yield_labels(stmt.try_body, counter),
+                fallback_body=_assign_yield_labels(stmt.fallback_body, counter))
+            new_stmt._yield_label = counter.next()
+            result.append(new_stmt)
         elif isinstance(stmt, IfStmt):
             new_then = _assign_yield_labels(stmt.then_body, counter)
             new_else = None
@@ -426,28 +427,55 @@ def _desugar_match_stmts(stmts: list) -> list:
             result.append(replace(stmt, body=_desugar_match_stmts(stmt.body)))
         elif isinstance(stmt, OnBlock):
             result.append(replace(stmt, body=_desugar_match_stmts(stmt.body)))
+        elif isinstance(stmt, ForStmt):
+            result.append(replace(stmt, body=_desugar_match_stmts(stmt.body)))
+        elif isinstance(stmt, TimeoutBlock):
+            result.append(replace(stmt,
+                try_body=_desugar_match_stmts(stmt.try_body),
+                fallback_body=_desugar_match_stmts(stmt.fallback_body)))
         else:
             result.append(stmt)
     return result
 
 
 def _desugar_one_match(match: MatchStmt) -> IfStmt:
-    """Convert match(expr) { .a -> X, .b -> Y } to if/else chain."""
+    """Convert match(expr) { .a -> X, .b -> Y, _ -> Z } to if/else chain."""
     chain = None
     for arm in reversed(match.arms):
         body = arm.body if isinstance(arm.body, list) else [ExprStmt(expr=arm.body, region=arm.region)]
-        condition = BinaryExpr(
-            left=match.expr,
-            op="==",
-            right=VarRef(name=arm.pattern, region=arm.region),
-            region=arm.region,
-        )
-        chain = IfStmt(
-            condition=condition,
-            then_body=body,
-            else_body=[chain] if chain else None,
-            region=arm.region,
-        )
+        pattern = arm.pattern.strip() if isinstance(arm.pattern, str) else str(arm.pattern)
+
+        if pattern == "_":
+            # Wildcard: unconditional else — just set body directly
+            if chain is None:
+                chain = IfStmt(
+                    condition=BoolLiteral(value=True, region=arm.region),
+                    then_body=body, else_body=None, region=arm.region,
+                )
+            else:
+                # Wildcard with existing chain: wrap as else
+                chain = IfStmt(
+                    condition=BoolLiteral(value=True, region=arm.region),
+                    then_body=body, else_body=[chain] if chain else None,
+                    region=arm.region,
+                )
+        else:
+            # Determine the right-hand comparand
+            try:
+                int_val = int(pattern)
+                right = IntLiteral(value=int_val, region=arm.region)
+            except ValueError:
+                # State/enum pattern (e.g., ".idle" → stripped to "idle")
+                right = VarRef(name=pattern.lstrip("."), region=arm.region)
+
+            condition = BinaryExpr(
+                left=match.expr, op="==", right=right, region=arm.region,
+            )
+            chain = IfStmt(
+                condition=condition, then_body=body,
+                else_body=[chain] if chain else None,
+                region=arm.region,
+            )
     return chain
 
 

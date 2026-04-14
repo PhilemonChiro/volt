@@ -257,12 +257,24 @@ class ASTBuilder(Transformer):
     # --- Task ---
 
     def task_decl(self, children):
-        name = str(children[0])
+        # Skip leading TASK_ANNOTATION tokens (@critical, @priority, etc.)
+        annotations = []
+        idx = 0
+        for i, child in enumerate(children):
+            if isinstance(child, Token) and child.type == 'TASK_ANNOTATION':
+                annotations.append(str(child))
+                idx = i + 1
+            else:
+                break
+        name = str(children[idx])
         body = []
-        for child in children[1:]:
+        for child in children[idx + 1:]:
             if isinstance(child, list):
                 body = child
-        return TaskDecl(name=name, body=body, region=_region(children[0]))
+        task = TaskDecl(name=name, body=body, region=_region(children[idx]))
+        # Attach annotations for codegen to read
+        task._annotations = annotations
+        return task
 
     # --- State Machine ---
 
@@ -508,7 +520,7 @@ class ASTBuilder(Transformer):
                 step = child  # step clause expression
         return ForStmt(
             var_name=var_name, start=start, end=end, body=body,
-            region=_region(children[0]),
+            step=step, region=_region(children[0]),
         )
 
     def step_clause(self, children):
@@ -572,8 +584,10 @@ class ASTBuilder(Transformer):
 
     def timeout_block(self, children):
         duration = children[0]
-        try_body = children[1] if len(children) > 1 and isinstance(children[1], list) else []
-        fallback = children[2] if len(children) > 2 and isinstance(children[2], list) else []
+        # Filter out TIMEOUT_ELSE token — only keep duration expr and block lists
+        blocks = [c for c in children[1:] if isinstance(c, list)]
+        try_body = blocks[0] if len(blocks) > 0 else []
+        fallback = blocks[1] if len(blocks) > 1 else []
         return TimeoutBlock(
             duration=duration, try_body=try_body, fallback_body=fallback,
             region=_region(children[0]),
