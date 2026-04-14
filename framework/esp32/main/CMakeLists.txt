@@ -17,9 +17,9 @@ set(CORE_SRCS
 )
 
 # Auto-discover all device drivers from devices/*/driver.c
-file(GLOB DEVICE_DRIVERS "../../devices/*/driver.c")
+file(GLOB DEVICE_DRIVERS "../../../devices/*/driver.c")
 
 idf_component_register(
     SRCS ${CORE_SRCS} ${DEVICE_DRIVERS}
-    INCLUDE_DIRS "../include"
+    INCLUDE_DIRS "../../include"
 )

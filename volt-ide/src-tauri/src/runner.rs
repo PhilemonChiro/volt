@@ -444,9 +444,9 @@ fn parse_binary_size(line: &str) -> Option<String> {
 
 fn get_framework_dir() -> std::path::PathBuf {
     let home = dirs::home_dir().unwrap();
-    let dev = home.join("dev/volt/framework");
+    let dev = home.join("dev/volt/framework/esp32");
     if dev.exists() { return dev; }
-    home.join(".volt/sdk/framework")
+    home.join(".volt/sdk/framework/esp32")
 }
 
 fn get_idf_path(chip: &str) -> std::path::PathBuf {
@@ -508,9 +508,9 @@ fn read_chip_from_source(volt_file: &str) -> Option<String> {
 
 fn get_rp2040_framework_dir() -> std::path::PathBuf {
     let home = dirs::home_dir().unwrap();
-    let dev = home.join("dev/volt/framework-rp2040");
+    let dev = home.join("dev/volt/framework/rp2040");
     if dev.exists() { return dev; }
-    home.join(".volt/sdk/framework-rp2040")
+    home.join(".volt/sdk/framework/rp2040")
 }
 
 fn run_build_rp2040(app: &AppHandle, project_path: &str) -> bool {

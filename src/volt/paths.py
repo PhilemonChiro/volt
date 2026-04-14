@@ -151,11 +151,17 @@ def ensure_volt_home():
 
 
 def install_sdk(source_framework_dir: Path):
-    """Copy framework headers and sources into ~/.volt/sdk/.
-    Called during `pip install` or `volt setup`."""
+    """Copy framework headers and per-platform sources into ~/.volt/sdk/.
+    Called during `pip install` or `volt setup`.
+
+    Layout: framework/
+              include/volt/   ← shared headers
+              esp32/src/      ← ESP32 implementations
+              rp2040/src/     ← RP2040 implementations
+    """
     sdk = volt_sdk()
 
-    # Copy headers
+    # Copy shared headers
     include_src = source_framework_dir / "include" / "volt"
     include_dst = sdk / "include" / "volt"
     if include_src.exists():
@@ -163,18 +169,34 @@ def install_sdk(source_framework_dir: Path):
         for f in include_src.glob("*.h"):
             shutil.copy2(f, include_dst / f.name)
 
-    # Copy sources
-    src_dir = source_framework_dir / "src"
-    dst_dir = sdk / "src"
-    if src_dir.exists():
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        for f in src_dir.glob("*.c"):
-            shutil.copy2(f, dst_dir / f.name)
+    # Copy per-platform sources and build files
+    for platform in ["esp32", "rp2040"]:
+        plat_dir = source_framework_dir / platform
+        if not plat_dir.exists():
+            continue
 
-    # Copy CMakeLists
-    cmake = source_framework_dir / "CMakeLists.txt"
-    if cmake.exists():
-        shutil.copy2(cmake, sdk / "CMakeLists.txt")
+        # Sources
+        src_dir = plat_dir / "src"
+        dst_dir = sdk / platform / "src"
+        if src_dir.exists():
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            for f in src_dir.glob("*.c"):
+                shutil.copy2(f, dst_dir / f.name)
+
+        # Main entry point
+        main_dir = plat_dir / "main"
+        main_dst = sdk / platform / "main"
+        if main_dir.exists():
+            main_dst.mkdir(parents=True, exist_ok=True)
+            for f in main_dir.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, main_dst / f.name)
+
+        # CMakeLists and config
+        for cfg in ["CMakeLists.txt", "sdkconfig"]:
+            cfg_file = plat_dir / cfg
+            if cfg_file.exists():
+                shutil.copy2(cfg_file, sdk / platform / cfg)
 
     # Copy main CMakeLists template
     main_cmake = source_framework_dir / "main" / "CMakeLists.txt"

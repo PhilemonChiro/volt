@@ -9,7 +9,7 @@ set(CMAKE_C_STANDARD 11)
 pico_sdk_init()
 
 # Auto-discover all device drivers from devices/*/driver.c
-file(GLOB DEVICE_DRIVERS "${CMAKE_CURRENT_SOURCE_DIR}/../devices/*/driver.c")
+file(GLOB DEVICE_DRIVERS "${CMAKE_CURRENT_SOURCE_DIR}/../../devices/*/driver.c")
 
 add_executable(volt-rp2040
     main/main.c
@@ -27,7 +27,7 @@ add_executable(volt-rp2040
 
 # Include the shared Volt headers
 target_include_directories(volt-rp2040 PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../framework/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 
 # Link pico SDK libraries
