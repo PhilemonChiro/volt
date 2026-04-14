@@ -56,7 +56,7 @@ pin_mode: NAME ("." NAME)*
 
 bus_decl: "bus" NAME ":" NAME "(" named_args ")"
 
-sensor_decl: "sensor" NAME ":" NAME "on" NAME "at" expr
+sensor_decl: "device" NAME ":" NAME "on" NAME "at" expr
 
 
 // --- Power Block (for compile-time power estimation) ---

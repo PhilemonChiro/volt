@@ -127,11 +127,11 @@
           }
         },
         {
-          "comment": "Sensor: sensor name: Type",
-          "match": "\\b(sensor)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "comment": "Device: device name: Type",
+          "match": "\\b(device)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
           "captures": {
-            "1": { "name": "keyword.declaration.sensor.volt" },
-            "2": { "name": "variable.other.hardware.sensor.volt" }
+            "1": { "name": "keyword.declaration.device.volt" },
+            "2": { "name": "variable.other.hardware.device.volt" }
           }
         }
       ]

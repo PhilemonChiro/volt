@@ -428,8 +428,8 @@ compile_fail("non-analog pin", "hardware {\n    pin x: Analog = 21\n}\n", "adc")
 compile_fail("i2c addr conflict", """
 hardware {
     bus bus: I2C(sda: 21, scl: 22)
-    sensor a: BME280 on bus at 0x76
-    sensor b: BME280 on bus at 0x76
+    device a: BME280 on bus at 0x76
+    device b: BME280 on bus at 0x76
 }
 """, "address")
 
@@ -456,7 +456,7 @@ task pid {
 
 compile_fail("sensor in critical", """
 hardware {
-    sensor bme: BME280 on bus at 0x76
+    device bme: BME280 on bus at 0x76
 }
 task pid {
     every 1ms strict {

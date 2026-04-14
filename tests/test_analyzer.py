@@ -157,7 +157,7 @@ print("\n=== ISR Safety: sensor read in critical task ===\n")
 
 prog, errs = full_analyze("""
 hardware {
-    sensor bme: BME280 on bus at 0x76
+    device bme: BME280 on bus at 0x76
 }
 task pid {
     every 1ms strict {

@@ -189,8 +189,8 @@ print("\n=== I2C Address Conflict ===\n")
 errs = validate("""
 hardware {
     bus bus: I2C(sda: 21, scl: 22)
-    sensor bme: BME280 on bus at 0x76
-    sensor bmp: BME280 on bus at 0x76
+    device bme: BME280 on bus at 0x76
+    device bmp: BME280 on bus at 0x76
 }
 """)
 check("I2C addr conflict", has_error_about(errs, "address") and has_error_about(errs, "already used"),
@@ -200,8 +200,8 @@ check("I2C addr conflict", has_error_about(errs, "address") and has_error_about(
 errs = validate("""
 hardware {
     bus bus: I2C(sda: 21, scl: 22)
-    sensor bme: BME280 on bus at 0x76
-    sensor light: BH1750 on bus at 0x23
+    device bme: BME280 on bus at 0x76
+    device light: BH1750 on bus at 0x23
 }
 """)
 i2c_errs = [e for e in errs.errors if "address" in e.message.lower() and e.severity == "error"]

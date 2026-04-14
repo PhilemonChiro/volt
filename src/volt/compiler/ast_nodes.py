@@ -96,7 +96,7 @@ class BusDecl(Node):
 
 @dataclass
 class SensorDecl(Node):
-    """sensor bme: BME280 on sensors at 0x76"""
+    """device bme: BME280 on sensors at 0x76"""
     name: str = ""
     sensor_type: str = ""   # "BME280", "DHT22", etc.
     bus_name: str = ""      # which bus it's on
