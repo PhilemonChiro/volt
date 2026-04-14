@@ -44,6 +44,11 @@ METHOD_MAP = {
     ("DAC", "write"):      "pin_dac_write({gpio}, {args})",
     ("DAC", "voltage"):    "pin_dac_voltage({gpio}, {args})",
     ("DAC", "read"):       "pin_dac_read({gpio})",
+    # Touch
+    ("Touch", "read"):          "touch_read({gpio})",
+    ("Touch", "is_touched"):    "touch_is_touched({gpio})",
+    ("Touch", "set_threshold"): "touch_set_threshold({gpio}, {args})",
+    ("Touch", "release"):       "touch_release({gpio})",
     # Servo
     ("Servo", "move"):          "servo_write({gpio}, {args})",
     ("Servo", "move_us"):       "servo_write_us({gpio}, {args})",
@@ -385,6 +390,8 @@ class CCodeGen:
                 self._out('#include "volt/uart.h"')
         if program.hardware and any(p.mode == "Servo" for p in program.hardware.pins):
             self._out('#include "volt/servo.h"')
+        if program.hardware and any(p.mode == "Touch" for p in program.hardware.pins):
+            self._out('#include "volt/touch.h"')
         if program.hardware and program.hardware.sensors:
             self._out('#include "volt/sensor.h"')
             # Check if any SPI devices are used
@@ -866,6 +873,8 @@ class CCodeGen:
                     self._out(f"servo_attach({pin.gpio});")
                 elif pin.mode == "DAC":
                     self._out(f"pin_set_dac({pin.gpio});")
+                elif pin.mode == "Touch":
+                    self._out(f"touch_init({pin.gpio});")
             self._out("")
 
             # Bus initialization (I2C and SPI) — chip-aware defaults

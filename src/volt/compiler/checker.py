@@ -68,6 +68,13 @@ METHOD_TYPES = {
         "voltage": (VOID, [("volts", FLOAT)]),
         "read":    (INT, []),
     },
+    "Touch": {
+        "read":          (INT, []),
+        "is_touched":    (BOOL, []),
+        "set_threshold": (VOID, [("threshold", INT)]),
+        "release":       (VOID, []),
+        "touch":         (VOID, []),  # event source for on blocks
+    },
     "Servo": {
         "move":         (VOID, [("angle", INT)]),
         "move_us":      (VOID, [("microseconds", INT)]),
