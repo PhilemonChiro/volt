@@ -118,13 +118,26 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
         )
         return None, errors
 
-    # v3: if no chip declaration in source, check volt.toml
-    if program.chip is None:
-        toml_chip = _read_chip_from_toml(filename)
-        if toml_chip:
-            from .ast_nodes import ChipDecl
-            from .ast_nodes import Region as _Region
-            program.chip = ChipDecl(target=toml_chip, region=_Region(0, 0, 0, 0))
+    # Chip resolution: volt.toml is the source of truth.
+    # chip in .volt file is accepted for backward compat but deprecated.
+    toml_chip = _read_chip_from_toml(filename)
+    if toml_chip:
+        if program.chip and program.chip.target != toml_chip:
+            errors.warning(
+                program.chip.region, "DEPRECATION",
+                f"`chip {program.chip.target}` in source conflicts with "
+                f"`chip = \"{toml_chip}\"` in volt.toml. Using volt.toml.",
+            )
+        from .ast_nodes import ChipDecl
+        from .ast_nodes import Region as _Region
+        program.chip = ChipDecl(target=toml_chip, region=_Region(0, 0, 0, 0))
+    elif program.chip:
+        # chip in source only — warn about deprecation
+        errors.warning(
+            program.chip.region, "DEPRECATION",
+            f"Move `chip {program.chip.target}` to volt.toml: chip = \"{program.chip.target}\"",
+            hint="The chip declaration will move to volt.toml in a future version.",
+        )
 
     # Pass 2: Resolve names
     scope = resolve(program, errors)

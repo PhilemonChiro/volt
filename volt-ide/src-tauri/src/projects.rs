@@ -38,24 +38,16 @@ pub fn create_project(name: &str, chip: &str) -> Result<String, String> {
         _ => "2",
     };
 
-    // Write main.volt
+    // Write main.volt (v3 — chip lives in volt.toml, not in source)
     let source = format!(
-"chip {chip}
-
-hardware {{
-    pin led: Output = {led}
+"hardware {{
+    pin led = {led}
 }}
 
-task blink() {{
-    every 500ms {{
-        led.toggle()
-    }}
+every 500ms {{
+    led.toggle()
 }}
-
-main {{
-    run(blink)
-}}
-", chip = chip, led = led_pin);
+", led = led_pin);
     fs::write(project_dir.join("main.volt"), &source).map_err(|e| e.to_string())?;
 
     // Write volt.toml
