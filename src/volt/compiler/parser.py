@@ -579,13 +579,21 @@ class ASTBuilder(Transformer):
     def every_block(self, children):
         interval = children[0]
         strict = False
+        guard = None
         body = []
         for child in children[1:]:
             if isinstance(child, Token) and child.type == 'STRICT':
                 strict = True
             elif isinstance(child, list):
                 body = child
-        return EveryBlock(interval=interval, strict=strict, body=body, region=_region(children[0]))
+            elif isinstance(child, Node) and not isinstance(child, (Token,)):
+                # when_clause returns the guard expression directly
+                guard = child
+        return EveryBlock(interval=interval, strict=strict, guard=guard, body=body,
+                          region=_region(children[0]))
+
+    def when_clause(self, children):
+        return children[0]
 
     def on_block(self, children):
         event = children[0]

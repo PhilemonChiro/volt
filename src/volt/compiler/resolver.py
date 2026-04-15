@@ -304,6 +304,8 @@ def _resolve_stmt(stmt, scope: Scope, errors: CompilerErrors):
 
     elif isinstance(stmt, EveryBlock):
         _resolve_expr(stmt.interval, scope, errors)
+        if stmt.guard:
+            _resolve_expr(stmt.guard, scope, errors)
         _resolve_stmts(stmt.body, scope, errors)
 
     elif isinstance(stmt, OnBlock):
