@@ -289,6 +289,7 @@ class CCodeGen:
         self._chip_family = self._get_chip_family(program)
         self._cached_all_stmts = None
         self._enum_types: dict = {}  # enum_name -> [variant_names]
+        self._skip_counters: set = set()  # skip counter names for or-skip sites
 
         # Section 1: Header
         self._emit_header(program)
@@ -325,6 +326,20 @@ class CCodeGen:
 
         # Section 7: app_main
         self._emit_app_main(program)
+
+        # Post-processing: insert skip counters if any or-skip sites were found
+        if self._skip_counters:
+            skip_decls = "\n".join(
+                f"static uint32_t {name} = 0;  // or-skip counter"
+                for name in sorted(self._skip_counters)
+            )
+            # Insert after the string buffer declaration
+            output = "\n".join(self.lines) + "\n"
+            output = output.replace(
+                "static char _volt_strbuf[16][128];\n",
+                f"static char _volt_strbuf[16][128];\n\n// Skip counters (or-skip observability)\n{skip_decls}\n",
+            )
+            return output
 
         return "\n".join(self.lines) + "\n"
 
@@ -1220,7 +1235,11 @@ class CCodeGen:
                     self.indent -= 1
                     self._out("}")
                 elif or_kind == "skip":
-                    self._out(f"if ({call_str} != VOLT_OK) {{ continue; }}")
+                    line = stmt.region.start_line if hasattr(stmt, 'region') and stmt.region else 0
+                    counter = f"_skip_count_L{line}"
+                    if counter not in self._skip_counters:
+                        self._skip_counters.add(counter)
+                    self._out(f"if ({call_str} != VOLT_OK) {{ {counter}++; continue; }}")
                 elif or_kind == "restart":
                     self._out(f"if ({call_str} != VOLT_OK) {{ system_restart(); }}")
                 else:
