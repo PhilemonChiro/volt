@@ -435,6 +435,10 @@ def check_types(program: Program, scope: Scope, errors: CompilerErrors):
         if dev_name not in METHOD_TYPES:
             METHOD_TYPES[dev_name] = methods
 
+    # Infer pin modes for pins declared without explicit mode (v3: pin led = 2)
+    if program.hardware:
+        _infer_pin_modes(program, scope, errors)
+
     # Check functions
     for func in program.functions:
         func_scope = scope.child(f"func:{func.name}")
@@ -490,6 +494,74 @@ def check_types(program: Program, scope: Scope, errors: CompilerErrors):
                     f"Storage `{storage.name}` declared as `{storage.type_name}` "
                     f"but default value is `{val_type}`.",
                 )
+
+
+# ============================================================
+# Pin mode inference (v3)
+# ============================================================
+
+# Method → inferred mode mapping
+_OUTPUT_METHODS = {"on", "off", "toggle", "write", "is_on", "blink", "blink_once"}
+_ANALOG_METHODS = {"read"}  # ambiguous — also used by Input
+
+def _infer_pin_modes(program, scope, errors):
+    """Infer pin modes for pins declared without explicit mode."""
+    if not program.hardware:
+        return
+    # Find pins with empty mode
+    infer_pins = {p.name: p for p in program.hardware.pins if not p.mode}
+    if not infer_pins:
+        return
+
+    # Collect all method calls from the entire program
+    all_stmts = []
+    for t in program.tasks:
+        all_stmts.extend(t.body)
+    for f in program.functions:
+        all_stmts.extend(f.body)
+    if program.setup:
+        all_stmts.extend(program.setup.body)
+    if program.loop:
+        all_stmts.extend(program.loop.body)
+
+    # Walk statements to find method calls on our pins
+    pin_methods = {name: set() for name in infer_pins}
+    _collect_pin_methods(all_stmts, pin_methods)
+
+    for name, methods in pin_methods.items():
+        pin = infer_pins[name]
+        if methods & _OUTPUT_METHODS:
+            pin.mode = "Output"
+        elif methods:
+            errors.error(pin.region, "PIN MODE",
+                         f"Pin `{name}` uses `.{next(iter(methods))}()` which could be "
+                         f"Input, PullUp, Analog, or PullDown. Add an explicit mode.",
+                         hint=f"Example: `pin {name}: Analog = {pin.gpio}`")
+        else:
+            pin.mode = "Output"
+
+        # Update the scope symbol's type_name to match the inferred mode
+        if pin.mode:
+            sym = scope.lookup(name)
+            if sym:
+                sym.type_name = pin.mode
+
+
+def _collect_pin_methods(stmts, pin_methods):
+    """Recursively collect method names called on pins."""
+    for stmt in stmts:
+        if stmt is None:
+            continue
+        if isinstance(stmt, ExprStmt) and isinstance(stmt.expr, MethodCall):
+            if isinstance(stmt.expr.obj, VarRef) and stmt.expr.obj.name in pin_methods:
+                pin_methods[stmt.expr.obj.name].add(stmt.expr.method)
+        # Recurse into all statement bodies
+        for attr in ('body', 'then_body', 'else_body', 'try_body', 'fallback_body'):
+            sub = getattr(stmt, attr, None)
+            if isinstance(sub, list):
+                _collect_pin_methods(sub, pin_methods)
+            elif isinstance(sub, Node):
+                _collect_pin_methods([sub], pin_methods)
 
 
 # ============================================================

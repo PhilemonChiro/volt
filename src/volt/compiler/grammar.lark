@@ -54,6 +54,7 @@ hardware_block: "hardware" "{" (_NL | hardware_item)* "}"
     | sensor_decl _NL
 
 pin_decl: "pin" NAME ":" pin_mode "=" expr
+    | "pin" NAME "=" expr -> pin_decl_inferred
 
 pin_mode: NAME ("." NAME)*
 
