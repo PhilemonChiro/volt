@@ -508,6 +508,12 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
         return
 
     if isinstance(stmt, VarDecl):
+        # Reject assignment expressions as values (var x = y = 5 is a mistake)
+        if stmt.value and isinstance(stmt.value, AssignExpr):
+            errors.error(stmt.region, "SYNTAX ERROR",
+                         f"Invalid initializer for `{stmt.name}` — did you mean `var {stmt.name}: type = value`?",
+                         hint="Use `:` for type annotations: `var x: int = 5`")
+            return
         val_type = _infer(stmt.value, scope, errors) if stmt.value else ERROR_TYPE
 
         if stmt.type_name:
@@ -596,7 +602,13 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                 )
 
     elif isinstance(stmt, ExprStmt):
-        _infer(stmt.expr, scope, errors)
+        # Warn if a DotAccess is used as a statement — likely missing ()
+        if isinstance(stmt.expr, DotAccess):
+            errors.error(stmt.region, "SYNTAX ERROR",
+                         f"Did you mean `{stmt.expr.obj.name if isinstance(stmt.expr.obj, VarRef) else '?'}.{stmt.expr.field_name}()`?",
+                         hint="Method calls require parentheses: `.method()`")
+        else:
+            _infer(stmt.expr, scope, errors)
 
     elif isinstance(stmt, ReturnStmt):
         if stmt.value:

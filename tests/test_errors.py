@@ -353,6 +353,42 @@ setup {
 
 
 # ============================================================
+print("\n=== Common Mistakes ===\n")
+# ============================================================
+
+compile_fail("missing_parens_method", """
+chip esp32
+hardware {
+    pin led: Output = 2
+}
+setup {
+    led.on
+}
+""", "did you mean")
+
+compile_fail("eq_instead_of_colon_type", """
+chip esp32
+setup {
+    var x = int = 5
+}
+""", "did you mean")
+
+# Method typo — check the hint contains the suggestion
+c_code, errors = compile_volt("""
+chip esp32
+hardware {
+    pin led: Output = 2
+}
+setup {
+    led.togle()
+}
+""", "typo.volt")
+has_suggestion = any(e.hint and "toggle" in e.hint for e in errors.errors)
+check("method_typo_suggest", errors.has_errors and has_suggestion,
+      f"expected hint with 'toggle', got: {[(e.message, e.hint) for e in errors.errors]}")
+
+
+# ============================================================
 # Summary
 # ============================================================
 
