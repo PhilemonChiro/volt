@@ -331,9 +331,10 @@ class ForStmt(Node):
 
 @dataclass
 class EveryBlock(Node):
-    """every 500ms { ... }  or  every 1ms strict { ... }"""
+    """every 500ms { ... }  or  every 1ms strict { ... }  or  every 10s when expr { ... }"""
     interval: Expr = None           # duration expression
     strict: bool = False            # strict = critical tier (hardware timer ISR)
+    guard: Expr = None              # v3: when clause — body only runs if guard is true
     body: list[Statement] = field(default_factory=list)
     yield_label: int = 0            # assigned by transformer (Pass 6)
 

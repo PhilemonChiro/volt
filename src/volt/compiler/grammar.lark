@@ -230,7 +230,9 @@ loop_stmt: "loop" block
 break_stmt: "break"
 continue_stmt: "continue"
 
-every_block: "every" expr STRICT? block
+every_block: "every" expr STRICT? when_clause? block
+
+when_clause: "when" expr
 
 STRICT: "strict"
 

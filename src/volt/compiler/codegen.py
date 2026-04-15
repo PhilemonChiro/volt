@@ -1301,7 +1301,15 @@ class CCodeGen:
             ms = stmt.interval.milliseconds if isinstance(stmt.interval, DurationLiteral) else 0
             self._out(f"for (;;) {{")
             self.indent += 1
-            self._emit_stmts(stmt.body, ctx_prefix, cv, use_freertos_delay)
+            if stmt.guard:
+                guard_str = self._emit_expr_str(stmt.guard, ctx_prefix, cv)
+                self._out(f"if ({guard_str}) {{")
+                self.indent += 1
+                self._emit_stmts(stmt.body, ctx_prefix, cv, use_freertos_delay)
+                self.indent -= 1
+                self._out("}")
+            else:
+                self._emit_stmts(stmt.body, ctx_prefix, cv, use_freertos_delay)
             if use_freertos_delay:
                 self._out(f"volt_delay_ms({ms});")
             else:

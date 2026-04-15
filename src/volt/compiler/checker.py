@@ -673,6 +673,13 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                 stmt.interval.region, "TYPE MISMATCH",
                 f"Interval must be a duration (e.g., 500ms), got `{interval_type}`.",
             )
+        if stmt.guard:
+            guard_type = _infer(stmt.guard, scope, errors)
+            if guard_type != ERROR_TYPE and guard_type != BOOL:
+                errors.error(
+                    stmt.guard.region, "TYPE MISMATCH",
+                    f"`when` guard must be `bool`, got `{guard_type}`.",
+                )
         _check_stmts(stmt.body, scope, errors, expected_return)
 
     elif isinstance(stmt, OnBlock):
