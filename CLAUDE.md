@@ -63,6 +63,10 @@ When the audit is large, spin up concurrent agents as:
 - **Performance engineer**: measure impact on compile time and output size
 - **End user**: write a Volt program that exercises the new code — does it feel natural?
 
+### 9. Update docs and ide
+ - keep uptodate  the  documentation and readme accordingly
+ - update  the ide accordingly too
+
 ### 8. Commit and repeat
 - Run full test suite (must be 100% green)
 - Commit with descriptive message listing what was fixed

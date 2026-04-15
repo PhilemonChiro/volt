@@ -54,6 +54,8 @@ ROADMAP.md
 serial_monitor.py
 logo-reference.png
 docs/volt-docs-pdf.zip
+docs/DX-AUDIT.md
+/debate/
 
 # Generated files — rebuilt every compile
 framework/main/main.c
