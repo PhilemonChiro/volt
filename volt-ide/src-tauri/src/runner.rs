@@ -492,6 +492,21 @@ fn run_flash(app: &AppHandle, _project_path: &str, port: &str, chip: &str) -> bo
 
 /// Read the chip declaration from a .volt source file
 fn read_chip_from_source(volt_file: &str) -> Option<String> {
+    // Priority: volt.toml > source file chip declaration
+    let project_dir = std::path::Path::new(volt_file).parent()?;
+    let toml_path = project_dir.join("volt.toml");
+    if toml_path.exists() {
+        if let Ok(toml_content) = std::fs::read_to_string(&toml_path) {
+            for line in toml_content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("chip") && trimmed.contains('=') {
+                    let val = trimmed.split('=').nth(1)?.trim().trim_matches('"');
+                    return Some(val.to_string());
+                }
+            }
+        }
+    }
+    // Fallback: read from source file (deprecated)
     let source = std::fs::read_to_string(volt_file).ok()?;
     for line in source.lines() {
         let trimmed = line.trim();
@@ -500,6 +515,33 @@ fn read_chip_from_source(volt_file: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn write_chip_to_toml(project_path: &str, chip: &str) {
+    let toml_path = std::path::Path::new(project_path).join("volt.toml");
+    if toml_path.exists() {
+        // Update existing toml
+        if let Ok(content) = std::fs::read_to_string(&toml_path) {
+            let mut updated = false;
+            let new_content: Vec<String> = content.lines().map(|line| {
+                if line.trim().starts_with("chip") && line.contains('=') {
+                    updated = true;
+                    format!("chip = \"{}\"", chip)
+                } else {
+                    line.to_string()
+                }
+            }).collect();
+            if updated {
+                let _ = std::fs::write(&toml_path, new_content.join("\n") + "\n");
+            } else {
+                let _ = std::fs::write(&toml_path, format!("{}\nchip = \"{}\"\n", content.trim(), chip));
+            }
+        }
+    } else {
+        // Create new toml
+        let content = format!("[project]\nchip = \"{}\"\n", chip);
+        let _ = std::fs::write(&toml_path, content);
+    }
 }
 
 // ================================================================
