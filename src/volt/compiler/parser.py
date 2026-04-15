@@ -178,6 +178,26 @@ class ASTBuilder(Transformer):
             region=_region(name),
         )
 
+    def pin_decl_inferred(self, children):
+        """pin led = 2 — mode inferred from usage (defaults to Output)."""
+        name = children[0]
+        gpio_expr = children[1]
+        if isinstance(gpio_expr, IntLiteral):
+            gpio_val = gpio_expr.value
+        elif isinstance(gpio_expr, VarRef):
+            pin_str = gpio_expr.name.upper()
+            if pin_str.startswith("GP") and pin_str[2:].isdigit():
+                gpio_val = int(pin_str[2:])
+            else:
+                gpio_val = 0
+        else:
+            gpio_val = 0
+        # Mode will be inferred by the checker based on method usage
+        return PinDecl(
+            name=str(name), mode="", gpio=gpio_val,
+            region=_region(name),
+        )
+
     def pin_mode(self, children):
         return ".".join(str(c) for c in children)
 
