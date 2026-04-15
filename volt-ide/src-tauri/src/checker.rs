@@ -187,23 +187,36 @@ pub fn compile_full(source: &str) -> CompileResult {
     let script = format!(
 r#"import sys, json
 sys.path.insert(0, '{}')
-from volt.compiler.voltc import compile_volt
-
-source = open('{}').read()
-c_code, errors = compile_volt(source, 'main.volt')
-
-# Re-parse to get AST structure (compile_volt returns C, not AST)
+from volt.compiler.errors import CompilerErrors
 from volt.compiler.parser import parse
 from volt.compiler.resolver import resolve
-from volt.compiler.errors import CompilerErrors
+from volt.compiler.checker import check_types
+from volt.compiler.hardware import validate_hardware
+from volt.compiler.analyzer import analyze
+from volt.compiler.transformer import transform
+from volt.compiler.codegen import generate
 
-errs2 = CompilerErrors()
-errs2.set_source(source)
+source = open('{}').read()
+errors = CompilerErrors()
+errors.set_source(source)
+program = None
+c_code = None
+
+# Run full pipeline — same program object gets pin inference, task tiers, etc.
 try:
     program = parse(source)
-    scope = resolve(program, errs2)
-except Exception:
-    program = None
+    scope = resolve(program, errors)
+    if not errors.has_errors:
+        check_types(program, scope, errors)  # pin inference happens here
+    if not errors.has_errors:
+        validate_hardware(program, scope, errors)
+    if not errors.has_errors:
+        analyze(program, scope, errors)  # task tier classification
+    if not errors.has_errors:
+        program = transform(program)
+        c_code = generate(program, 'main.volt')
+except Exception as e:
+    pass
 
 result = {{
     'diagnostics': [{{
