@@ -328,10 +328,16 @@ SHR.2: ">>"
     | "~" unary -> bitnot_expr
     | postfix
 
-// Postfix: field access, method calls, function calls
+// Postfix: field access, method calls, function calls, or-fallback
 ?postfix: primary
     | postfix "." NAME -> dot_access
     | postfix "(" arg_list? ")" -> func_call
+    | postfix "or" or_fallback -> or_expr
+
+or_fallback: "skip" -> or_skip
+    | "restart" -> or_restart
+    | "retry" "(" expr ")" -> or_retry
+    | expr -> or_default
 
 // Primary expressions
 ?primary: DURATION -> duration_lit

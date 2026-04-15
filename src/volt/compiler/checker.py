@@ -806,6 +806,25 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
         # Could be a struct field
         return "unknown"
 
+    # Or expression: expr or fallback
+    if isinstance(expr, OrExpr):
+        expr_type = _infer(expr.expr, scope, errors)
+        if expr.kind == "skip" or expr.kind == "restart":
+            return expr_type  # skip/restart don't produce a value
+        elif expr.kind == "retry":
+            if expr.fallback:
+                _infer(expr.fallback, scope, errors)  # validate retry count
+            return expr_type
+        else:
+            # Default value — check type matches
+            fallback_type = _infer(expr.fallback, scope, errors)
+            if expr_type != ERROR_TYPE and fallback_type != ERROR_TYPE:
+                if expr_type != fallback_type and not (
+                    {expr_type, fallback_type} == {INT, FLOAT}):
+                    errors.error(expr.region, "TYPE MISMATCH",
+                                 f"`or` fallback is `{fallback_type}` but expression returns `{expr_type}`.")
+            return expr_type
+
     # Function call
     if isinstance(expr, FuncCall):
         # Check builtin functions

@@ -372,6 +372,15 @@ def _resolve_expr(expr, scope: Scope, errors: CompilerErrors):
         for elem in expr.elements:
             _resolve_expr(elem, scope, errors)
 
+    elif isinstance(expr, OrExpr):
+        _resolve_expr(expr.expr, scope, errors)
+        if expr.fallback:
+            _resolve_expr(expr.fallback, scope, errors)
+
+    elif isinstance(expr, AssignExpr):
+        _resolve_expr(expr.target, scope, errors)
+        _resolve_expr(expr.value, scope, errors)
+
     # Literals don't need resolution
     elif isinstance(expr, (IntLiteral, FloatLiteral, BoolLiteral,
                            StringLiteral, DurationLiteral)):

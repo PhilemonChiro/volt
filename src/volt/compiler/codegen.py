@@ -1127,15 +1127,34 @@ class CCodeGen:
         if isinstance(stmt, VarDecl):
             self._line_directive(stmt)
             c_type = self._c_type(stmt.type_name) if stmt.type_name else TYPE_MAP.get(stmt.type_name, "int32_t")
-            val = self._emit_expr_str(stmt.value, ctx_prefix, cv)
             # Track variable types for dispatch (storage.save etc.)
             if stmt.type_name:
                 self._var_types[stmt.name] = stmt.type_name
-            if stmt.name in cv and ctx_prefix:
-                # Lifted var: assign to context, don't declare
-                self._out(f"{ctx_prefix}{_c_name(stmt.name)} = {val};")
+
+            # Handle or-expression in variable init
+            if isinstance(stmt.value, OrExpr):
+                call_str = self._emit_expr_str(stmt.value.expr, ctx_prefix, cv)
+                var_name = _c_name(stmt.name)
+                if stmt.name in cv and ctx_prefix:
+                    var_name = f"{ctx_prefix}{var_name}"
+                    self._out(f"{var_name} = {call_str};")
+                else:
+                    self._out(f"{c_type} {var_name} = {call_str};")
+                # Emit fallback
+                if stmt.value.kind == "skip":
+                    self._out(f"// or skip — iteration skipped on failure")
+                elif stmt.value.kind == "default":
+                    fallback = self._emit_expr_str(stmt.value.fallback, ctx_prefix, cv)
+                    self._out(f"// or {fallback} — fallback on failure")
+                elif stmt.value.kind == "retry":
+                    count = self._emit_expr_str(stmt.value.fallback, ctx_prefix, cv)
+                    self._out(f"// or retry({count})")
             else:
-                self._out(f"{c_type} {_c_name(stmt.name)} = {val};")
+                val = self._emit_expr_str(stmt.value, ctx_prefix, cv)
+                if stmt.name in cv and ctx_prefix:
+                    self._out(f"{ctx_prefix}{_c_name(stmt.name)} = {val};")
+                else:
+                    self._out(f"{c_type} {_c_name(stmt.name)} = {val};")
 
         elif isinstance(stmt, AssignExpr):
             self._line_directive(stmt)
@@ -1175,9 +1194,31 @@ class CCodeGen:
 
         elif isinstance(stmt, ExprStmt):
             self._line_directive(stmt)
-            expr_str = self._emit_expr_str(stmt.expr, ctx_prefix, cv)
+
+            # Handle or-expression at statement level
+            if isinstance(stmt.expr, OrExpr):
+                call_str = self._emit_expr_str(stmt.expr.expr, ctx_prefix, cv)
+                or_kind = stmt.expr.kind
+                if or_kind == "retry":
+                    count = self._emit_expr_str(stmt.expr.fallback, ctx_prefix, cv)
+                    self._out(f"{{ volt_error_t _err = {call_str};")
+                    self.indent += 1
+                    self._out(f"for (int _retry = 0; _err != VOLT_OK && _retry < {count}; _retry++) {{")
+                    self.indent += 1
+                    self._out(f"_err = {call_str};")
+                    self.indent -= 1
+                    self._out("}")
+                    self.indent -= 1
+                    self._out("}")
+                elif or_kind == "skip":
+                    self._out(f"if ({call_str} != VOLT_OK) {{ continue; }}")
+                elif or_kind == "restart":
+                    self._out(f"if ({call_str} != VOLT_OK) {{ system_restart(); }}")
+                else:
+                    self._out(f"{call_str};")
             # Sleep — yield in protothreads, blocking delay in main/priority
-            if isinstance(stmt.expr, FuncCall) and stmt.expr.name == "sleep":
+            elif isinstance(stmt.expr, FuncCall) and stmt.expr.name == "sleep":
+                expr_str = self._emit_expr_str(stmt.expr, ctx_prefix, cv)
                 ms = (
                     self._emit_expr_str(stmt.expr.args[0], ctx_prefix, cv)
                     if stmt.expr.args
@@ -1189,6 +1230,7 @@ class CCodeGen:
                     label = getattr(stmt, "_yield_label", 0)
                     self._out(f"VOLT_YIELD_LABEL(_vt, {label}, {ms});")
             else:
+                expr_str = self._emit_expr_str(stmt.expr, ctx_prefix, cv)
                 self._out(f"{expr_str};")
 
         elif isinstance(stmt, ReturnStmt):
@@ -1342,6 +1384,12 @@ class CCodeGen:
         if isinstance(expr, UnaryExpr):
             operand = self._emit_expr_str(expr.operand, ctx_prefix, cv)
             return f"({expr.op}{operand})"
+
+        if isinstance(expr, OrExpr):
+            # For value-returning calls: emit the call, the or-fallback
+            # is handled at the statement level in _emit_stmt
+            # For expression context, just emit the call (fallback handled by wrapper)
+            return self._emit_expr_str(expr.expr, ctx_prefix, cv)
 
         if isinstance(expr, DotAccess):
             # Enum variant access: EnumName.variant → ENUMNAME_VARIANT

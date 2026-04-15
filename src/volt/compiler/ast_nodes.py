@@ -199,6 +199,14 @@ class RawBlock(Node):
 
 
 @dataclass
+class OrExpr(Node):
+    """expr or fallback — error handling for fallible calls."""
+    expr: Expr = None           # the fallible call
+    fallback: Expr = None       # default value, or None for skip/restart
+    kind: str = "default"       # "skip", "restart", "retry", "default"
+
+
+@dataclass
 class StorageDecl(Node):
     """storage boot_count: int = 0 — persists across reboot/deep sleep."""
     name: str = ""
