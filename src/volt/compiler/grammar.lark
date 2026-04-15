@@ -80,9 +80,10 @@ struct_decl: "struct" NAME "{" (_NL | struct_field)* "}"
 struct_field: NAME ":" type_name _NL
 
 // --- Enum ---
-// enum Color { red, green, blue }
-enum_decl: "enum" NAME "{" (_NL | enum_variant)* "}"
-enum_variant: NAME _NL
+// enum Color { red, green, blue }  or  enum Color { red\n green\n blue }
+enum_decl: "enum" NAME "{" enum_body "}"
+enum_body: (_NL | enum_variant)*
+enum_variant: NAME ","?  _NL?
 
 
 // --- Function ---

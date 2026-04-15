@@ -236,10 +236,17 @@ class ASTBuilder(Transformer):
 
     def enum_decl(self, children):
         name = str(children[0])
-        variants = [str(c) for c in children[1:] if isinstance(c, Token) and c.type == 'NAME']
-        # Also pick up variants returned by enum_variant as strings
-        variants += [c for c in children[1:] if isinstance(c, str)]
+        # Collect variants from enum_body (which is a list of strings)
+        variants = []
+        for c in children[1:]:
+            if isinstance(c, list):
+                variants.extend(c)
+            elif isinstance(c, str):
+                variants.append(c)
         return EnumDecl(name=name, variants=variants, region=_region(children[0]))
+
+    def enum_body(self, children):
+        return [c for c in children if isinstance(c, str)]
 
     def enum_variant(self, children):
         return str(children[0])
