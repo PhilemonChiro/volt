@@ -102,6 +102,8 @@ class ASTBuilder(Transformer):
                 prog.power = child
             elif isinstance(child, StructDecl):
                 prog.structs.append(child)
+            elif isinstance(child, EnumDecl):
+                prog.enums.append(child)
             elif isinstance(child, FuncDecl):
                 prog.functions.append(child)
             elif isinstance(child, TaskDecl):
@@ -222,6 +224,16 @@ class ASTBuilder(Transformer):
         name = str(children[0])
         type_name = children[1]
         return FieldDecl(name=name, type_name=type_name, region=_region(children[0]))
+
+    def enum_decl(self, children):
+        name = str(children[0])
+        variants = [str(c) for c in children[1:] if isinstance(c, Token) and c.type == 'NAME']
+        # Also pick up variants returned by enum_variant as strings
+        variants += [c for c in children[1:] if isinstance(c, str)]
+        return EnumDecl(name=name, variants=variants, region=_region(children[0]))
+
+    def enum_variant(self, children):
+        return str(children[0])
 
     # --- Function ---
 

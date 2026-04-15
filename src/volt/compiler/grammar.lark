@@ -18,6 +18,7 @@ start: (_NL | top_level)*
     | hardware_block
     | power_block
     | struct_decl
+    | enum_decl
     | func_decl
     | task_decl
     | machine_decl
@@ -75,6 +76,11 @@ power_value: NAME "(" arg_list ")"
 struct_decl: "struct" NAME "{" (_NL | struct_field)* "}"
 
 struct_field: NAME ":" type_name _NL
+
+// --- Enum ---
+// enum Color { red, green, blue }
+enum_decl: "enum" NAME "{" (_NL | enum_variant)* "}"
+enum_variant: NAME _NL
 
 
 // --- Function ---
