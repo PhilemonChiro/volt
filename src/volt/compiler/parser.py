@@ -122,6 +122,15 @@ class ASTBuilder(Transformer):
                 prog.global_vars.append(child)
             elif isinstance(child, ChannelDecl):
                 prog.channels.append(child)
+            elif isinstance(child, (EveryBlock, OnBlock)):
+                # v3: top-level every/on blocks become auto-named tasks
+                auto_idx = len([t for t in prog.tasks if t.name.startswith("_rule")])
+                task = TaskDecl(
+                    name=f"_rule{auto_idx}",
+                    body=[child],
+                    region=child.region,
+                )
+                prog.tasks.append(task)
             elif isinstance(child, str) and child.endswith('.volt'):
                 prog.includes.append(child)
         return prog

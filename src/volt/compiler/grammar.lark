@@ -28,6 +28,8 @@ start: (_NL | top_level)*
     | storage_decl _NL
     | var_decl _NL
     | channel_decl _NL
+    | every_block
+    | on_block
 
 
 // --- Chip Declaration ---
