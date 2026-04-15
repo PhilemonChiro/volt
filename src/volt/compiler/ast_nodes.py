@@ -179,6 +179,12 @@ class BreakStmt(Node):
 
 
 @dataclass
+class BecomeStmt(Node):
+    """become state_name — transition to a new state in a state machine"""
+    target: str = ""
+
+
+@dataclass
 class ContinueStmt(Node):
     """continue — skip to next iteration"""
     pass

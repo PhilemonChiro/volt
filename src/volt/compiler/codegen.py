@@ -718,6 +718,7 @@ class CCodeGen:
 
     def _emit_one_machine(self, machine: MachineDecl):
         name = machine.name
+        self._current_machine = name  # for BecomeStmt codegen
         states = machine.states
         initial = next((s for s in states if s.is_initial), states[0])
 
@@ -1191,6 +1192,14 @@ class CCodeGen:
 
         elif isinstance(stmt, ContinueStmt):
             self._out("continue;")
+
+        elif isinstance(stmt, BecomeStmt):
+            # State machine transition — emitted inside machine run functions
+            # The machine name is stored in self._current_machine during codegen
+            if hasattr(self, '_current_machine') and self._current_machine:
+                machine = self._current_machine
+                target = stmt.target
+                self._out(f"{machine}_transition(ctx, {machine.upper()}_{target.upper()});")
 
         elif isinstance(stmt, ExprStmt):
             self._line_directive(stmt)
