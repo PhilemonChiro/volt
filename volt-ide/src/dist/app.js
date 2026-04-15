@@ -51,6 +51,57 @@
     }
 
     // ----------------------------------------------------------------
+    // ASTStore — single source of truth for all panels
+    // Compiles on keystroke, notifies subscribers with AST + C + errors
+    // ----------------------------------------------------------------
+    var ASTStore = {
+        _ast: null,     // { pins, tasks, machines, channels, enums, chip }
+        _cCode: "",
+        _errors: [],
+        _listeners: [],
+        _compileTimer: null,
+
+        compile: function(source, filename) {
+            var self = this;
+            return invoke("compile_full", { source: source }).then(function(result) {
+                self._ast = {
+                    pins: result.pins || [],
+                    tasks: result.tasks || [],
+                    machines: result.machines || [],
+                    channels: result.channels || [],
+                    enums: result.enums || [],
+                    chip: result.chip || "esp32",
+                };
+                self._cCode = result.c_code || "";
+                self._errors = result.diagnostics || [];
+                self._listeners.forEach(function(fn) { fn(self._ast, self._cCode, self._errors); });
+            }).catch(function() {});
+        },
+
+        scheduleCompile: function(source) {
+            var self = this;
+            clearTimeout(self._compileTimer);
+            self._compileTimer = setTimeout(function() {
+                self.compile(source, "main.volt");
+            }, 300); // 300ms debounce
+        },
+
+        subscribe: function(callback) {
+            this._listeners.push(callback);
+            // Return unsubscribe function
+            var listeners = this._listeners;
+            return function() {
+                var idx = listeners.indexOf(callback);
+                if (idx >= 0) listeners.splice(idx, 1);
+            };
+        },
+
+        getAST: function() { return this._ast; },
+        getCCode: function() { return this._cCode; },
+        getErrors: function() { return this._errors; },
+    };
+
+    // ----------------------------------------------------------------
     // Volt language definition (Monarch tokenizer)
     // ----------------------------------------------------------------
     monaco.languages.register({ id: "volt" });
@@ -1945,6 +1996,10 @@
     function scheduleDiagnostics() {
         clearTimeout(diagnosticTimer);
         diagnosticTimer = setTimeout(runDiagnostics, 800);
+        // Also trigger ASTStore compile for panel updates
+        if (editor) {
+            ASTStore.scheduleCompile(editor.getValue());
+        }
     }
 
     // ----------------------------------------------------------------

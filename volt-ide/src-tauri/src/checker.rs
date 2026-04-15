@@ -127,6 +127,164 @@ print(json.dumps(result))
     }
 }
 
+// ============================================================
+// Full compilation result — AST + C code + diagnostics
+// Used by the ASTStore for panel rendering
+// ============================================================
+
+#[derive(Serialize, serde::Deserialize)]
+pub struct CompileResult {
+    pub diagnostics: Vec<DiagnosticItem>,
+    pub c_code: String,
+    pub pins: Vec<PinInfo>,
+    pub tasks: Vec<TaskInfo>,
+    pub machines: Vec<MachineInfo>,
+    pub channels: Vec<ChannelInfo>,
+    pub enums: Vec<EnumInfo>,
+    pub chip: String,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+pub struct PinInfo {
+    pub name: String,
+    pub mode: String,
+    pub gpio: u32,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+pub struct TaskInfo {
+    pub name: String,
+    pub tier: String,
+    pub line: u32,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+pub struct MachineInfo {
+    pub name: String,
+    pub states: Vec<String>,
+    pub line: u32,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+pub struct ChannelInfo {
+    pub name: String,
+    pub elem_type: String,
+    pub capacity: u32,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+pub struct EnumInfo {
+    pub name: String,
+    pub variants: Vec<String>,
+}
+
+pub fn compile_full(source: &str) -> CompileResult {
+    let volt_src = crate::runner::get_volt_src_path();
+    let pid = std::process::id();
+    let tmp = std::env::temp_dir().join(format!("_volt_full_{}.volt", pid));
+    std::fs::write(&tmp, source).ok();
+
+    let script = format!(
+r#"import sys, json
+sys.path.insert(0, '{}')
+from volt.compiler.voltc import compile_volt
+
+source = open('{}').read()
+c_code, errors = compile_volt(source, 'main.volt')
+
+# Re-parse to get AST structure (compile_volt returns C, not AST)
+from volt.compiler.parser import parse
+from volt.compiler.resolver import resolve
+from volt.compiler.errors import CompilerErrors
+
+errs2 = CompilerErrors()
+errs2.set_source(source)
+try:
+    program = parse(source)
+    scope = resolve(program, errs2)
+except Exception:
+    program = None
+
+result = {{
+    'diagnostics': [{{
+        'line': e.region.start_line if e.region else 1,
+        'col': e.region.start_col if e.region else 1,
+        'message': e.message,
+        'severity': e.severity,
+        'hint': e.hint or ''
+    }} for e in errors.errors],
+    'c_code': c_code or '',
+    'pins': [],
+    'tasks': [],
+    'machines': [],
+    'channels': [],
+    'enums': [],
+    'chip': '',
+}}
+
+if program:
+    if program.chip:
+        result['chip'] = program.chip.target
+    if program.hardware:
+        result['pins'] = [{{
+            'name': p.name, 'mode': p.mode, 'gpio': p.gpio
+        }} for p in program.hardware.pins]
+    result['tasks'] = [{{
+        'name': t.name, 'tier': getattr(t, 'tier', 'background'),
+        'line': t.region.start_line
+    }} for t in program.tasks]
+    result['machines'] = [{{
+        'name': m.name,
+        'states': [s.name for s in m.states],
+        'line': m.region.start_line
+    }} for m in program.machines]
+    result['channels'] = [{{
+        'name': c.name, 'elem_type': c.elem_type, 'capacity': c.capacity
+    }} for c in program.channels]
+    result['enums'] = [{{
+        'name': e.name, 'variants': e.variants
+    }} for e in program.enums]
+
+print(json.dumps(result))
+"#,
+        volt_src.replace("\\", "/"),
+        tmp.to_string_lossy().replace("\\", "/"),
+    );
+
+    let script_path = std::env::temp_dir().join(format!("_volt_full_{}.py", pid));
+    std::fs::write(&script_path, &script).ok();
+
+    let output = std::process::Command::new("python3")
+        .arg(&script_path)
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            serde_json::from_str(&stdout).unwrap_or(CompileResult {
+                diagnostics: vec![],
+                c_code: String::new(),
+                pins: vec![],
+                tasks: vec![],
+                machines: vec![],
+                channels: vec![],
+                enums: vec![],
+                chip: String::new(),
+            })
+        }
+        Err(_) => CompileResult {
+            diagnostics: vec![],
+            c_code: String::new(),
+            pins: vec![],
+            tasks: vec![],
+            machines: vec![],
+            channels: vec![],
+            enums: vec![],
+            chip: String::new(),
+        },
+    }
+}
+
 #[derive(Serialize, serde::Deserialize)]
 pub struct SymbolInfo {
     pub name: String,
