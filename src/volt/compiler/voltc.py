@@ -8,10 +8,26 @@ Usage: python voltc.py input.volt [-o output.c] [--show-tree] [--show-analysis]
 """
 
 import sys
+import re as _re
 from pathlib import Path
 
 # Add compiler dir to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+
+def _read_chip_from_toml(filename: str) -> str | None:
+    """Read chip target from volt.toml in the same directory as the source file."""
+    try:
+        base = Path(filename).parent if filename != "main.volt" else Path(".")
+        toml_path = base / "volt.toml"
+        if not toml_path.exists():
+            return None
+        text = toml_path.read_text()
+        # Simple TOML parsing — just look for chip = "esp32"
+        match = _re.search(r'^\s*chip\s*=\s*"([^"]+)"', text, _re.MULTILINE)
+        return match.group(1) if match else None
+    except Exception:
+        return None
 
 from .parser import parse
 from .resolver import resolve
@@ -23,8 +39,6 @@ from .codegen import generate
 from .errors import CompilerErrors
 from .ast_nodes import Region
 
-
-import re as _re
 
 def _resolve_includes(source: str, filename: str, errors) -> str:
     """Resolve include "file.volt" directives by inlining file contents."""
@@ -103,6 +117,14 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
             str(e).split('\n')[0],
         )
         return None, errors
+
+    # v3: if no chip declaration in source, check volt.toml
+    if program.chip is None:
+        toml_chip = _read_chip_from_toml(filename)
+        if toml_chip:
+            from .ast_nodes import ChipDecl
+            from .ast_nodes import Region as _Region
+            program.chip = ChipDecl(target=toml_chip, region=_Region(0, 0, 0, 0))
 
     # Pass 2: Resolve names
     scope = resolve(program, errors)
