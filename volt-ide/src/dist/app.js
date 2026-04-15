@@ -101,6 +101,58 @@
         getErrors: function() { return this._errors; },
     };
 
+    // Sidebar panel renderer — subscribes to ASTStore
+    var PIN_COLORS = { Output: "#4EC9B0", Input: "#9CDCFE", PullUpInput: "#6A9955",
+        PullDownInput: "#6A9955", Analog: "#569CD6", PWM: "#CE9178",
+        Servo: "#D7BA7D", DAC: "#C586C0", Touch: "#DCDCAA" };
+
+    ASTStore.subscribe(function(ast) {
+        if (!ast) return;
+
+        // Update pins panel
+        var pinEl = document.getElementById("pinList");
+        if (pinEl) {
+            if (ast.pins.length === 0) {
+                pinEl.innerHTML = '<div class="side-empty">No hardware block</div>';
+            } else {
+                pinEl.innerHTML = ast.pins.map(function(p) {
+                    var color = PIN_COLORS[p.mode] || "#808080";
+                    return '<div class="side-item"><span class="side-item-dot" style="background:' + color + '"></span>' +
+                        '<span class="side-item-label">' + p.name + '</span>' +
+                        '<span class="side-item-detail">' + (p.mode || '?') + ' GP' + p.gpio + '</span></div>';
+                }).join("");
+            }
+        }
+
+        // Update tasks panel
+        var taskEl = document.getElementById("taskList");
+        if (taskEl) {
+            if (ast.tasks.length === 0) {
+                taskEl.innerHTML = '<div class="side-empty">No tasks</div>';
+            } else {
+                taskEl.innerHTML = ast.tasks.map(function(t) {
+                    var icon = t.tier === "critical" ? "!" : t.tier === "priority" ? "^" : "*";
+                    return '<div class="side-item"><span style="color:var(--fg-dim)">' + icon + '</span>' +
+                        '<span class="side-item-label">' + t.name + '</span>' +
+                        '<span class="side-item-detail">' + (t.tier || '') + '</span></div>';
+                }).join("");
+            }
+        }
+
+        // Update enums panel
+        var enumEl = document.getElementById("enumList");
+        if (enumEl) {
+            if (ast.enums.length === 0) {
+                enumEl.innerHTML = '<div class="side-empty">No enums</div>';
+            } else {
+                enumEl.innerHTML = ast.enums.map(function(e) {
+                    return '<div class="side-item"><span class="side-item-label">' + e.name + '</span>' +
+                        '<span class="side-item-detail">' + e.variants.join(", ") + '</span></div>';
+                }).join("");
+            }
+        }
+    });
+
     // ----------------------------------------------------------------
     // Volt language definition (Monarch tokenizer)
     // ----------------------------------------------------------------
@@ -795,12 +847,14 @@
     // ----------------------------------------------------------------
     function showWelcome() {
         document.getElementById("welcomeScreen").style.display = "flex";
-        editorContainer.style.display = "none";
+        var ma = document.getElementById("mainArea");
+        if (ma) ma.style.display = "none";
     }
 
     function showEditor() {
         document.getElementById("welcomeScreen").style.display = "none";
-        editorContainer.style.display = "block";
+        var ma = document.getElementById("mainArea");
+        if (ma) ma.style.display = "flex";
         ensureEditor();
         setTimeout(function () {
             if (editor) { editor.layout(); editor.focus(); }

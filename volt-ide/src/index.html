@@ -120,8 +120,44 @@
         </div>
     </main>
 
-    <!-- EDITOR (hidden until a file is opened) -->
-    <main id="editorContainer" style="display:none"></main>
+    <!-- MAIN AREA: Editor + Sidebar -->
+    <div id="mainArea" style="display:none">
+        <!-- EDITOR -->
+        <main id="editorContainer"></main>
+
+        <!-- RIGHT SIDEBAR: Context panels -->
+        <aside id="sidePanel">
+            <div class="side-header">
+                <span class="side-title" id="sidePanelTitle">Hardware</span>
+            </div>
+            <div class="side-content" id="sidePanelContent">
+                <div class="side-section" id="panelPins">
+                    <div class="side-section-title">Pins</div>
+                    <div class="side-section-body" id="pinList">
+                        <div class="side-empty">No hardware block</div>
+                    </div>
+                </div>
+                <div class="side-section" id="panelTasks">
+                    <div class="side-section-title">Tasks</div>
+                    <div class="side-section-body" id="taskList">
+                        <div class="side-empty">No tasks</div>
+                    </div>
+                </div>
+                <div class="side-section" id="panelDevices">
+                    <div class="side-section-title">Devices</div>
+                    <div class="side-section-body" id="deviceList">
+                        <div class="side-empty">No devices</div>
+                    </div>
+                </div>
+                <div class="side-section" id="panelEnums">
+                    <div class="side-section-title">Enums</div>
+                    <div class="side-section-body" id="enumList">
+                        <div class="side-empty">No enums</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
 
     <!-- BOTTOM PANEL: Serial Monitor -->
     <section id="bottomPanel">
