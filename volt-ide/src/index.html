@@ -202,6 +202,76 @@
         </div>
     </div>
 
+    <!-- New Project Wizard -->
+    <div class="overlay" id="wizardOverlay" style="display:none">
+        <div class="picker" style="width:480px">
+            <div class="picker-header">
+                <span class="picker-title" id="wizardTitle">New Project</span>
+                <button class="panel-action-btn" id="wizardCloseBtn">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <!-- Step 1: Board -->
+            <div class="wizard-step" id="wizardStep1">
+                <p class="wizard-label">Select your board</p>
+                <div class="wizard-grid" id="wizardBoards">
+                    <button class="wizard-card active" data-chip="esp32">
+                        <strong>ESP32</strong>
+                        <small>WiFi + BLE, 520KB RAM</small>
+                    </button>
+                    <button class="wizard-card" data-chip="rp2040">
+                        <strong>RP2040 Pico</strong>
+                        <small>Dual-core ARM, 264KB</small>
+                    </button>
+                    <button class="wizard-card" data-chip="esp8266">
+                        <strong>ESP8266</strong>
+                        <small>WiFi, 80KB RAM</small>
+                    </button>
+                    <button class="wizard-card" data-chip="stm32f103">
+                        <strong>STM32 Blue Pill</strong>
+                        <small>Cortex-M3, 20KB RAM</small>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Template -->
+            <div class="wizard-step" id="wizardStep2" style="display:none">
+                <p class="wizard-label">Choose a starting template</p>
+                <div class="wizard-grid" id="wizardTemplates">
+                    <button class="wizard-card active" data-template="blink">
+                        <strong>Blink</strong>
+                        <small>LED toggle every 500ms</small>
+                    </button>
+                    <button class="wizard-card" data-template="iot-sensor">
+                        <strong>IoT Sensor</strong>
+                        <small>WiFi + MQTT + sensor</small>
+                    </button>
+                    <button class="wizard-card" data-template="door-lock">
+                        <strong>Door Lock</strong>
+                        <small>State machine + keypad</small>
+                    </button>
+                    <button class="wizard-card" data-template="empty">
+                        <strong>Empty</strong>
+                        <small>Blank project</small>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Name -->
+            <div class="wizard-step" id="wizardStep3" style="display:none">
+                <p class="wizard-label">Name your project</p>
+                <input type="text" class="wizard-input" id="wizardName" placeholder="my-project" autofocus>
+            </div>
+
+            <div class="wizard-footer">
+                <button class="wizard-btn" id="wizardBackBtn" style="display:none">Back</button>
+                <div style="flex:1"></div>
+                <button class="wizard-btn wizard-btn-primary" id="wizardNextBtn">Next</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Monaco AMD loader (proven on WebKitGTK) -->
     <script src="lib/monaco/vs/loader.js"></script>
     <script>

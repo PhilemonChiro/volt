@@ -2100,18 +2100,98 @@
     // ----------------------------------------------------------------
     // New Project
     // ----------------------------------------------------------------
-    document.getElementById("newProjectBtn").addEventListener("click", function () {
-        var name = prompt("Project name:");
-        if (!name) return;
-        var chip = "esp32";
+    // ----------------------------------------------------------------
+    // New Project Wizard (3-step)
+    // ----------------------------------------------------------------
+    var wizardState = { step: 1, chip: "esp32", template: "blink" };
+
+    function showWizard() {
+        wizardState = { step: 1, chip: "esp32", template: "blink" };
+        document.getElementById("wizardOverlay").style.display = "";
+        updateWizardStep();
+        // Auto-select detected board
         if (currentDevices.length > 0) {
-            chip = currentDevices[selectedDeviceIndex].chip.toLowerCase();
-            if (chip === "esp" || chip === "espressif") chip = "esp32";
+            var detected = currentDevices[selectedDeviceIndex].chip.toLowerCase();
+            if (detected.indexOf("rp2040") >= 0 || detected.indexOf("pico") >= 0) wizardState.chip = "rp2040";
+            else if (detected.indexOf("8266") >= 0) wizardState.chip = "esp8266";
+            else wizardState.chip = "esp32";
+            // Highlight the detected board
+            var cards = document.querySelectorAll("#wizardBoards .wizard-card");
+            cards.forEach(function(c) {
+                c.classList.toggle("active", c.getAttribute("data-chip") === wizardState.chip);
+            });
         }
-        invoke("create_project", { name: name, chip: chip }).then(function (path) {
-            if (path) { loadProject(path); appendOutput("Created project: " + path, "success"); }
-        }).catch(function (e) { appendOutput("New project failed: " + e, "error"); });
+    }
+
+    function hideWizard() {
+        document.getElementById("wizardOverlay").style.display = "none";
+    }
+
+    function updateWizardStep() {
+        document.getElementById("wizardStep1").style.display = wizardState.step === 1 ? "" : "none";
+        document.getElementById("wizardStep2").style.display = wizardState.step === 2 ? "" : "none";
+        document.getElementById("wizardStep3").style.display = wizardState.step === 3 ? "" : "none";
+        document.getElementById("wizardBackBtn").style.display = wizardState.step > 1 ? "" : "none";
+        document.getElementById("wizardNextBtn").textContent = wizardState.step === 3 ? "Create" : "Next";
+        var titles = { 1: "Select Board", 2: "Choose Template", 3: "Name Project" };
+        document.getElementById("wizardTitle").textContent = titles[wizardState.step];
+        if (wizardState.step === 3) {
+            setTimeout(function() { document.getElementById("wizardName").focus(); }, 50);
+        }
+    }
+
+    // Board card clicks
+    document.getElementById("wizardBoards").addEventListener("click", function(e) {
+        var card = e.target.closest(".wizard-card");
+        if (!card) return;
+        document.querySelectorAll("#wizardBoards .wizard-card").forEach(function(c) { c.classList.remove("active"); });
+        card.classList.add("active");
+        wizardState.chip = card.getAttribute("data-chip");
     });
+
+    // Template card clicks
+    document.getElementById("wizardTemplates").addEventListener("click", function(e) {
+        var card = e.target.closest(".wizard-card");
+        if (!card) return;
+        document.querySelectorAll("#wizardTemplates .wizard-card").forEach(function(c) { c.classList.remove("active"); });
+        card.classList.add("active");
+        wizardState.template = card.getAttribute("data-template");
+    });
+
+    document.getElementById("wizardNextBtn").addEventListener("click", function() {
+        if (wizardState.step < 3) {
+            wizardState.step++;
+            updateWizardStep();
+        } else {
+            // Create project
+            var name = document.getElementById("wizardName").value.trim();
+            if (!name) { document.getElementById("wizardName").focus(); return; }
+            invoke("create_project", { name: name, chip: wizardState.chip }).then(function(path) {
+                if (path) {
+                    hideWizard();
+                    loadProject(path);
+                    appendOutput("Created project: " + path + " (" + wizardState.chip + ")", "success");
+                }
+            }).catch(function(e) { appendOutput("New project failed: " + e, "error"); });
+        }
+    });
+
+    document.getElementById("wizardBackBtn").addEventListener("click", function() {
+        if (wizardState.step > 1) { wizardState.step--; updateWizardStep(); }
+    });
+
+    document.getElementById("wizardCloseBtn").addEventListener("click", hideWizard);
+    document.getElementById("wizardOverlay").addEventListener("click", function(e) {
+        if (e.target === this) hideWizard();
+    });
+
+    // Enter key in name field
+    document.getElementById("wizardName").addEventListener("keydown", function(e) {
+        if (e.key === "Enter") document.getElementById("wizardNextBtn").click();
+    });
+
+    // Wire both New buttons to the wizard
+    document.getElementById("newProjectBtn").addEventListener("click", showWizard);
 
     // ----------------------------------------------------------------
     // Load project
