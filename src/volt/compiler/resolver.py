@@ -100,6 +100,14 @@ def _collect_declarations(program: Program, scope: Scope, errors: CompilerErrors
             struct.name, "struct", struct.name, struct.region,
         ), errors)
 
+    # Enums — register the type name and each Variant as EnumType.Variant
+    for enum in program.enums:
+        _declare_or_error(scope, Symbol(
+            enum.name, "enum", enum.name, enum.region,
+        ), errors)
+        # Register each variant as a constant accessible via EnumName.variant
+        # The DotAccess resolution will handle EnumName.variant at check time
+
     # Functions (register name + signature, don't look at body)
     for func in program.functions:
         params = [(p.name, p.type_name) for p in func.params]

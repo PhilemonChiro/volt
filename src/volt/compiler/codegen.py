@@ -277,6 +277,7 @@ class CCodeGen:
         self._shared_vars: set = set()  # vars that need atomic operations
         self._var_types: dict[str, str] = {}  # name → declared type (for codegen dispatch)
         self._func_return_types: dict[str, str] = {}  # func name → return type
+        self._enum_types: dict = {}  # enum_name → [variant_names]
 
     def generate(self, program: Program) -> str:
         """Generate complete C source from AST."""
@@ -287,11 +288,15 @@ class CCodeGen:
         self._sprintf_buf_idx = 0
         self._chip_family = self._get_chip_family(program)
         self._cached_all_stmts = None
+        self._enum_types: dict = {}  # enum_name -> [variant_names]
 
         # Section 1: Header
         self._emit_header(program)
 
-        # Section 2: Forward declarations
+        # Section 2: Enums
+        self._emit_enums(program)
+
+        # Section 3: Forward declarations
         self._emit_forward_decls(program)
 
         # Section 3: Module-level variables
@@ -433,6 +438,19 @@ class CCodeGen:
         # String interpolation buffers (used by string concat, log interpolation, UART read_line)
         self._out("static char _volt_strbuf[16][128];")
         self._out("")
+
+    def _emit_enums(self, program: Program):
+        """Emit C enum typedefs."""
+        for enum in program.enums:
+            name = enum.name
+            self._out(f"typedef enum {{")
+            for i, variant in enumerate(enum.variants):
+                comma = "," if i < len(enum.variants) - 1 else ""
+                self._out(f"    {name.upper()}_{variant.upper()}{comma}")
+            self._out(f"}} {name.lower()}_t;")
+            self._out("")
+            # Store enum info for codegen lookups
+            self._enum_types[name] = enum.variants
 
     def _emit_forward_decls(self, program: Program):
         self._out("// Forward declarations")
@@ -1108,7 +1126,7 @@ class CCodeGen:
 
         if isinstance(stmt, VarDecl):
             self._line_directive(stmt)
-            c_type = TYPE_MAP.get(stmt.type_name, "int32_t")
+            c_type = self._c_type(stmt.type_name) if stmt.type_name else TYPE_MAP.get(stmt.type_name, "int32_t")
             val = self._emit_expr_str(stmt.value, ctx_prefix, cv)
             # Track variable types for dispatch (storage.save etc.)
             if stmt.type_name:
@@ -1326,6 +1344,11 @@ class CCodeGen:
             return f"({expr.op}{operand})"
 
         if isinstance(expr, DotAccess):
+            # Enum variant access: EnumName.variant → ENUMNAME_VARIANT
+            if isinstance(expr.obj, VarRef) and expr.obj.name in self._enum_types:
+                enum_name = expr.obj.name
+                variant = expr.field_name
+                return f"{enum_name.upper()}_{variant.upper()}"
             obj = self._emit_expr_str(expr.obj, ctx_prefix, cv)
             return f"{obj}.{expr.field_name}"
 
@@ -1413,6 +1436,12 @@ class CCodeGen:
             # Escape quotes in filename to prevent malformed #line directives
             safe_file = self.source_file.replace("\\", "\\\\").replace('"', '\\"')
             self.lines.append(f'#line {node.region.start_line} "{safe_file}"')
+
+    def _c_type(self, type_name: str) -> str:
+        """Map a Volt type to a C type, including enum types."""
+        if type_name in self._enum_types:
+            return f"{type_name.lower()}_t"
+        return TYPE_MAP.get(type_name, "int32_t")
 
     def _var_type(self, name: str) -> str:
         """Look up variable type from the var_types map built during codegen."""

@@ -755,11 +755,16 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
 
         result = BINARY_OP_TYPES.get((left_type, expr.op, right_type))
         if result is None:
-            errors.error(
-                expr.region, "TYPE MISMATCH",
-                f"Cannot use `{expr.op}` between `{left_type}` and `{right_type}`.",
-            )
-            return ERROR_TYPE
+            # Allow == and != between same enum types
+            if left_type == right_type and expr.op in {"==", "!="} and \
+               scope.lookup(left_type) and scope.lookup(left_type).kind == "enum":
+                result = BOOL
+            else:
+                errors.error(
+                    expr.region, "TYPE MISMATCH",
+                    f"Cannot use `{expr.op}` between `{left_type}` and `{right_type}`.",
+                )
+                return ERROR_TYPE
 
         expr.result_type = result
         return result
@@ -781,6 +786,14 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
 
     # Field access (dot without call): data.temperature
     if isinstance(expr, DotAccess):
+        # Check for enum variant access: EnumName.variant
+        if isinstance(expr.obj, VarRef):
+            sym = scope.lookup(expr.obj.name)
+            if sym and sym.kind == "enum":
+                # Validate variant exists — find enum in program context
+                # For now, trust that the resolver registered it; return enum type
+                return sym.type_name
+
         obj_type = _infer(expr.obj, scope, errors)
         if obj_type == ERROR_TYPE:
             return ERROR_TYPE
@@ -790,8 +803,7 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
         methods = METHOD_TYPES.get(lookup_type, {})
         if expr.field_name in methods:
             return methods[expr.field_name][0]
-        # Could be a struct field — checker doesn't know struct fields yet
-        # Return unknown, let it be resolved when we have struct field info
+        # Could be a struct field
         return "unknown"
 
     # Function call

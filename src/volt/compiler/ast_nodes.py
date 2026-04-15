@@ -48,6 +48,7 @@ class Program(Node):
     hardware: HardwareBlock | None = None
     power: PowerBlock | None = None
     structs: list[StructDecl] = field(default_factory=list)
+    enums: list[EnumDecl] = field(default_factory=list)
     functions: list[FuncDecl] = field(default_factory=list)
     tasks: list[TaskDecl] = field(default_factory=list)
     machines: list[MachineDecl] = field(default_factory=list)
@@ -114,6 +115,13 @@ class StructDecl(Node):
     """struct Reading { temperature: float ... }"""
     name: str = ""
     fields: list[FieldDecl] = field(default_factory=list)
+
+
+@dataclass
+class EnumDecl(Node):
+    """enum Color { red, green, blue }"""
+    name: str = ""
+    variants: list[str] = field(default_factory=list)
 
 
 @dataclass
