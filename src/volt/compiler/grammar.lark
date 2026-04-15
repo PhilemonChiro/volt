@@ -47,11 +47,16 @@ include_decl: "include" ESCAPED_STRING _NL
 // --- Hardware Block ---
 // hardware { pin led: Output = 2 ... }
 
-hardware_block: "hardware" "{" (_NL | hardware_item)* "}"
+hardware_block: "hardware" "{" (_NL | hardware_item)* _hw_inline? "}"
 
 ?hardware_item: pin_decl _NL
     | bus_decl _NL
     | sensor_decl _NL
+
+// Allow single-line hardware blocks: hardware { pin led = 2 }
+_hw_inline: pin_decl
+    | bus_decl
+    | sensor_decl
 
 pin_decl: "pin" NAME ":" pin_mode "=" expr
     | "pin" NAME "=" expr -> pin_decl_inferred
