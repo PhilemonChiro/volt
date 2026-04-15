@@ -123,6 +123,7 @@ INITIAL: "initial"
     | state_exit
     | state_on _NL
     | state_after _NL
+    | become_stmt _NL
     | statement
 
 state_enter: "enter" block
@@ -131,6 +132,8 @@ state_exit: "exit" block
 state_on: "on" expr state_guard? "->" NAME state_action?
 
 state_after: "after" expr state_guard? "->" NAME state_action?
+
+become_stmt: "become" NAME
 
 state_guard: "[" expr "]"
 
@@ -171,6 +174,7 @@ _inline_stmt: var_decl
     | expr_stmt
     | break_stmt
     | continue_stmt
+    | become_stmt
 
 
 // --- Statements ---

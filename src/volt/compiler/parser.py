@@ -332,6 +332,9 @@ class ASTBuilder(Transformer):
         name = str(children[0])
         states = [c for c in children[1:] if isinstance(c, StateDecl)]
         variables = [c for c in children[1:] if isinstance(c, VarDecl)]
+        # v3: if no state is marked initial, first state is initial by default
+        if states and not any(s.is_initial for s in states):
+            states[0].is_initial = True
         return MachineDecl(name=name, states=states, variables=variables,
                            region=_region(children[0]))
 
@@ -421,6 +424,10 @@ class ASTBuilder(Transformer):
             duration=duration, target_state=target, guard=guard, action=action,
             region=_region(children[0]),
         )
+
+    def become_stmt(self, children):
+        target = str(children[0])
+        return BecomeStmt(target=target, region=_region(children[0]))
 
     def state_guard(self, children):
         return children[0]
