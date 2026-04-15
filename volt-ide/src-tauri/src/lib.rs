@@ -7,7 +7,7 @@ mod toolchain;
 
 use devices::Device;
 use projects::{ProjectInfo, BrowseResult};
-use checker::{DiagnosticItem, SymbolInfo};
+use checker::{DiagnosticItem, SymbolInfo, CompileResult};
 
 #[tauri::command]
 fn scan_devices() -> Vec<Device> {
@@ -76,6 +76,11 @@ fn find_symbols(source: String) -> Vec<SymbolInfo> {
     checker::find_symbols(&source)
 }
 
+#[tauri::command]
+fn compile_full(source: String) -> CompileResult {
+    checker::compile_full(&source)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -92,6 +97,7 @@ pub fn run() {
             list_projects,
             check_code,
             find_symbols,
+            compile_full,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
