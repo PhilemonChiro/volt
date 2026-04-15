@@ -711,6 +711,29 @@ class ASTBuilder(Transformer):
         # Fallback: shouldn't normally happen
         return FuncCall(name=str(callee), args=args, region=_region(callee))
 
+    def or_expr(self, children):
+        expr = children[0]
+        fallback_node = children[1]
+        # fallback_node is a tuple (kind, value) from or_skip/or_retry/or_default
+        if isinstance(fallback_node, tuple):
+            kind, value = fallback_node
+        else:
+            kind, value = "default", fallback_node
+        return OrExpr(expr=expr, fallback=value, kind=kind,
+                      region=_region(children[0]))
+
+    def or_skip(self, children):
+        return ("skip", None)
+
+    def or_restart(self, children):
+        return ("restart", None)
+
+    def or_retry(self, children):
+        return ("retry", children[0])
+
+    def or_default(self, children):
+        return ("default", children[0])
+
     def arg_list(self, children):
         return list(children)
 
