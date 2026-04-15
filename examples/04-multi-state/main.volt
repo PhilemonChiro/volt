@@ -1,13 +1,13 @@
-chip esp32
+/* Multiple state machines + tasks */
 
 hardware {
-    pin led: Output = 2
+    pin led = 2
 }
 
 machine pattern {
     var cycle: int = 0
 
-    initial state fast {
+    state fast {
         enter {
             log("mode", "fast")
         }
@@ -29,11 +29,7 @@ machine pattern {
     }
 }
 
-task blink {
-    every 200ms {
-        led.toggle()
-    }
-}
+every 200ms { led.toggle() }
 
 task status {
     var tick: int = 0

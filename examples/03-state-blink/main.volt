@@ -1,20 +1,20 @@
-chip esp32
+/* LED blink via state machine */
 
 hardware {
-    pin led: Output = 2
+    pin led = 2
 }
 
-machine Blinker {
-    initial state off {
+machine blinker {
+    state off_state {
         enter {
             led.off()
         }
-        after 500ms -> on
+        after 500ms -> on_state
     }
-    state on {
+    state on_state {
         enter {
             led.on()
         }
-        after 500ms -> off
+        after 500ms -> off_state
     }
 }

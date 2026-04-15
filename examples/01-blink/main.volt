@@ -1,25 +1,11 @@
-chip esp32
+/* Three LEDs blinking at different rates — simplest v3 program */
 
 hardware {
-    pin green: Output = 23
-    pin red: Output = 22
-    pin yellow: Output = 21
+    pin green = 23
+    pin red = 22
+    pin yellow = 21
 }
 
-task blink_red {
-    every 100ms {
-        red.toggle()
-    }
-}
-
-task blink_green {
-    every 400ms {
-        green.toggle()
-    }
-}
-
-task blink_yellow {
-    every 600ms {
-        yellow.toggle()
-    }
-}
+every 100ms { red.toggle() }
+every 400ms { green.toggle() }
+every 600ms { yellow.toggle() }

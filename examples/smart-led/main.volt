@@ -11,8 +11,6 @@ GP15 = button (cycle modes)
 GP0  = status indicator
 ============================================================ */
 
-chip rp2040
-
 hardware {
     pin led: PWM = GP25
     pin button: PullUpInput = GP15
