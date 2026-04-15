@@ -2177,18 +2177,110 @@
     // ----------------------------------------------------------------
     // New Project (simple prompt — wizard will be added later via separate panel)
     // ----------------------------------------------------------------
-    document.getElementById("newProjectBtn").addEventListener("click", function () {
-        var name = prompt("Project name:");
-        if (!name) return;
-        var chip = "esp32";
-        if (currentDevices.length > 0) {
-            chip = currentDevices[selectedDeviceIndex].chip.toLowerCase();
-            if (chip === "esp" || chip === "espressif") chip = "esp32";
+    // --- New Project Wizard (3-step: Board → Template → Name) ---
+    function showNewProjectWizard() {
+        var existing = document.getElementById("wizardOverlay");
+        if (existing) existing.remove();
+
+        var state = { step: 1, chip: "esp32", template: "blink" };
+
+        var boards = [
+            { id: "esp32", label: "ESP32", desc: "WiFi + BLE, 520KB" },
+            { id: "rp2040", label: "RP2040 Pico", desc: "Dual-core ARM, 264KB" },
+            { id: "esp8266", label: "ESP8266", desc: "WiFi, 80KB" },
+            { id: "stm32f103", label: "STM32 Blue Pill", desc: "Cortex-M3, 20KB" },
+        ];
+
+        var templates = [
+            { id: "blink", label: "Blink", desc: "LED toggle every 500ms" },
+            { id: "iot-sensor", label: "IoT Sensor", desc: "WiFi + MQTT + sensor" },
+            { id: "door-lock", label: "Door Lock", desc: "State machine + keypad" },
+            { id: "empty", label: "Empty", desc: "Blank project" },
+        ];
+
+        var overlay = document.createElement("div");
+        overlay.id = "wizardOverlay";
+        overlay.className = "overlay";
+        document.body.appendChild(overlay);
+
+        function render() {
+            var titles = { 1: "Select Board", 2: "Choose Template", 3: "Name Your Project" };
+            var btnText = state.step === 3 ? "Create" : "Next";
+            var backBtn = state.step > 1 ? '<button class="wiz-btn" id="wizBack">Back</button>' : '';
+
+            var body = "";
+            if (state.step === 1) {
+                body = '<div class="wiz-grid">' + boards.map(function(b) {
+                    var cls = b.id === state.chip ? "wiz-card active" : "wiz-card";
+                    return '<button class="' + cls + '" data-val="' + b.id + '"><strong>' + b.label + '</strong><small>' + b.desc + '</small></button>';
+                }).join("") + '</div>';
+            } else if (state.step === 2) {
+                body = '<div class="wiz-grid">' + templates.map(function(t) {
+                    var cls = t.id === state.template ? "wiz-card active" : "wiz-card";
+                    return '<button class="' + cls + '" data-val="' + t.id + '"><strong>' + t.label + '</strong><small>' + t.desc + '</small></button>';
+                }).join("") + '</div>';
+            } else {
+                body = '<input type="text" id="wizNameInput" class="wiz-input" placeholder="my-project" autofocus>';
+            }
+
+            overlay.innerHTML =
+                '<div class="picker" style="width:420px">' +
+                '<div class="picker-header"><span class="picker-title">' + titles[state.step] + '</span>' +
+                '<button class="panel-action-btn" id="wizClose"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>' +
+                '<div style="padding:16px">' + body + '</div>' +
+                '<div style="padding:0 16px 16px;display:flex;justify-content:space-between">' + backBtn +
+                '<div style="flex:1"></div>' +
+                '<button class="wiz-btn wiz-btn-primary" id="wizNext">' + btnText + '</button></div></div>';
+
+            // Bind events
+            overlay.querySelector("#wizClose").onclick = function() { overlay.remove(); };
+            overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+            if (state.step === 1 || state.step === 2) {
+                overlay.querySelectorAll(".wiz-card").forEach(function(card) {
+                    card.onclick = function() {
+                        overlay.querySelectorAll(".wiz-card").forEach(function(c) { c.classList.remove("active"); });
+                        card.classList.add("active");
+                        if (state.step === 1) state.chip = card.getAttribute("data-val");
+                        else state.template = card.getAttribute("data-val");
+                    };
+                });
+            }
+
+            if (state.step === 3) {
+                var input = overlay.querySelector("#wizNameInput");
+                setTimeout(function() { if (input) input.focus(); }, 50);
+                if (input) input.onkeydown = function(e) { if (e.key === "Enter") overlay.querySelector("#wizNext").click(); };
+            }
+
+            overlay.querySelector("#wizNext").onclick = function() {
+                if (state.step < 3) { state.step++; render(); }
+                else {
+                    var nameInput = overlay.querySelector("#wizNameInput");
+                    var name = nameInput ? nameInput.value.trim() : "";
+                    if (!name) { if (nameInput) nameInput.focus(); return; }
+                    overlay.remove();
+                    invoke("create_project", { name: name, chip: state.chip }).then(function(path) {
+                        if (path) { loadProject(path); appendOutput("Created project: " + path + " (" + state.chip + ")", "success"); }
+                    }).catch(function(e) { appendOutput("New project failed: " + e, "error"); });
+                }
+            };
+
+            var backEl = overlay.querySelector("#wizBack");
+            if (backEl) backEl.onclick = function() { state.step--; render(); };
         }
-        invoke("create_project", { name: name, chip: chip }).then(function (path) {
-            if (path) { loadProject(path); appendOutput("Created project: " + path, "success"); }
-        }).catch(function (e) { appendOutput("New project failed: " + e, "error"); });
-    });
+
+        // Auto-detect board
+        if (currentDevices.length > 0) {
+            var det = currentDevices[selectedDeviceIndex].chip.toLowerCase();
+            if (det.indexOf("rp2040") >= 0 || det.indexOf("pico") >= 0) state.chip = "rp2040";
+            else if (det.indexOf("8266") >= 0) state.chip = "esp8266";
+        }
+
+        render();
+    }
+
+    document.getElementById("newProjectBtn").addEventListener("click", showNewProjectWizard);
 
     // ----------------------------------------------------------------
     // Load project
