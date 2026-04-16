@@ -26,7 +26,14 @@ contextBridge.exposeInMainWorld("volt", {
     stopMonitor: () => ipcRenderer.invoke("stop_monitor"),
     isMonitoring: () => ipcRenderer.invoke("is_monitoring"),
 
+    // Toolchain
+    checkToolchain: (chip) => ipcRenderer.invoke("check_toolchain", chip),
+    setupToolchain: (chip) => ipcRenderer.invoke("setup_toolchain", chip),
+    onToolchainLog: (callback) => ipcRenderer.on("toolchain:log", (_, msg) => callback(msg)),
+
     // Build
+    buildOnly: (projectPath, voltFile, chip) =>
+        ipcRenderer.invoke("build_only", projectPath, voltFile, chip),
     runProject: (projectPath, voltFile, port, chip) =>
         ipcRenderer.invoke("run_project", projectPath, voltFile, port, chip),
 

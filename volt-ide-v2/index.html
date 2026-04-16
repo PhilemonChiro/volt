@@ -56,6 +56,8 @@
                 </div>
             </div>
 
+            <!-- chip badge moved to info bar -->
+
             <div class="toolbar-divider"></div>
 
             <button class="toolbar-btn toolbar-btn-subtle" id="newProjectBtn" title="New Project (Ctrl+N)">
@@ -90,6 +92,22 @@
             </div>
         </div>
     </header>
+
+    <!-- SECONDARY HEADER — project info bar (only when project is open) -->
+    <div id="infoBar" class="project-only" style="display:none">
+        <div class="info-left">
+            <span class="info-chip" id="chipBadge" title="Target board">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
+                <span id="chipLabel">ESP32</span>
+            </span>
+            <span class="info-sep"></span>
+            <span class="info-project" id="infoProjectName"></span>
+            <span class="info-file" id="infoFileName"></span>
+        </div>
+        <div class="info-right">
+            <span class="info-mismatch" id="chipMismatch" style="display:none" title="Connected device doesn't match project target"></span>
+        </div>
+    </div>
 
     <!-- EDITOR (hidden until project opens) -->
     <div id="editorArea" style="display:none;flex:1;overflow:hidden">
