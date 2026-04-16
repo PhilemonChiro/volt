@@ -1,0 +1,16 @@
+{
+  "name": "volt-ide",
+  "version": "2.0.0",
+  "description": "Volt IDE",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "author": "Philemon Chiro",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^41.2.0"
+  }
+}
