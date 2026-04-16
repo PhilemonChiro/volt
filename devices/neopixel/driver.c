@@ -5,6 +5,13 @@
 #include "volt/pin.h"
 #include "volt/log.h"
 #include <string.h>
+#ifdef ESP_PLATFORM
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#endif
+#ifdef PICO_BOARD
+#include "hardware/sync.h"
+#endif
 
 #define NEOPIXEL_MAX_LEDS 256
 

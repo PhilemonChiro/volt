@@ -60,6 +60,7 @@ void ssd1306_show(ssd1306_t *dev)
 }
 
 // Simple 5x7 font rendering (minimal — just ASCII 32-127)
+__attribute__((used))
 static const uint8_t font5x7[] = {
     0x00,0x00,0x00,0x00,0x00, // space
     0x00,0x00,0x5F,0x00,0x00, // !

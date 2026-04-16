@@ -106,44 +106,37 @@ function getVoltSrc() {
 
 const VOLT_SRC = getVoltSrc();
 
-function runCompiler(source) {
-    const tmp = path.join(os.tmpdir(), `_volt_${process.pid}.volt`);
-    const script = path.join(os.tmpdir(), `_volt_${process.pid}.py`);
+function runCompiler(source, projectDir) {
+    // Write source to project dir so compiler finds volt.toml for chip detection
+    const tmp = projectDir
+        ? path.join(projectDir, "_volt_tmp.volt")
+        : path.join(os.tmpdir(), `_volt_${process.pid}.volt`);
     fs.writeFileSync(tmp, source);
+    const script = path.join(os.tmpdir(), `_volt_${process.pid}.py`);
 
+    const tmpEsc = tmp.replace(/\\/g, "/");
     fs.writeFileSync(script, `
 import sys, json
 sys.path.insert(0, '${VOLT_SRC.replace(/\\/g, "/")}')
-from volt.compiler.errors import CompilerErrors
+from volt.compiler.voltc import compile_volt
 from volt.compiler.parser import parse
 from volt.compiler.resolver import resolve
 from volt.compiler.checker import check_types
-from volt.compiler.hardware import validate_hardware
-from volt.compiler.analyzer import analyze
-from volt.compiler.transformer import transform
-from volt.compiler.codegen import generate
+from volt.compiler.errors import CompilerErrors
 
-source = open('${tmp.replace(/\\/g, "/")}').read()
-errors = CompilerErrors()
-errors.set_source(source)
+source = open('${tmpEsc}').read()
+c_code, errors = compile_volt(source, '${tmpEsc}')
+
+# Re-parse to extract AST (compile_volt doesn't return program)
 program = None
-c_code = None
-
 try:
+    errs2 = CompilerErrors()
+    errs2.set_source(source)
     program = parse(source)
-    scope = resolve(program, errors)
-    if not errors.has_errors:
-        check_types(program, scope, errors)
-    if not errors.has_errors:
-        validate_hardware(program, scope, errors)
-    if not errors.has_errors:
-        analyze(program, scope, errors)
-    if not errors.has_errors:
-        program = transform(program)
-        c_code = generate(program, 'main.volt')
-except Exception as e:
-    from volt.compiler.ast_nodes import Region
-    errors.error(Region(1,1,1,1), "INTERNAL", str(e).split('\\n')[0])
+    scope = resolve(program, errs2)
+    check_types(program, scope, errs2)
+except Exception:
+    pass
 
 result = {
     'diagnostics': [{
@@ -297,6 +290,106 @@ ipcMain.handle("stop_monitor", () => {
 ipcMain.handle("is_monitoring", () => monitoring);
 
 // ============================================================
-// Build (TODO)
+// Toolchain + Build
 // ============================================================
-ipcMain.handle("run_project", () => {});
+const toolchain = require("./src/main/toolchain");
+
+ipcMain.handle("check_toolchain", (_, chip) => toolchain.isToolchainReady(chip));
+
+ipcMain.handle("setup_toolchain", async (_, chip) => {
+    const logs = [];
+    const log = (msg) => {
+        logs.push(msg);
+        if (win) win.webContents.send("toolchain:log", msg);
+    };
+    const ok = toolchain.ensureToolchain(chip, log);
+    return { ok, logs };
+});
+
+const builder = require("./src/main/builder");
+
+ipcMain.handle("build_only", (_, projectPath, voltFile, chip) => {
+    const log = (stage, msg) => {
+        if (win) win.webContents.send("build:progress", { stage, message: msg });
+    };
+    const c = chip.toLowerCase();
+    const buildDir = path.join(projectPath, "build");
+    fs.mkdirSync(buildDir, { recursive: true });
+
+    // Compile Volt → C
+    log("compile", "Compiling...");
+    const source = fs.readFileSync(voltFile, "utf-8");
+    const result = runCompiler(source, projectPath);
+    try { fs.unlinkSync(path.join(projectPath, "_volt_tmp.volt")); } catch (_) {}
+    if (!result.c_code) { log("error", "Compile failed"); return { ok: false }; }
+    fs.writeFileSync(path.join(buildDir, "main.c"), result.c_code);
+
+    // Build only — no flash
+    let ok = false;
+    if (c.includes("rp2040") || c.includes("pico")) {
+        ok = builder.buildRP2040(projectPath, log);
+    } else {
+        ok = builder.buildESP32(projectPath, c, log);
+    }
+    if (!ok) return { ok: false };
+
+    log("done", "Build successful");
+    return { ok: true };
+});
+
+ipcMain.handle("run_project", (_, projectPath, voltFile, port, chip) => {
+    const log = (stage, msg) => {
+        if (win) win.webContents.send("build:progress", { stage, message: msg });
+    };
+
+    const c = chip.toLowerCase();
+    const buildDir = path.join(projectPath, "build");
+    fs.mkdirSync(buildDir, { recursive: true });
+
+    // Ensure volt.toml matches the target device
+    const tomlPath = path.join(projectPath, "volt.toml");
+    if (fs.existsSync(tomlPath)) {
+        const toml = fs.readFileSync(tomlPath, "utf-8");
+        const m = toml.match(/chip\s*=\s*"([^"]+)"/);
+        const tomlChip = m ? m[1].toLowerCase() : "";
+        if (tomlChip !== c && c !== "unknown") {
+            log("info", `Updating volt.toml: chip "${tomlChip}" → "${c}"`);
+            fs.writeFileSync(tomlPath, toml.replace(/chip\s*=\s*"[^"]+"/, `chip = "${c}"`));
+        }
+    }
+
+    // Compile Volt → C (use project dir so compiler finds volt.toml)
+    log("compile", "Compiling...");
+    const source = fs.readFileSync(voltFile, "utf-8");
+    const result = runCompiler(source, projectPath);
+    // Clean up temp file
+    try { fs.unlinkSync(path.join(projectPath, "_volt_tmp.volt")); } catch (_) {}
+    if (!result.c_code) { log("error", "Compile failed"); return { ok: false }; }
+    fs.writeFileSync(path.join(buildDir, "main.c"), result.c_code);
+
+    // Build
+    let ok = false;
+    if (c.includes("rp2040") || c.includes("pico")) {
+        ok = builder.buildRP2040(projectPath, log);
+    } else {
+        ok = builder.buildESP32(projectPath, c, log);
+    }
+    if (!ok) return { ok: false };
+
+    // Flash
+    if (c.includes("rp2040") || c.includes("pico")) {
+        ok = builder.flashRP2040(projectPath, port, log);
+    } else {
+        ok = builder.flashESP32(projectPath, port, c, log);
+    }
+    if (!ok) return { ok: false };
+
+    // Connect
+    log("connect", "Waiting for device...");
+    const prefix = port.includes("ttyACM") ? "ttyACM" : "ttyUSB";
+    const newPort = builder.waitForPort(prefix, 10000);
+    log("connect", newPort ? "Device on " + newPort : "Device not found");
+
+    log("done", "Flash complete!");
+    return { ok: true, port: newPort || port };
+});

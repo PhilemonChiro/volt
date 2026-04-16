@@ -6,6 +6,8 @@
 #include "driver/ledc.h"
 #include "driver/dac.h"
 #include "esp_attr.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 // Track the mode of each pin so we can validate operations
 typedef enum {
