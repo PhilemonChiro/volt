@@ -393,21 +393,57 @@ function startWorker() {
     return workerStart;
 }
 
-// Locate a usable python3 binary by trying common install locations. On
-// macOS apps launched from Finder, $PATH doesn't include /usr/local/bin or
-// /opt/homebrew/bin, so "python3" alone can fail even when Python is installed.
+// Locate a usable python3 binary. Priority order:
+//
+//   1. Bundled python-build-standalone shipped inside the packaged app
+//      (sdk/python/<platform>/) — preferred so the IDE works without any
+//      system Python install. Also used in dev mode if you ran
+//      `npm run bundle:python` locally.
+//   2. Common system install locations (Homebrew x86/arm, python.org,
+//      /usr/bin, etc.). On macOS apps launched from Finder, $PATH doesn't
+//      include /usr/local/bin or /opt/homebrew/bin so we check them
+//      directly.
+//   3. Bare "python3" — let spawn's ENOENT fire if not on PATH.
 function findPython() {
-    const candidates = [
-        "python3",
-        "/usr/local/bin/python3",
-        "/opt/homebrew/bin/python3",
-        "/usr/bin/python3",
-        "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+    const platKey = `${process.platform}-${process.arch}`;
+    const bundledBin = process.platform === "win32" ? "python.exe" : "bin/python3";
+
+    // (1) Bundled Python — check packaged-resources, then the dev sdk/ dir.
+    const bundledRoots = [
+        ...(process.resourcesPath
+            ? [path.join(process.resourcesPath, "sdk", "python", platKey)]
+            : []),
+        path.join(__dirname, "sdk", "python", platKey),
     ];
-    for (const p of candidates) {
-        if (p.startsWith("/") && fs.existsSync(p)) return p;
+    for (const root of bundledRoots) {
+        const candidate = path.join(root, bundledBin);
+        if (fs.existsSync(candidate)) return candidate;
     }
-    return "python3";  // last resort — let spawn's ENOENT fire if not on PATH
+
+    // (2) System Python
+    const candidates = process.platform === "win32"
+        ? [
+            "python",
+            "python3",
+            "C:\\Python312\\python.exe",
+            "C:\\Python311\\python.exe",
+            path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python312", "python.exe"),
+        ]
+        : [
+            "python3",
+            "/usr/local/bin/python3",
+            "/opt/homebrew/bin/python3",
+            "/usr/bin/python3",
+            "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+        ];
+    for (const p of candidates) {
+        if (p.startsWith("/") || /^[A-Z]:\\/.test(p)) {
+            if (fs.existsSync(p)) return p;
+        }
+    }
+
+    // (3) Fall back to bare name — spawn will surface ENOENT if missing.
+    return process.platform === "win32" ? "python" : "python3";
 }
 
 // Turn the raw stderr of a failed worker into a one-paragraph user-facing

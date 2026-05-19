@@ -29,12 +29,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Install
         working-directory: volt-ide
         # npm install (not ci) — package-lock.json is gitignored in this repo
         run: npm install --no-audit --no-fund
       - name: Build
         working-directory: volt-ide
+        # pack:linux runs stage:sdk + build:icons + bundle:python (linux-x64) + electron-builder
         run: npm run pack:linux
       - uses: actions/upload-artifact@v4
         with:
@@ -51,14 +54,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Install
         working-directory: volt-ide
-        # npm install (not ci) — package-lock.json is gitignored in this repo
         run: npm install --no-audit --no-fund
+      - name: Bundle Python (win32-x64) + stage SDK + icons
+        working-directory: volt-ide
+        run: |
+          npm run bundle:python
+          npm run prepack
       - name: Build (native Windows — produces NSIS + portable)
         working-directory: volt-ide
         # Use full Windows targets here (NSIS) since Wine is not in the picture.
-        # We override the config's portable-only restriction by passing targets directly.
         run: npx electron-builder --win nsis portable --config.win.signAndEditExecutable=true
       - uses: actions/upload-artifact@v4
         with:
@@ -69,18 +77,36 @@ jobs:
   # ---------------------------------------------------------------
   macos:
     if: ${{ github.event_name == 'push' || inputs.platforms == 'all' || inputs.platforms == 'macos' }}
+    # macos-latest is Apple Silicon (arm64). The arm64 bundle gets lark
+    # installed natively. We also bundle a darwin-x64 Python so the x64 .dmg
+    # exists, but lark isn't installed into it from this runner (cross-arch
+    # pip install of a pure-Python wheel works fine though — see step below).
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Install
         working-directory: volt-ide
-        # npm install (not ci) — package-lock.json is gitignored in this repo
         run: npm install --no-audit --no-fund
-      - name: Build (arm64 + x64 universal-style DMGs)
+      - name: Bundle Python (both arm64 + x64)
         working-directory: volt-ide
-        run: npm run pack:mac
+        run: |
+          npm run bundle:python -- --platform=darwin-arm64
+          npm run bundle:python -- --platform=darwin-x64
+          # lark is pure-Python — works across archs. Force install into x64 bundle
+          # using the arm64 bundle's pip (running under Rosetta would also work).
+          ./sdk/python/darwin-arm64/bin/python3 -m pip install \
+            --target sdk/python/darwin-x64/lib/python3.12/site-packages \
+            --no-warn-script-location --no-cache-dir --upgrade lark
+      - name: Stage SDK + icons
+        working-directory: volt-ide
+        run: npm run prepack
+      - name: Build (arm64 + x64 DMGs)
+        working-directory: volt-ide
+        run: npx electron-builder --mac
       - uses: actions/upload-artifact@v4
         with:
           name: macos

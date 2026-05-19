@@ -13,13 +13,14 @@
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --dev --no-sandbox",
-    "stage:sdk":    "node scripts/stage-sdk.js",
-    "build:icons":  "node scripts/build-icons.js",
-    "prepack":      "npm run stage:sdk && npm run build:icons",
-    "pack:linux":   "npm run prepack && electron-builder --linux",
-    "pack:win":     "npm run prepack && electron-builder --win",
-    "pack:mac":     "npm run prepack && electron-builder --mac",
-    "pack:all":     "npm run prepack && electron-builder --linux --win"
+    "stage:sdk":      "node scripts/stage-sdk.js",
+    "build:icons":    "node scripts/build-icons.js",
+    "bundle:python":  "node scripts/bundle-python.js",
+    "prepack":        "npm run stage:sdk && npm run build:icons",
+    "pack:linux":     "npm run prepack && npm run bundle:python && electron-builder --linux",
+    "pack:win":       "npm run prepack && npm run bundle:python && electron-builder --win",
+    "pack:mac":       "npm run prepack && npm run bundle:python && electron-builder --mac",
+    "pack:all":       "npm run prepack && npm run bundle:python && electron-builder --linux --win"
   },
   "dependencies": {
     "@serialport/parser-readline": "^13.0.0",
