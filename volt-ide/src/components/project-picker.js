@@ -88,7 +88,10 @@ export async function show(onOpen) {
         };
     }
 
-    function close() { overlay.remove(); }
+    function close() {
+        overlay.classList.add("is-closing");
+        setTimeout(() => overlay.remove(), 180);
+    }
 
     function highlight(text, query) {
         if (!query) return text;
