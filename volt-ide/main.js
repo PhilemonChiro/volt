@@ -318,15 +318,28 @@ function startWorker() {
 
     workerStart = new Promise((resolve, reject) => {
         const script = path.join(__dirname, "scripts", "worker.py");
-        worker = spawn("python3", [script, VOLT_SRC], {
-            stdio: ["pipe", "pipe", "pipe"],
-        });
+        // On macOS the IDE may be launched from Finder without a shell PATH,
+        // so /usr/local/bin (Homebrew) and similar aren't visible. Search a
+        // few common Python locations directly, falling back to "python3".
+        const pythonBin = findPython();
+
+        let started = false;
+        let stderrBuf = "";
+
+        try {
+            worker = spawn(pythonBin, [script, VOLT_SRC], {
+                stdio: ["pipe", "pipe", "pipe"],
+            });
+        } catch (e) {
+            reject(new Error(`Failed to spawn ${pythonBin}: ${e.message}`));
+            return;
+        }
 
         const rl = readline.createInterface({ input: worker.stdout });
         rl.on("line", (line) => {
             let msg;
             try { msg = JSON.parse(line); } catch { return; }
-            if (msg.id === "_ready") { resolve(); return; }
+            if (msg.id === "_ready") { started = true; resolve(); return; }
             const p = pending.get(msg.id);
             if (!p) return;
             // Intermediate progress event — relay to caller, keep waiting.
@@ -341,15 +354,27 @@ function startWorker() {
         });
 
         worker.stderr.on("data", (chunk) => {
-            const s = chunk.toString().trim();
-            if (s) console.warn("[worker]", s);
+            const s = chunk.toString();
+            stderrBuf += s;
+            // Cap so we don't grow forever during a long session
+            if (stderrBuf.length > 4000) stderrBuf = stderrBuf.slice(-4000);
+            const trimmed = s.trim();
+            if (trimmed) console.warn("[worker]", trimmed);
         });
 
-        worker.on("exit", (code) => {
-            console.warn(`[worker] exited code=${code}; will respawn on next request`);
+        worker.on("exit", (code, signal) => {
+            // If the worker died BEFORE signalling _ready, reject the start
+            // promise with the captured stderr so the user sees the real
+            // cause (Python missing, lark missing, import error, etc.).
+            if (!started) {
+                const reason = stderrBuf.trim().slice(0, 600) || `exit code ${code}, signal ${signal}`;
+                const hint = diagnoseWorkerFailure(pythonBin, reason);
+                reject(new Error(hint));
+            }
+            console.warn(`[worker] exited code=${code} signal=${signal}; will respawn on next request`);
             for (const [, p] of pending) {
                 clearTimeout(p.timer);
-                p.reject(new Error("worker died"));
+                p.reject(new Error("worker died: " + (stderrBuf.trim().slice(-300) || "unknown")));
             }
             pending.clear();
             worker = null;
@@ -358,11 +383,48 @@ function startWorker() {
 
         worker.on("error", (err) => {
             console.error("[worker] spawn error:", err);
-            reject(err);
+            const hint = err.code === "ENOENT"
+                ? `Python 3 not found. Install from python.org or 'brew install python@3.12', then 'pip3 install lark'.`
+                : err.message;
+            reject(new Error(hint));
         });
     });
 
     return workerStart;
+}
+
+// Locate a usable python3 binary by trying common install locations. On
+// macOS apps launched from Finder, $PATH doesn't include /usr/local/bin or
+// /opt/homebrew/bin, so "python3" alone can fail even when Python is installed.
+function findPython() {
+    const candidates = [
+        "python3",
+        "/usr/local/bin/python3",
+        "/opt/homebrew/bin/python3",
+        "/usr/bin/python3",
+        "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+    ];
+    for (const p of candidates) {
+        if (p.startsWith("/") && fs.existsSync(p)) return p;
+    }
+    return "python3";  // last resort — let spawn's ENOENT fire if not on PATH
+}
+
+// Turn the raw stderr of a failed worker into a one-paragraph user-facing
+// hint that points at the actual fix.
+function diagnoseWorkerFailure(pythonBin, stderr) {
+    if (!stderr) return `Python worker exited before sending ready signal (using ${pythonBin}).`;
+    if (/No module named ['"]?lark/.test(stderr)) {
+        return `Python is installed but the 'lark' library is missing. Run:\n    pip3 install lark\nthen restart Volt IDE.`;
+    }
+    if (/No module named ['"]?volt/.test(stderr)) {
+        return `Volt SDK not bundled correctly — the IDE can't find its compiler.\nstderr: ${stderr}`;
+    }
+    if (/ModuleNotFoundError/.test(stderr)) {
+        const mod = (stderr.match(/No module named ['"]?(\w+)/) || [])[1] || "?";
+        return `Missing Python module: ${mod}. Run:\n    pip3 install ${mod}\nthen restart Volt IDE.`;
+    }
+    return `Python worker failed to start:\n${stderr}`;
 }
 
 function workerCall(op, payload, timeoutMs = 10000, onProgress = null) {
@@ -395,11 +457,13 @@ const EMPTY_COMPILE_RESULT = {
 };
 
 function compileErrorResult(message) {
+    // Preserve the full message (including multi-line install instructions
+    // from diagnoseWorkerFailure) rather than truncating it to 200 chars.
     return {
         ...EMPTY_COMPILE_RESULT,
         diagnostics: [{
             line: 1, col: 1,
-            message: "Compiler error: " + (message || "").substring(0, 200),
+            message: "Compiler error: " + (message || "").slice(0, 1000),
             severity: "error", hint: "",
         }],
     };
