@@ -16,8 +16,14 @@ export function register() {
         return Kind.Text;
     }
 
-    // Scan document for pin and sensor declarations
+    // Scan document for pin and sensor declarations.
+    // Cached by model.getVersionId() so hover/completion/definition don't
+    // each re-scan the whole document on every keystroke-triggered popup.
+    var declCache = null;
+    var declCacheVersion = -1;
     function scanDeclarations(model) {
+        var version = model.getVersionId();
+        if (declCache && declCacheVersion === version) return declCache;
         var pins = {};
         var sensors = {};
         var lines = model.getLineCount();
@@ -28,7 +34,9 @@ export function register() {
             var sm = line.match(/\bdevice\s+(\w+)\s*:\s*(BME280|AHT20|SHT31|DHT22|MPU6050|INA219|DS3231|BH1750|VEML7700|SSD1306)/);
             if (sm) sensors[sm[1]] = sm[2];
         }
-        return { pins: pins, sensors: sensors };
+        declCache = { pins: pins, sensors: sensors };
+        declCacheVersion = version;
+        return declCache;
     }
 
     function detectChip(model) {

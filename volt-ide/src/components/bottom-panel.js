@@ -149,30 +149,28 @@ export function updatePipelineStage(stage, message, percent) {
 
     el.style.display = "flex";
 
-    // Compute local % within the current stage
-    const ranges = { compile: [0, 25], build: [25, 60], flash: [60, 95], connect: [95, 100] };
-    const range = ranges[stage];
-    let localPct = 0;
-    if (range && percent !== undefined) {
-        localPct = Math.min(100, Math.max(0, Math.round(((percent - range[0]) / (range[1] - range[0])) * 100)));
-    }
-
     if (stage === "done") {
         if (label) label.textContent = "Done";
         if (fill) { fill.style.width = "100%"; fill.className = "status-progress-fill done"; }
         if (pct) pct.textContent = "✓";
-    } else if (stage === "error") {
+        return;
+    }
+    if (stage === "error") {
         if (label) label.textContent = message.substring(0, 40);
         if (fill) { fill.className = "status-progress-fill error"; }
         if (pct) pct.textContent = "";
-    } else {
-        const stageLabel = STAGE_LABELS[stage] || stage;
-        // Show message if it has detail like "Building (45/72)"
-        const shortMsg = message.length > 30 ? stageLabel + "..." : message;
-        if (label) label.textContent = shortMsg;
-        if (fill) { fill.style.width = localPct + "%"; fill.className = "status-progress-fill"; }
-        if (pct) pct.textContent = localPct > 0 ? localPct + "%" : "";
+        return;
     }
+
+    // percent is the GLOBAL build progress (0-100) — main.js already mapped
+    // each sub-stage (compile 0-25, build 30-60, flash 65-95, connect 95-100).
+    // Don't re-map; show it as the bar width directly.
+    const p = Math.min(100, Math.max(0, Math.round(percent || 0)));
+    const stageLabel = STAGE_LABELS[stage] || stage;
+    const shortMsg = message.length > 30 ? stageLabel + "..." : message;
+    if (label) label.textContent = shortMsg;
+    if (fill) { fill.style.width = p + "%"; fill.className = "status-progress-fill"; }
+    if (pct) pct.textContent = p > 0 ? p + "%" : "";
 }
 
 export function updateProgress(stage, message, percent) {

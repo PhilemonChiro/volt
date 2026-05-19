@@ -429,6 +429,17 @@ document.addEventListener("keydown", (e) => {
 bottomPanel.init(document.getElementById("bottomPanel"));
 sidePanel.init();
 
+// Drive the build progress bar from the real events main.js emits during
+// compile / cmake configure / ninja / esptool. Per-file build steps and
+// flash percentages are now the source of truth instead of hardcoded
+// stage markers from the renderer.
+window.volt.onBuild("progress", ({ stage, message, percent }) => {
+    bottomPanel.updatePipelineStage(stage, message, percent);
+    if (stage === "build" || stage === "flash" || stage === "compile") {
+        statusBar.setBuild(message);
+    }
+});
+
 // Update status bar + problems panel + side panel when diagnostics complete
 diagnostics.onResult((diags, result) => {
     bottomPanel.setProblems(diags);

@@ -1,6 +1,5 @@
 // Editor component — Monaco with Volt syntax highlighting
 
-import * as astStore from "../services/ast-store.js";
 import * as langFeatures from "./language-features.js";
 
 let editor = null;
@@ -174,11 +173,11 @@ export function init(container, { onContentChange, onCursorChange }) {
         },
     });
 
-    // Content change → diagnostics + AST update
+    // Content change → diagnostics path (which also updates the side panels via
+    // diagnostics.onResult → sidePanel.update). One getValue per change.
     editor.onDidChangeModelContent(() => {
         unsavedChanges = true;
         if (onContentChange) onContentChange(editor.getValue());
-        astStore.scheduleCompile(editor.getValue());
     });
 
     // Cursor position

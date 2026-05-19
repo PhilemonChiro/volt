@@ -191,12 +191,12 @@ ipcMain.handle("browse_folder", async () => {
 });
 
 // ============================================================
-// Compiler — calls Python subprocess
+// Compiler — long-lived Python worker process (JSON-line IPC over stdin/stdout)
 // ============================================================
-const { execSync } = require("child_process");
+const { execSync, spawn } = require("child_process");
+const readline = require("readline");
 
 function getVoltSrc() {
-    // Dev: relative to this project
     const dev = path.join(__dirname, "..", "src");
     if (fs.existsSync(path.join(dev, "volt", "compiler", "voltc.py"))) return dev;
     return path.join(os.homedir(), ".volt", "sdk", "src");
@@ -204,121 +204,144 @@ function getVoltSrc() {
 
 const VOLT_SRC = getVoltSrc();
 
-function runCompiler(source, projectDir, realFilename) {
-    // Write source to project dir so compiler finds volt.toml for chip detection
-    const tmp = projectDir
-        ? path.join(projectDir, "_volt_tmp.volt")
-        : path.join(os.tmpdir(), `_volt_${process.pid}.volt`);
-    fs.writeFileSync(tmp, source);
-    const script = path.join(os.tmpdir(), `_volt_${process.pid}.py`);
+let worker = null;
+let workerStart = null;
+const pending = new Map();   // id → { resolve, reject, timer, onProgress? }
+let reqCounter = 0;
 
-    const tmpEsc = tmp.replace(/\\/g, "/");
-    // Use real filename for #line directives if provided, else use temp path
-    const filenameForCompiler = (realFilename || tmp).replace(/\\/g, "/");
-    fs.writeFileSync(script, `
-import sys, json
-sys.path.insert(0, '${VOLT_SRC.replace(/\\/g, "/")}')
-from volt.compiler.voltc import compile_volt
-from volt.compiler.parser import parse
-from volt.compiler.resolver import resolve
-from volt.compiler.checker import check_types
-from volt.compiler.errors import CompilerErrors
+function startWorker() {
+    if (workerStart) return workerStart;
 
-source = open('${tmpEsc}').read()
-c_code, errors = compile_volt(source, '${filenameForCompiler}')
+    workerStart = new Promise((resolve, reject) => {
+        const script = path.join(__dirname, "scripts", "worker.py");
+        worker = spawn("python3", [script, VOLT_SRC], {
+            stdio: ["pipe", "pipe", "pipe"],
+        });
 
-# Re-parse to extract AST (compile_volt doesn't return program)
-program = None
-try:
-    errs2 = CompilerErrors()
-    errs2.set_source(source)
-    program = parse(source)
-    scope = resolve(program, errs2)
-    check_types(program, scope, errs2)
-except Exception:
-    pass
+        const rl = readline.createInterface({ input: worker.stdout });
+        rl.on("line", (line) => {
+            let msg;
+            try { msg = JSON.parse(line); } catch { return; }
+            if (msg.id === "_ready") { resolve(); return; }
+            const p = pending.get(msg.id);
+            if (!p) return;
+            // Intermediate progress event — relay to caller, keep waiting.
+            if (msg.progress) {
+                if (p.onProgress) p.onProgress(msg.progress);
+                return;
+            }
+            pending.delete(msg.id);
+            clearTimeout(p.timer);
+            if (msg.ok) p.resolve(msg.result);
+            else p.reject(new Error(msg.error || "worker error"));
+        });
 
-result = {
-    'diagnostics': [{
-        'line': e.region.start_line if e.region else 1,
-        'col': e.region.start_col if e.region else 1,
-        'message': e.message,
-        'severity': e.severity,
-        'hint': e.hint or ''
-    } for e in errors.errors],
-    'c_code': c_code or '',
-    'pins': [],
-    'devices': [],
-    'buses': [],
-    'tasks': [],
-    'machines': [],
-    'channels': [],
-    'enums': [],
-    'chip': '',
+        worker.stderr.on("data", (chunk) => {
+            const s = chunk.toString().trim();
+            if (s) console.warn("[worker]", s);
+        });
+
+        worker.on("exit", (code) => {
+            console.warn(`[worker] exited code=${code}; will respawn on next request`);
+            for (const [, p] of pending) {
+                clearTimeout(p.timer);
+                p.reject(new Error("worker died"));
+            }
+            pending.clear();
+            worker = null;
+            workerStart = null;
+        });
+
+        worker.on("error", (err) => {
+            console.error("[worker] spawn error:", err);
+            reject(err);
+        });
+    });
+
+    return workerStart;
 }
 
-if program:
-    if program.chip:
-        result['chip'] = program.chip.target
-    if program.hardware:
-        result['pins'] = [{'name': p.name, 'mode': p.mode, 'gpio': p.gpio} for p in program.hardware.pins]
-        result['devices'] = [{'name': s.name, 'type': s.sensor_type, 'bus': s.bus_name, 'address': s.address} for s in program.hardware.sensors]
-        result['buses'] = [{'name': b.name, 'type': b.bus_type} for b in program.hardware.buses]
-    result['tasks'] = [{'name': t.name, 'tier': getattr(t, 'tier', 'background'), 'line': t.region.start_line} for t in program.tasks]
-    result['machines'] = [{'name': m.name, 'states': [s.name for s in m.states], 'line': m.region.start_line} for m in program.machines]
-    result['channels'] = [{'name': c.name, 'elem_type': c.elem_type, 'capacity': c.capacity} for c in program.channels]
-    result['enums'] = [{'name': e.name, 'variants': e.variants} for e in program.enums]
-
-print(json.dumps(result))
-`);
-
-    try {
-        const out = execSync(`python3 "${script}"`, { timeout: 10000, maxBuffer: 2 * 1024 * 1024 });
-        return JSON.parse(out.toString().trim());
-    } catch (e) {
-        return { diagnostics: [{ line: 1, col: 1, message: "Compiler error: " + (e.message || "").substring(0, 200), severity: "error", hint: "" }],
-            c_code: "", pins: [], devices: [], buses: [], tasks: [], machines: [], channels: [], enums: [], chip: "" };
+function workerCall(op, payload, timeoutMs = 10000, onProgress = null) {
+    if (!worker || !workerStart) {
+        return startWorker().then(() => workerCall(op, payload, timeoutMs, onProgress));
     }
+    return workerStart.then(() => new Promise((resolve, reject) => {
+        const id = String(++reqCounter);
+        const timer = setTimeout(() => {
+            pending.delete(id);
+            reject(new Error("worker timeout"));
+        }, timeoutMs);
+        pending.set(id, { resolve, reject, timer, onProgress });
+        // Ask the worker to stream phase progress if we have a listener
+        const req = onProgress ? { id, op, emit_progress: true, ...payload }
+                               : { id, op, ...payload };
+        try {
+            worker.stdin.write(JSON.stringify(req) + "\n");
+        } catch (e) {
+            pending.delete(id);
+            clearTimeout(timer);
+            reject(e);
+        }
+    }));
 }
 
-ipcMain.handle("compile_full", (_, source) => runCompiler(source));
+const EMPTY_COMPILE_RESULT = {
+    diagnostics: [], c_code: "", pins: [], devices: [], buses: [],
+    tasks: [], machines: [], channels: [], enums: [], chip: "",
+};
 
-ipcMain.handle("check_code", (_, source) => {
-    const result = runCompiler(source);
-    return result.diagnostics;
+function compileErrorResult(message) {
+    return {
+        ...EMPTY_COMPILE_RESULT,
+        diagnostics: [{
+            line: 1, col: 1,
+            message: "Compiler error: " + (message || "").substring(0, 200),
+            severity: "error", hint: "",
+        }],
+    };
+}
+
+// Eagerly start the worker — first compile then doesn't pay the import cost
+app.whenReady().then(() => {
+    startWorker().catch((e) => console.error("[worker] startup failed:", e));
 });
 
-ipcMain.handle("format_code", (_, source) => {
-    const script = path.join(os.tmpdir(), `_volt_fmt_${process.pid}.py`);
-    fs.writeFileSync(script, `
-import sys, json
-sys.path.insert(0, '${VOLT_SRC.replace(/\\/g, "/")}')
-from volt.compiler.formatter import format_source
+app.on("before-quit", () => {
+    if (worker) try { worker.kill(); } catch (_) {}
+});
 
-source = sys.stdin.read()
-print(format_source(source))
-`);
+ipcMain.handle("compile_full", async (_, source) => {
     try {
-        const out = execSync(`python3 "${script}"`, {
-            input: source,
-            timeout: 5000,
-            maxBuffer: 1024 * 1024,
-        });
-        return out.toString();
+        return await workerCall("compile_full", { source, filename: "main.volt" });
     } catch (e) {
+        return compileErrorResult(e.message);
+    }
+});
+
+ipcMain.handle("check_code", async (_, source) => {
+    try {
+        const result = await workerCall("compile_full", { source, filename: "main.volt" });
+        return result.diagnostics;
+    } catch (e) {
+        return [{
+            line: 1, col: 1,
+            message: "Compiler error: " + (e.message || "").substring(0, 200),
+            severity: "error", hint: "",
+        }];
+    }
+});
+
+ipcMain.handle("format_code", async (_, source) => {
+    try {
+        return await workerCall("format_code", { source }, 5000);
+    } catch (_) {
         return null;  // format failed — IDE keeps original
     }
 });
 
-ipcMain.handle("find_symbols", (_, source) => {
-    const script = path.join(__dirname, "scripts", "find-symbols.py");
+ipcMain.handle("find_symbols", async (_, source) => {
     try {
-        const out = execSync(`python3 "${script}" "${VOLT_SRC.replace(/"/g, '\\"')}"`, {
-            input: source,
-            timeout: 5000,
-            maxBuffer: 2 * 1024 * 1024,
-        });
-        return JSON.parse(out.toString().trim() || "[]");
+        return await workerCall("find_symbols", { source }, 5000);
     } catch (_) {
         return [];
     }
@@ -447,19 +470,54 @@ function buildEmit(stage, message, pct) {
     if (win) win.webContents.send("build:progress", { stage, message, percent: pct || 0 });
 }
 
-// Shared compile step
-function compileStep(projectPath, voltFile) {
+// Shared compile step (async — goes through the warm worker)
+// The compile stage owns 0-25% of the total build progress, so we map
+// the worker's per-phase 5-100% range into that slice via mapPct().
+const COMPILE_PCT_END = 25;
+const PHASE_LABELS = {
+    include:   "Resolving includes",
+    parse:     "Parsing",
+    resolve:   "Resolving names",
+    check:     "Type checking",
+    hardware:  "Validating hardware",
+    analyze:   "Analyzing tasks",
+    transform: "Transforming",
+    codegen:   "Generating C",
+};
+
+async function compileStep(projectPath, voltFile) {
     const buildDir = path.join(projectPath, "build");
     fs.mkdirSync(buildDir, { recursive: true });
 
-    buildEmit("compile", "Compiling...", 10);
+    buildEmit("compile", "Compiling...", 1);
     const source = fs.readFileSync(voltFile, "utf-8");
-    // Pass real voltFile path so #line directives point to the user's source, not the temp
-    const result = runCompiler(source, projectPath, voltFile);
-    try { fs.unlinkSync(path.join(projectPath, "_volt_tmp.volt")); } catch (_) {}
+
+    const onProgress = ({ phase, pct }) => {
+        const label = PHASE_LABELS[phase] || phase;
+        const mapped = Math.round((pct / 100) * COMPILE_PCT_END);
+        buildEmit("compile", label, mapped);
+    };
+
+    // Pass the real voltFile path so #line directives reference the user's
+    // source and compile_volt's volt.toml lookup picks up the project's chip.
+    let result;
+    try {
+        result = await workerCall(
+            "compile_full",
+            { source, filename: voltFile },
+            15000,
+            onProgress,
+        );
+    } catch (e) {
+        buildEmit("error", "Compile failed: " + (e.message || "worker error"));
+        return null;
+    }
 
     if (!result.c_code) {
-        const errMsg = (result.diagnostics || []).filter(d => d.severity === "error").map(d => d.message).join("; ");
+        const errMsg = (result.diagnostics || [])
+            .filter(d => d.severity === "error")
+            .map(d => d.message)
+            .join("; ");
         buildEmit("error", "Compile failed: " + (errMsg || "unknown error"));
         return null;
     }
@@ -470,7 +528,7 @@ function compileStep(projectPath, voltFile) {
 }
 
 ipcMain.handle("build_only", async (_, projectPath, voltFile, chip) => {
-    const result = compileStep(projectPath, voltFile);
+    const result = await compileStep(projectPath, voltFile);
     if (!result) return { ok: false };
 
     const c = chip.toLowerCase();
@@ -487,7 +545,7 @@ ipcMain.handle("build_only", async (_, projectPath, voltFile, chip) => {
 });
 
 ipcMain.handle("run_project", async (_, projectPath, voltFile, port, chip) => {
-    const result = compileStep(projectPath, voltFile);
+    const result = await compileStep(projectPath, voltFile);
     if (!result) return { ok: false };
 
     const c = chip.toLowerCase();
