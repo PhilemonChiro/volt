@@ -51,6 +51,10 @@ contextBridge.exposeInMainWorld("volt", {
     onSettingsChanged: (callback) =>
         ipcRenderer.on("settings:changed", (_, data) => callback(data)),
 
+    // Device library
+    devicesList:   () => ipcRenderer.invoke("devices_list"),
+    deviceSource:  (chip, sourceFile) => ipcRenderer.invoke("device_source", chip, sourceFile),
+
     // Events from main process
     onSerial: (callback) => ipcRenderer.on("serial:data", (_, data) => callback(data)),
     onSerialDisconnected: (callback) => ipcRenderer.on("serial:disconnected", (_, port) => callback(port)),

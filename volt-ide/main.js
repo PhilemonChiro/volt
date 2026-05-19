@@ -45,8 +45,9 @@ function saveRecent(projectPath) {
         chip,
         opened: Date.now(),
     });
-    // Keep max 20
-    const trimmed = filtered.slice(0, 20);
+    // Cap by the user's "recent projects to remember" setting
+    const max = Math.max(1, Number(settings.get("projects.recentMax")) || 20);
+    const trimmed = filtered.slice(0, max);
     fs.mkdirSync(path.dirname(RECENTS_FILE), { recursive: true });
     fs.writeFileSync(RECENTS_FILE, JSON.stringify(trimmed, null, 2));
 }
@@ -230,6 +231,52 @@ ipcMain.handle("settings_open_file", () => {
     if (!fs.existsSync(file)) settings.save();
     shell.openPath(file);
     return file;
+});
+
+// ============================================================
+// Device library — reads the JSON catalog in <repo>/devices/*/*.json
+// ============================================================
+function devicesDir() {
+    const dev = path.join(__dirname, "..", "devices");
+    if (fs.existsSync(dev)) return dev;
+    return path.join(os.homedir(), ".volt", "sdk", "devices");
+}
+
+ipcMain.handle("devices_list", () => {
+    const root = devicesDir();
+    if (!fs.existsSync(root)) return [];
+    const out = [];
+    for (const entry of fs.readdirSync(root)) {
+        const dir = path.join(root, entry);
+        if (!fs.statSync(dir).isDirectory()) continue;
+        for (const f of fs.readdirSync(dir)) {
+            if (!f.endsWith(".json")) continue;
+            try {
+                const data = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8"));
+                out.push(data);
+            } catch (_) {}
+        }
+    }
+    return out;
+});
+
+// Read a device driver's C source (read-only viewer). chip is the target
+// platform ("esp32" / "rp2040" / etc.), sourceFile is the c_source field
+// from the device JSON (e.g. "sensor_bme280.c").
+ipcMain.handle("device_source", (_, chip, sourceFile) => {
+    if (!sourceFile || !/^[a-zA-Z0-9_.-]+\.c$/.test(sourceFile)) {
+        throw new Error("Invalid device source filename");
+    }
+    const c = (chip || "esp32").toLowerCase();
+    const platform = c.includes("rp2040") || c.includes("pico") ? "rp2040" : "esp32";
+    const dev = path.join(__dirname, "..", "framework", platform, "src", sourceFile);
+    const installed = path.join(os.homedir(), ".volt", "sdk", "framework", platform, "src", sourceFile);
+    for (const candidate of [dev, installed]) {
+        if (fs.existsSync(candidate)) {
+            return { path: candidate, content: fs.readFileSync(candidate, "utf-8") };
+        }
+    }
+    throw new Error(`Source not found: ${sourceFile} (looked in framework/${platform}/src)`);
 });
 
 function getVoltSrc() {
@@ -595,6 +642,12 @@ ipcMain.handle("run_project", async (_, projectPath, voltFile, port, chip) => {
         ok = await builder.buildESP32(projectPath, c, buildEmit);
     }
     if (!ok) return { ok: false };
+
+    // Honor "auto-flash" setting — if off, stop after build (no flash, no monitor)
+    if (settings.get("build.autoFlash") === false) {
+        buildEmit("done", "Build successful — auto-flash disabled", 100);
+        return { ok: true, port: null };
+    }
 
     // Release serial port before flashing — esptool needs exclusive access
     const wasMonitoring = monitoring;

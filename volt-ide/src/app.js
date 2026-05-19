@@ -192,6 +192,25 @@ function showChipPicker(projectPath) {
 async function onSave() {
     if (!currentFile) return;
     try {
+        // Format on save (Settings → Editor → "Format on save")
+        if (settings.get("editor.formatOnSave") === true) {
+            try {
+                const original = editor.getValue();
+                const formatted = await window.volt.formatCode(original);
+                if (formatted && formatted !== original) {
+                    const editors = monaco.editor.getEditors();
+                    if (editors.length > 0) {
+                        editors[0].executeEdits("format-on-save", [{
+                            range: editors[0].getModel().getFullModelRange(),
+                            text: formatted,
+                            forceMoveMarkers: true,
+                        }]);
+                    }
+                }
+            } catch (e) {
+                console.warn("[volt] format-on-save failed:", e);
+            }
+        }
         await saveFile(currentFile, editor.getValue());
         editor.markSaved();
         toolbar.setSaveUnsaved(false);
@@ -443,6 +462,7 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "1") { e.preventDefault(); sidePanel.toggle("hardware"); }
     if (e.ctrlKey && e.key === "2") { e.preventDefault(); sidePanel.toggle("tasks"); }
     if (e.ctrlKey && e.key === "3") { e.preventDefault(); sidePanel.toggle("outline"); }
+    if (e.ctrlKey && e.key === "4") { e.preventDefault(); sidePanel.toggle("library"); }
 });
 
 // Init panels

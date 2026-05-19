@@ -2228,3 +2228,309 @@ kbd {
     background: rgba(207,67,67,0.18);
     border-color: rgba(207,67,67,0.45);
 }
+
+/* ---- Device Library Panel ---- */
+.lib-search-wrap {
+    padding: var(--s-2) var(--s-2) var(--s-3);
+    position: sticky;
+    top: 0;
+    background: var(--bg-1);
+    z-index: 2;
+}
+.lib-search {
+    width: 100%;
+    height: 28px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    color: var(--t1);
+    font-size: var(--fs-12);
+    padding: 0 var(--s-3);
+    letter-spacing: var(--tracking-snug);
+    transition: border-color var(--dur-fast) var(--ease-out),
+                box-shadow var(--dur-fast) var(--ease-out);
+}
+.lib-search:focus {
+    outline: none;
+    border-color: var(--volt);
+    box-shadow: 0 0 0 3px rgba(43,124,179,0.18);
+}
+
+.lib-list { padding: 0 var(--s-1); }
+
+.lib-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s-2);
+    width: 100%;
+    text-align: left;
+    padding: var(--s-2);
+    margin-bottom: 1px;
+    border-radius: var(--r-2);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-out),
+                border-color var(--dur-fast) var(--ease-out),
+                padding var(--dur-base) var(--ease-out);
+}
+.lib-item:hover {
+    background: var(--bg-2);
+    border-color: var(--border);
+    padding-left: var(--s-3);
+}
+.lib-item-iface {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: 18px;
+    min-width: 28px;
+    padding: 0 var(--s-1);
+    font-family: var(--mono);
+    font-size: var(--fs-10);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    border-radius: var(--r-1);
+    margin-top: 1px;
+}
+.lib-iface-i2c  { background: rgba(43,124,179,0.18);  color: hsl(210,70%,75%); }
+.lib-iface-spi  { background: rgba(170,90,200,0.18); color: hsl(280,55%,76%); }
+.lib-iface-gpio { background: rgba(48,196,121,0.16); color: hsl(140,60%,72%); }
+.lib-iface-uart { background: rgba(255,184,28,0.16); color: hsl(38,75%,68%); }
+.lib-item-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+.lib-item-name {
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--t1);
+    font-size: var(--fs-12);
+    letter-spacing: var(--tracking-snug);
+    line-height: 1.3;
+}
+.lib-item-desc {
+    color: var(--t3);
+    font-size: var(--fs-10);
+    line-height: 1.4;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Context Menu (OS-style popup) ---- */
+.context-menu {
+    position: fixed;
+    z-index: 2000;
+    min-width: 220px;
+    background: var(--bg-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-3);
+    box-shadow: var(--elev-pop);
+    padding: var(--s-1);
+    animation: context-menu-in var(--dur-fast) var(--ease-out);
+    user-select: none;
+}
+@keyframes context-menu-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    width: 100%;
+    padding: var(--s-2) var(--s-3);
+    border-radius: var(--r-2);
+    background: transparent;
+    border: none;
+    color: var(--t1);
+    font-size: var(--fs-12);
+    font-weight: 500;
+    letter-spacing: var(--tracking-snug);
+    text-align: left;
+    cursor: pointer;
+}
+.context-menu-item.is-focus,
+.context-menu-item:hover { background: var(--volt-dim); color: var(--t1); }
+.context-menu-label { flex: 1; }
+.context-menu-hint {
+    font-family: var(--mono);
+    font-size: var(--fs-10);
+    color: var(--t3);
+    opacity: 0.7;
+}
+.context-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: var(--s-1) var(--s-2);
+}
+
+/* ---- Device Detail Dialog (read-only) ---- */
+.device-detail-dialog {
+    background: var(--bg-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-4);
+    width: 560px;
+    max-width: 92vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--elev-pop);
+    overflow: hidden;
+}
+.device-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--s-4) var(--s-5);
+    border-bottom: 1px solid var(--border);
+}
+.device-detail-title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-3);
+    min-width: 0;
+}
+.device-detail-name {
+    font-size: var(--fs-16);
+    font-weight: 600;
+    color: var(--t1);
+    letter-spacing: var(--tracking-tight);
+    font-family: var(--mono);
+}
+.device-detail-badges {
+    display: inline-flex;
+    gap: var(--s-2);
+}
+.device-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 var(--s-2);
+    border-radius: var(--r-pill);
+    font-size: var(--fs-10);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.device-badge-cat {
+    background: var(--volt-dim);
+    color: var(--volt-hover);
+    border: 1px solid rgba(43,124,179,0.22);
+}
+.device-badge-iface {
+    background: var(--bg-3);
+    color: var(--t2);
+    font-family: var(--mono);
+    border: 1px solid var(--border);
+}
+.device-detail-close {
+    background: transparent;
+    color: var(--t3);
+    font-size: var(--fs-20);
+    line-height: 1;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--r-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.device-detail-close:hover { color: var(--t1); background: var(--bg-3); }
+
+.device-detail-body {
+    padding: var(--s-4) var(--s-5);
+    overflow-y: auto;
+}
+.device-detail-desc {
+    color: var(--t2);
+    font-size: var(--fs-13);
+    line-height: var(--lh-base);
+    margin-bottom: var(--s-4);
+    letter-spacing: var(--tracking-snug);
+}
+.device-detail-section-title {
+    font-size: var(--fs-10);
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    margin: var(--s-3) 0 var(--s-2);
+}
+
+.device-methods {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-12);
+}
+.device-methods td {
+    padding: var(--s-2) var(--s-3);
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+.device-methods tr:last-child td { border-bottom: none; }
+.dm-name {
+    font-family: var(--mono);
+    color: var(--t1);
+    font-weight: 500;
+    white-space: nowrap;
+}
+.dm-returns {
+    color: var(--volt-hover);
+    font-family: var(--mono);
+    font-size: var(--fs-11);
+    white-space: nowrap;
+}
+.dm-desc {
+    color: var(--t2);
+    font-size: var(--fs-11);
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-snug);
+}
+.device-methods-empty {
+    color: var(--t3);
+    font-size: var(--fs-12);
+    padding: var(--s-3);
+    font-style: italic;
+}
+
+.device-detail-snippet {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    padding: var(--s-3);
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: var(--fs-12);
+    line-height: var(--lh-snug);
+    color: var(--t1);
+    margin: 0;
+}
+.device-detail-snippet code { font-family: inherit; }
+
+/* ---- C Source Viewer ---- */
+.c-source-dialog {
+    background: var(--bg-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-4);
+    width: 880px;
+    max-width: 92vw;
+    height: 560px;
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--elev-pop);
+    overflow: hidden;
+}
+.c-source-body {
+    flex: 1;
+    background: var(--bg-0);
+    min-height: 0;
+}

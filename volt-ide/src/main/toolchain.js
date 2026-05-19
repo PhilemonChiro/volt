@@ -32,6 +32,14 @@ function run(cmd, log) {
 // ================================================================
 
 function picoSdkPath() {
+    // 1. user override from Settings
+    try {
+        const override = require("./settings").get("build.picoSdkPath");
+        if (override && override.trim()) return override;
+    } catch (_) {}
+    // 2. environment variable (standard pico-sdk convention)
+    if (process.env.PICO_SDK_PATH) return process.env.PICO_SDK_PATH;
+    // 3. local managed install
     return path.join(TOOLCHAINS_DIR, "pico-sdk");
 }
 
@@ -148,9 +156,17 @@ function espIdfPath(chip) {
     if (chip.includes("8266")) {
         return path.join(TOOLCHAINS_DIR, "esp8266-rtos-sdk");
     }
-    // Check common location first
+    // 1. user override from Settings
+    try {
+        const override = require("./settings").get("build.espIdfPath");
+        if (override && override.trim()) return override;
+    } catch (_) {}
+    // 2. environment variable
+    if (process.env.IDF_PATH) return process.env.IDF_PATH;
+    // 3. common dev location
     const devPath = path.join(os.homedir(), "esp", "esp-idf");
     if (fs.existsSync(devPath)) return devPath;
+    // 4. local managed install
     return path.join(TOOLCHAINS_DIR, "esp-idf");
 }
 

@@ -6,8 +6,8 @@ let activePanel = null;
 let lastAST = null;
 
 export function init() {
-    const ids = ["toggleHardware", "toggleTasks", "toggleOutline"];
-    const panels = ["hardware", "tasks", "outline"];
+    const ids = ["toggleHardware", "toggleTasks", "toggleOutline", "toggleLibrary"];
+    const panels = ["hardware", "tasks", "outline", "library"];
 
     ids.forEach((id, i) => {
         const btn = document.getElementById(id);
@@ -53,11 +53,16 @@ export function open(panel) {
     if (btn) btn.classList.add("active");
 
     // Swap visible body — fade-in via .is-active class (CSS keyframe)
-    ["panelHardware", "panelTasks", "panelOutline"].forEach(id => {
+    ["panelHardware", "panelTasks", "panelOutline", "panelLibrary"].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
-    const bodyMap = { hardware: "panelHardware", tasks: "panelTasks", outline: "panelOutline" };
+    const bodyMap = {
+        hardware: "panelHardware",
+        tasks:    "panelTasks",
+        outline:  "panelOutline",
+        library:  "panelLibrary",
+    };
     const body = document.getElementById(bodyMap[panel]);
     if (body) {
         body.style.display = "";
@@ -66,11 +71,16 @@ export function open(panel) {
     }
 
     // Title
-    const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline" };
+    const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline", library: "Library" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
-    if (lastAST) render(lastAST);
+    if (panel === "library") {
+        // Library is data-driven by the device catalog, not the editor AST
+        import("./library.js").then(m => m.renderInto(body));
+    } else if (lastAST) {
+        render(lastAST);
+    }
 
     relayoutEditorThroughTransition();
 }
