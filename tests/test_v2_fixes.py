@@ -503,6 +503,44 @@ setup {
 """, "stdatomic.h")
 
 # ============================================================
+print("\n=== ROUND 31 FIXES ===\n")
+# ============================================================
+
+# CompoundAssign renamed during function inlining
+c_inl, _ = compile_ok("compound assign inlined",
+    """chip esp32
+hardware { pin led: Output = 2 }
+func count_up() {
+    var x: int = 0
+    x += 1
+    sleep(100ms)
+}
+task worker {
+    every 1s { count_up() }
+}
+""")
+check("compound assign uses inlined name", c_inl is not None and "_inl1_x += 1" in c_inl,
+      "x += 1 must become _inl1_x += 1 after inlining")
+check("no bare 'x += 1' after inlining",
+      c_inl is not None and "\n         x += 1" not in c_inl,
+      "unrenamed compound assign would reference wrong variable")
+
+# Preamble not duplicated across split sub-tasks
+c_preamble, _ = compile_ok("preamble not duplicated",
+    """chip esp32
+hardware { pin led: Output = 2 }
+task worker {
+    led.on()
+    every 500ms { led.toggle() }
+    every 1s { log("tick", "one") }
+}
+""")
+if c_preamble:
+    on_count = c_preamble.count("pin_write(2, HIGH)")
+    check("led.on() appears once not twice", on_count == 1,
+          f"appeared {on_count} times — preamble was duplicated into split sub-tasks")
+
+# ============================================================
 print(f"\n{'='*60}")
 print(f"  RESULTS: {passed}/{total} passed, {failed} failed")
 print(f"{'='*60}\n")

@@ -142,6 +142,10 @@ def _sub_bodies(stmt):
     elif isinstance(stmt, TimeoutBlock):
         yield stmt.try_body
         yield stmt.fallback_body
+    elif isinstance(stmt, MatchStmt):
+        for arm in stmt.arms:
+            if isinstance(arm.body, list):
+                yield arm.body
 
 
 def find_var_decls_by_name(stmts: list, names: list):
@@ -154,10 +158,85 @@ def find_var_decls_by_name(stmts: list, names: list):
 
 
 def find_calls(stmts: list, obj_name: str):
-    """Find method calls on a specific object in a statement list (recursive)."""
+    """Find statements containing method calls on a specific object (recursive).
+    Checks ALL expressions in every statement type:
+    - Direct calls: wifi.connect()
+    - Or-wrapped: wifi.connect() or retry(3)
+    - Conditions: if wifi.is_connected() { ... }, while wifi.is_connected() { ... }
+    - Var inits: var x = wifi.is_connected()
+    - Assignments: status = wifi.is_connected()
+    - Return values: return wifi.is_connected()
+    - Guards: every 1s when wifi.is_connected() { ... }
+    - Event triggers: on wifi.on_connect() { ... }
+    - Compound assigns: count += wifi.get_rssi()
+    - Nested inside binary/unary expressions: x && wifi.is_connected()
+    """
     for stmt in stmts:
-        if isinstance(stmt, ExprStmt) and isinstance(stmt.expr, MethodCall):
-            if isinstance(stmt.expr.obj, VarRef) and stmt.expr.obj.name == obj_name:
-                yield stmt
+        if _stmt_has_call(stmt, obj_name):
+            yield stmt
         for body in _sub_bodies(stmt):
             yield from find_calls(body, obj_name)
+
+
+def _stmt_has_call(stmt, obj_name: str) -> bool:
+    """Check if a statement's expressions contain a method call on obj_name."""
+    if isinstance(stmt, ExprStmt):
+        return _expr_has_call(stmt.expr, obj_name)
+    if isinstance(stmt, VarDecl):
+        return stmt.value is not None and _expr_has_call(stmt.value, obj_name)
+    if isinstance(stmt, AssignExpr):
+        return _expr_has_call(stmt.target, obj_name) or _expr_has_call(stmt.value, obj_name)
+    if isinstance(stmt, CompoundAssign):
+        return _expr_has_call(stmt.target, obj_name) or _expr_has_call(stmt.value, obj_name)
+    if isinstance(stmt, ReturnStmt):
+        return stmt.value is not None and _expr_has_call(stmt.value, obj_name)
+    if isinstance(stmt, IfStmt):
+        return _expr_has_call(stmt.condition, obj_name)
+    if isinstance(stmt, WhileStmt):
+        return _expr_has_call(stmt.condition, obj_name)
+    if isinstance(stmt, ForStmt):
+        return (_expr_has_call(stmt.start, obj_name)
+                or _expr_has_call(stmt.end, obj_name)
+                or (stmt.step is not None and _expr_has_call(stmt.step, obj_name)))
+    if isinstance(stmt, EveryBlock):
+        return ((stmt.guard is not None and _expr_has_call(stmt.guard, obj_name))
+                or _expr_has_call(stmt.interval, obj_name))
+    if isinstance(stmt, OnBlock):
+        return _expr_has_call(stmt.event, obj_name)
+    if isinstance(stmt, TimeoutBlock):
+        return _expr_has_call(stmt.duration, obj_name)
+    if isinstance(stmt, MatchStmt):
+        return _expr_has_call(stmt.expr, obj_name)
+    return False
+
+
+def _expr_has_call(expr, obj_name: str) -> bool:
+    """Recursively check if an expression tree contains a method call on obj_name."""
+    if expr is None:
+        return False
+    if isinstance(expr, MethodCall):
+        if isinstance(expr.obj, VarRef) and expr.obj.name == obj_name:
+            return True
+        # Recurse into method args too: foo(wifi.is_connected())
+        if _expr_has_call(expr.obj, obj_name):
+            return True
+        for arg in expr.args:
+            if _expr_has_call(arg, obj_name):
+                return True
+        return False
+    if isinstance(expr, BinaryExpr):
+        return _expr_has_call(expr.left, obj_name) or _expr_has_call(expr.right, obj_name)
+    if isinstance(expr, UnaryExpr):
+        return _expr_has_call(expr.operand, obj_name)
+    if isinstance(expr, OrExpr):
+        return _expr_has_call(expr.expr, obj_name) or _expr_has_call(expr.fallback, obj_name)
+    if isinstance(expr, FuncCall):
+        for arg in expr.args:
+            if _expr_has_call(arg, obj_name):
+                return True
+        return False
+    if isinstance(expr, AssignExpr):
+        return _expr_has_call(expr.target, obj_name) or _expr_has_call(expr.value, obj_name)
+    if isinstance(expr, DotAccess):
+        return _expr_has_call(expr.obj, obj_name)
+    return False

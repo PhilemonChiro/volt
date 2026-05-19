@@ -15,8 +15,15 @@ __pycache__/
 compiler/.venv/
 *.egg-info/
 
+# Node — ignore node_modules anywhere (root, IDE dirs, extensions)
+node_modules/
+
+# Electron / Tauri build artifacts
+volt-ide-v2/dist/
+volt-electron/dist/
+volt-ide/src-tauri/target/
+
 # VS Code extension
-volt-vscode/node_modules/
 volt-vscode/*.vsix
 
 # OS files

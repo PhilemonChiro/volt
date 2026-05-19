@@ -1,20 +1,20 @@
 {
   "name": "volt-ide",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Volt IDE",
+  "main": "main.js",
   "scripts": {
-    "build": "echo 'app.js ready'",
-    "dev": "echo 'app.js ready'",
-    "tauri": "tauri"
+    "start": "electron . --no-sandbox",
+    "dev": "electron . --dev --no-sandbox"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Philemon Chiro",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
-    "@tauri-apps/api": "^2.10.1",
-    "@tauri-apps/cli": "^2.10.1",
-    "monaco-editor": "^0.55.1"
+    "@serialport/parser-readline": "^13.0.0",
+    "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "electron": "^41.2.0"
   }
 }

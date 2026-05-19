@@ -1,4 +1,4 @@
-src/dist/
-src-tauri/target/
 node_modules/
-src/lib/
+dist/
+.volt/
+build/

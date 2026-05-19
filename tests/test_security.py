@@ -177,6 +177,65 @@ check("deep_nesting_no_crash", True, "didn't crash")  # reaching here = no excep
 
 
 # ============================================================
+print("\n=== FORMAT STRING SAFETY ===\n")
+# ============================================================
+
+# log() with string variable must use %s, never pass variable as format string
+c_code, errors = compile_volt("""
+chip esp32
+hardware { pin led = 2 }
+task main {
+    var msg: string = "hello %x %x"
+    log("app", msg)
+}
+""", "fmt_safe.volt")
+check("log_uses_safe_format", c_code and '%s"' in c_code,
+      "log() must generate format-safe log_info(tag, \"%s\", msg)")
+check("log_no_bare_variable_format",
+      c_code and 'log_info("app", msg)' not in c_code,
+      "must not pass variable directly as format string")
+
+# log() with one arg — tag only, safe
+c_code2, _ = compile_volt("""
+chip esp32
+hardware { pin led = 2 }
+task main { log("hello") }
+""", "log_one.volt")
+check("log_one_arg_safe", c_code2 and 'log_info("hello", "%s", "")' in c_code2,
+      "single-arg log must use safe format")
+
+# log() with two string literals — still safe
+c_code3, _ = compile_volt("""
+chip esp32
+hardware { pin led = 2 }
+task main { log("tag", "message with %d") }
+""", "log_two.volt")
+check("log_two_args_safe", c_code3 and '"%s"' in c_code3,
+      "two-arg log must still use %s wrapper")
+
+
+# ============================================================
+print("\n=== YIELD DETECTION: sleep() or skip ===\n")
+# ============================================================
+
+# sleep() wrapped in OrExpr should still be detected as a yield point
+c_code4, errors4 = compile_volt("""
+chip esp32
+hardware { pin led = 2 }
+task worker {
+    every 1s {
+        led.toggle()
+    }
+    sleep(500ms) or skip
+}
+""", "yield_or.volt")
+# Should NOT get a "no yield points" warning
+warnings = [e for e in errors4.errors if "no yield" in e.message.lower()]
+check("sleep_or_skip_detected_as_yield", len(warnings) == 0,
+      "sleep() or skip should be detected as yield point")
+
+
+# ============================================================
 # Summary
 # ============================================================
 

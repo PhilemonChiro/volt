@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Volt IDE</title>
+    <link rel="stylesheet" href="src/styles/main.css">
+</head>
+<body>
+    <!-- TOOLBAR -->
+    <header id="toolbar">
+        <div class="toolbar-left">
+            <div class="toolbar-brand">
+                <img class="brand-logo" src="assets/volt-logo.svg" alt="Volt" width="18" height="18">
+                <span class="brand-name">Volt</span>
+            </div>
+
+            <div class="toolbar-divider"></div>
+
+            <button class="toolbar-btn project-only" id="runBtn" title="Build + Flash + Monitor (Ctrl+R)" style="display:none">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Run</span>
+            </button>
+
+            <button class="toolbar-btn project-only" id="monitorBtn" title="Monitor (Ctrl+M)" style="display:none">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span>Monitor</span>
+            </button>
+
+            <div class="toolbar-divider project-only" style="display:none"></div>
+
+            <button class="toolbar-btn toolbar-btn-subtle project-only" id="checkBtn" title="Check for errors (Ctrl+B)" style="display:none">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Check</span>
+            </button>
+            <button class="toolbar-btn toolbar-btn-subtle project-only" id="formatBtn" title="Format code" style="display:none">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="7" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/></svg>
+                <span>Format</span>
+            </button>
+            <button class="toolbar-btn toolbar-btn-subtle project-only" id="saveBtn" title="Save (Ctrl+S)" style="display:none">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span>Save</span>
+            </button>
+        </div>
+
+        <div class="toolbar-right">
+            <!-- Device selector -->
+            <div class="device-selector-wrap">
+                <button class="device-selector" id="deviceSelector">
+                    <span class="device-dot" id="deviceDot"></span>
+                    <span class="device-label" id="deviceLabel">No device</span>
+                    <svg class="toolbar-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="device-dropdown" id="deviceDropdown">
+                    <div class="dropdown-empty" id="dropdownEmpty">No devices detected</div>
+                    <div id="dropdownList"></div>
+                </div>
+            </div>
+
+            <!-- chip badge moved to info bar -->
+
+            <div class="toolbar-divider"></div>
+
+            <button class="toolbar-btn toolbar-btn-subtle" id="newProjectBtn" title="New Project (Ctrl+N)">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>New</span>
+            </button>
+            <button class="toolbar-btn toolbar-btn-subtle project-only" id="closeProjectBtn" title="Close Project (Ctrl+W)" style="display:none">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Close</span>
+            </button>
+            <button class="toolbar-btn toolbar-btn-subtle" id="openProjectBtn" title="Open Project (Ctrl+O)">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span>Open</span>
+            </button>
+            <button class="toolbar-btn toolbar-btn-subtle" id="settingsBtn" title="Settings">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>Settings</span>
+            </button>
+
+            <div class="toolbar-divider"></div>
+
+            <div class="window-controls">
+                <button class="win-btn" id="winMinimize" title="Minimize">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button class="win-btn" id="winMaximize" title="Maximize">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                </button>
+                <button class="win-btn win-close" id="winClose" title="Close">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- SECONDARY HEADER — project info bar (only when project is open) -->
+    <div id="infoBar" class="project-only" style="display:none">
+        <div class="info-left">
+            <span class="info-chip" id="chipBadge" title="Target board">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
+                <span id="chipLabel">ESP32</span>
+            </span>
+            <span class="info-sep"></span>
+            <span class="info-project" id="infoProjectName"></span>
+            <span class="info-file" id="infoFileName"></span>
+        </div>
+        <div class="info-right">
+            <span class="info-mismatch" id="chipMismatch" style="display:none" title="Connected device doesn't match project target"></span>
+
+        </div>
+    </div>
+
+    <!-- MAIN WORKSPACE: editor + side panel + activity bar -->
+    <div id="editorArea" class="workspace" style="display:none">
+        <div id="editorContainer" class="workspace-editor"></div>
+
+        <!-- Side panel (slides open between editor and activity bar) -->
+        <div id="sidePanel" class="workspace-side" style="display:none">
+            <div class="side-panel-header">
+                <span class="side-panel-title" id="sidePanelTitle">Hardware</span>
+            </div>
+            <div class="side-panel-body" id="panelHardware" style="display:none"></div>
+            <div class="side-panel-body" id="panelTasks" style="display:none"></div>
+            <div class="side-panel-body" id="panelOutline" style="display:none"></div>
+        </div>
+
+        <!-- Activity bar (VS Code style — icon strip on far right) -->
+        <div class="activity-bar project-only" style="display:none">
+            <button class="activity-btn" id="toggleHardware" title="Hardware (Ctrl+1)">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
+            </button>
+            <button class="activity-btn" id="toggleTasks" title="Tasks (Ctrl+2)">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </button>
+            <button class="activity-btn" id="toggleOutline" title="Outline (Ctrl+3)">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- WELCOME SCREEN -->
+    <div id="welcome">
+        <img src="assets/volt-logo.svg" width="48" height="48" style="margin-bottom:16px;opacity:0.8">
+        <h1 style="font-size:22px;font-weight:600;color:var(--t1)">Volt IDE</h1>
+        <p style="color:var(--t3);margin:6px 0 24px">Embedded development that reads like English</p>
+        <div style="display:flex;gap:10px">
+            <button class="welcome-btn primary" id="welcomeNewBtn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New Project
+            </button>
+            <button class="welcome-btn" id="welcomeOpenBtn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Open Project
+            </button>
+        </div>
+        <div style="margin-top:24px;font-size:11px;color:var(--t3)">
+            <span style="background:var(--bg-3);padding:2px 6px;border-radius:3px;font-family:var(--mono)">Ctrl+N</span> New
+            &nbsp;&nbsp;
+            <span style="background:var(--bg-3);padding:2px 6px;border-radius:3px;font-family:var(--mono)">Ctrl+O</span> Open
+            &nbsp;&nbsp;
+            <span style="background:var(--bg-3);padding:2px 6px;border-radius:3px;font-family:var(--mono)">Ctrl+R</span> Run
+        </div>
+    </div>
+
+    <!-- BOTTOM PANEL -->
+    <section id="bottomPanel" class="project-only" style="display:none"></section>
+
+    <!-- STATUS BAR -->
+    <footer id="statusBar">
+        <span class="status-item" id="statusChip">
+            <span class="status-dot"></span>
+            No device
+        </span>
+
+        <!-- Build progress (center) — shows during build/flash -->
+        <div class="status-progress" id="statusProgress" style="display:none">
+            <span class="status-progress-label" id="statusProgressLabel"></span>
+            <div class="status-progress-track">
+                <div class="status-progress-fill" id="statusProgressFill"></div>
+            </div>
+            <span class="status-progress-pct" id="statusProgressPct"></span>
+        </div>
+
+        <span style="flex:1"></span>
+        <span class="status-item status-dim" id="statusLine">Ready</span>
+    </footer>
+
+    <!-- Monaco editor -->
+    <script src="lib/monaco/vs/loader.js"></script>
+    <script>
+        require.config({ paths: { vs: 'lib/monaco/vs' } });
+        require(['vs/editor/editor.main'], function() {
+            // Monaco loaded — now load app
+            var s = document.createElement('script');
+            s.type = 'module';
+            s.src = 'src/app.js';
+            document.body.appendChild(s);
+        });
+    </script>
+</body>
+</html>

@@ -22,6 +22,12 @@ add_executable(volt-rp2040
     src/i2c.c
     src/spi.c
     src/uart.c
+    src/servo.c
+    src/touch.c
+    src/ble.c
+    src/wifi.c
+    src/mqtt.c
+    src/http.c
     ${DEVICE_DRIVERS}
 )
 
