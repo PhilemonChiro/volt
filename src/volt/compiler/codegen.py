@@ -96,7 +96,8 @@ METHOD_MAP = {
     ("HTTP", "post"): "http_post({args}, NULL, NULL, 0, NULL)",
     # Storage — save/load dispatch handled in _emit_method_call
     ("Storage", "push"): "storage_push({args})",
-    ("Storage", "drain"): "storage_drain({args})",
+    # drain handled specially — framework needs a buffer; we discard to a static scratch
+    ("Storage", "drain"): None,
     ("Storage", "list_count"): "storage_list_count({args})",
     ("Storage", "list_clear"): "storage_list_clear({args})",
     # System — portable names (implemented per-chip)
@@ -222,7 +223,7 @@ METHOD_MAP = {
 
 # Builtin function → C function
 BUILTIN_MAP = {
-    "log": "log_info({args})",
+    "log": None,  # handled specially for format string safety
     "sleep": None,  # handled specially (yield point)
     "deep_sleep": "system_deep_sleep({args} * 1000)",
     "light_sleep": "system_light_sleep()",
@@ -290,6 +291,7 @@ class CCodeGen:
         self._cached_all_stmts = None
         self._enum_types: dict = {}  # enum_name -> [variant_names]
         self._skip_counters: set = set()  # skip counter names for or-skip sites
+        self._storage_str_buf_count: int = 0  # storage.load_str() buffer count
 
         # Section 1: Header
         self._emit_header(program)
@@ -420,6 +422,10 @@ class CCodeGen:
         self._out("#include <stdio.h>")
         self._out('#include "volt/volt.h"')
 
+        # ESP32/ESP8266 need esp_attr.h for IRAM_ATTR used by critical tasks
+        if chip in ("esp32", "esp8266") and self._uses_critical_task(program):
+            self._out('#include "esp_attr.h"')
+
         # Conditional includes based on usage
         if self._uses_wifi(program):
             self._out('#include "volt/wifi.h"')
@@ -452,6 +458,9 @@ class CCodeGen:
         self._out("")
         # String interpolation buffers (used by string concat, log interpolation, UART read_line)
         self._out("static char _volt_strbuf[16][128];")
+        # Storage string load buffers — fixed pool for storage.load_str() calls (8 slots, rotating)
+        if self._uses_storage(program):
+            self._out("static char _volt_storage_strbuf[8][128];")
         self._out("")
 
     def _emit_enums(self, program: Program):
@@ -1142,7 +1151,7 @@ class CCodeGen:
 
         if isinstance(stmt, VarDecl):
             self._line_directive(stmt)
-            c_type = self._c_type(stmt.type_name) if stmt.type_name else TYPE_MAP.get(stmt.type_name, "int32_t")
+            c_type = self._c_type(stmt.type_name) if stmt.type_name else "int32_t"
             # Track variable types for dispatch (storage.save etc.)
             if stmt.type_name:
                 self._var_types[stmt.name] = stmt.type_name
@@ -1404,6 +1413,10 @@ class CCodeGen:
             easing = _EASING_CONSTANTS.get(expr.name)
             if easing is not None:
                 return easing
+            # Enum variant — resolve bare name to ENUM_VARIANT
+            for enum_name, variants in self._enum_types.items():
+                if expr.name in variants:
+                    return f"{enum_name.upper()}_{expr.name.upper()}"
             name = _c_name(expr.name)
             if ctx_prefix and expr.name in cv:
                 return f"{ctx_prefix}{name}"
@@ -1442,6 +1455,11 @@ class CCodeGen:
             # Builtin functions
             if expr.name == "run":
                 return "/* run() handled by task table */"
+            if expr.name == "log":
+                # Safe format: log_info(tag, "%s", message) prevents format string injection
+                tag = self._emit_expr_str(expr.args[0], ctx_prefix, cv) if expr.args else '"volt"'
+                msg = self._emit_expr_str(expr.args[1], ctx_prefix, cv) if len(expr.args) > 1 else '""'
+                return f'log_info({tag}, "%s", {msg})'
             if expr.name in BUILTIN_MAP:
                 template = BUILTIN_MAP[expr.name]
                 if template:
@@ -1483,6 +1501,23 @@ class CCodeGen:
                         return f"storage_save_int({args_str})"
                 if type_name == "Storage" and expr.method == "load" and len(expr.args) >= 1:
                     return f"storage_load_int({args_str}, 0)"
+                if type_name == "Storage" and expr.method == "load_float" and len(expr.args) >= 1:
+                    return f"storage_load_float({args_str}, 0.0f)"
+                if type_name == "Storage" and expr.method == "load_str" and len(expr.args) >= 1:
+                    # storage_load_str(key, buf, buf_size, default) fills a buffer.
+                    # Rotate through 8 static buffers so the returned pointer is valid
+                    # at least until 8 more load_str calls happen.
+                    idx = self._storage_str_buf_count % 8
+                    self._storage_str_buf_count += 1
+                    return (f'(storage_load_str({args_str}, _volt_storage_strbuf[{idx}], '
+                            f'sizeof(_volt_storage_strbuf[{idx}]), ""), '
+                            f'(const char*)_volt_storage_strbuf[{idx}])')
+                if type_name == "Storage" and expr.method == "drain" and len(expr.args) >= 1:
+                    # storage_drain(list_name, buf, buf_size) returns count drained.
+                    # GCC statement expression: last expression is the value.
+                    return (f"({{ static int32_t _volt_drain_buf[64]; "
+                            f"int _drained = storage_drain({args_str}, _volt_drain_buf, 64); "
+                            f"_drained; }})")
 
                 key = (type_name, expr.method)
                 if key in METHOD_MAP:
@@ -1643,6 +1678,10 @@ class CCodeGen:
 
     def _uses_ble(self, prog):
         return any(True for _ in _find_calls(self._all_stmts(prog), "ble"))
+
+    def _uses_critical_task(self, prog):
+        """True if program has any critical (strict) tasks — needs IRAM_ATTR."""
+        return any(getattr(t, "tier", "") == "critical" for t in prog.tasks)
 
     # ---- String concatenation with non-string types ----
 

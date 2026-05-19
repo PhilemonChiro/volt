@@ -16,6 +16,20 @@ const char *volt_error_name(volt_error_t error)
         case VOLT_ERR_TOO_MANY_TASKS:      return "VOLT_ERR_TOO_MANY_TASKS";
         case VOLT_ERR_TASK_CREATE_FAILED:   return "VOLT_ERR_TASK_CREATE_FAILED";
         case VOLT_ERR_TIMER_FAILED:         return "VOLT_ERR_TIMER_FAILED";
+        case VOLT_ERR_WIFI_INIT_FAILED:    return "VOLT_ERR_WIFI_INIT_FAILED";
+        case VOLT_ERR_WIFI_START_FAILED:   return "VOLT_ERR_WIFI_START_FAILED";
+        case VOLT_ERR_WIFI_NOT_CONNECTED:  return "VOLT_ERR_WIFI_NOT_CONNECTED";
+        case VOLT_ERR_MQTT_INIT_FAILED:    return "VOLT_ERR_MQTT_INIT_FAILED";
+        case VOLT_ERR_MQTT_START_FAILED:   return "VOLT_ERR_MQTT_START_FAILED";
+        case VOLT_ERR_MQTT_NOT_CONNECTED:  return "VOLT_ERR_MQTT_NOT_CONNECTED";
+        case VOLT_ERR_MQTT_PUBLISH_FAILED: return "VOLT_ERR_MQTT_PUBLISH_FAILED";
+        case VOLT_ERR_MQTT_SUB_FULL:       return "VOLT_ERR_MQTT_SUB_FULL";
+        case VOLT_ERR_HTTP_INIT_FAILED:    return "VOLT_ERR_HTTP_INIT_FAILED";
+        case VOLT_ERR_HTTP_FAILED:         return "VOLT_ERR_HTTP_FAILED";
+        case VOLT_ERR_KEY_NOT_FOUND:       return "VOLT_ERR_KEY_NOT_FOUND";
+        case VOLT_ERR_STORAGE_FULL:        return "VOLT_ERR_STORAGE_FULL";
+        case VOLT_ERR_STORAGE_INIT_FAILED: return "VOLT_ERR_STORAGE_INIT_FAILED";
+        case VOLT_ERR_STORAGE_WRITE_FAILED: return "VOLT_ERR_STORAGE_WRITE_FAILED";
         default:                           return "VOLT_ERR_UNKNOWN";
     }
 }

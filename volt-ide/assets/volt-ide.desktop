@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Volt IDE
+Comment=Embedded development that reads like English
+Exec=volt-ide %F
+Icon=volt-ide
+Type=Application
+Categories=Development;IDE;
+MimeType=text/x-volt;
+Terminal=false

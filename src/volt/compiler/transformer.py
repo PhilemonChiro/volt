@@ -155,7 +155,7 @@ def _is_concurrent_block(stmt) -> bool:
 def _split_multi_every(task: TaskDecl) -> list[TaskDecl]:
     """If a task has multiple concurrent blocks (every/on) at the top level,
     split each into its own internal task so they run concurrently.
-    Non-concurrent statements before the first block go into all sub-tasks.
+    Only statements before the FIRST concurrent block go into the first sub-task.
     """
     if task.tier != "background":
         return [task]
@@ -167,12 +167,15 @@ def _split_multi_every(task: TaskDecl) -> list[TaskDecl]:
     preamble = []
     result_tasks = []
     block_idx = 0
+    found_first_block = False
 
     for stmt in task.body:
         if _is_concurrent_block(stmt):
             block_idx += 1
             sub_name = task.name if block_idx == 1 else f"{task.name}_{block_idx}"
-            sub_body = list(preamble) + [stmt]
+            # Only the first sub-task gets the preamble (avoid duplicate side effects)
+            sub_body = (list(preamble) + [stmt]) if not found_first_block else [stmt]
+            found_first_block = True
             # Re-detect crossing vars for this sub-task's body
             from .analyzer import _find_yield_points, _find_crossing_vars
             yield_pts = _find_yield_points(sub_body)
@@ -351,6 +354,25 @@ def _rename_vars_in_node(node, rename_map: dict):
 
     if isinstance(node, OnBlock):
         return replace(node, body=_rename_vars_in_stmts(node.body, rename_map))
+
+    if isinstance(node, CompoundAssign):
+        return replace(node,
+                       target=_rename_vars_in_node(node.target, rename_map),
+                       value=_rename_vars_in_node(node.value, rename_map))
+
+    if isinstance(node, OrExpr):
+        return replace(node,
+                       expr=_rename_vars_in_node(node.expr, rename_map),
+                       fallback=_rename_vars_in_node(node.fallback, rename_map))
+
+    if isinstance(node, ForStmt):
+        new_name = rename_map.get(node.var_name, node.var_name)
+        return replace(node,
+                       var_name=new_name,
+                       start=_rename_vars_in_node(node.start, rename_map),
+                       end=_rename_vars_in_node(node.end, rename_map),
+                       step=_rename_vars_in_node(node.step, rename_map),
+                       body=_rename_vars_in_stmts(node.body, rename_map))
 
     return node
 

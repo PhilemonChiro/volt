@@ -83,6 +83,8 @@ int volt_uart_read_line(uint8_t port_id, char *buf, uint16_t max_len)
 int volt_uart_available(uint8_t port_id)
 {
     uart_inst_t *hw = get_uart_hw(port_id);
+    if (!hw) return 0;
+    // RP2040 UART FIFO doesn't expose a byte count; returns 0 or 1
     return uart_is_readable(hw) ? 1 : 0;
 }
 

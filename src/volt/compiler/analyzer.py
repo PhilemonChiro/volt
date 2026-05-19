@@ -237,8 +237,12 @@ def _find_yield_points(stmts: list) -> list[Region]:
             yields.append(stmt.region)
         elif isinstance(stmt, OnBlock):
             yields.append(stmt.region)
-        elif isinstance(stmt, ExprStmt) and isinstance(stmt.expr, FuncCall):
-            if stmt.expr.name in ("sleep", "deep_sleep", "light_sleep"):
+        elif isinstance(stmt, ExprStmt):
+            # Check direct calls and calls wrapped in OrExpr (e.g. sleep(1s) or skip)
+            call = stmt.expr
+            if isinstance(call, OrExpr):
+                call = call.expr
+            if isinstance(call, FuncCall) and call.name in ("sleep", "deep_sleep", "light_sleep"):
                 yields.append(stmt.region)
         elif isinstance(stmt, TimeoutBlock):
             yields.append(stmt.region)
@@ -722,6 +726,37 @@ def _verify_state_machine(machine: MachineDecl, errors: CompilerErrors):
                                f"have guards. If no guard matches, event is silently dropped.",
                                hint="Add a default (unguarded) transition as fallback.")
 
+    # Check: or skip inside state enter/exit/action — not a loop, can't continue
+    for state in machine.states:
+        _check_no_or_skip(state.enter_body, f"enter block of state `{state.name}`", errors)
+        _check_no_or_skip(state.exit_body, f"exit block of state `{state.name}`", errors)
+        for trans in state.transitions:
+            _check_no_or_skip(trans.action, f"transition action in state `{state.name}`", errors)
+
+
+def _check_no_or_skip(stmts: list, context: str, errors: CompilerErrors):
+    """Reject `or skip` inside state enter/exit/action — not inside a loop.
+    `or skip` needs `continue`, which requires being inside a loop."""
+    for stmt in stmts:
+        expr = None
+        if isinstance(stmt, ExprStmt):
+            expr = stmt.expr
+        elif isinstance(stmt, VarDecl):
+            expr = stmt.value
+        if isinstance(expr, OrExpr) and expr.kind == "skip":
+            errors.error(
+                stmt.region, "STATE MACHINE ERROR",
+                f"`or skip` cannot be used in {context} — state blocks are not loops.",
+                hint="Use `or restart` or `or <default value>` instead.",
+            )
+        # Recurse into nested blocks (if/while/etc.)
+        if isinstance(stmt, IfStmt):
+            _check_no_or_skip(stmt.then_body, context, errors)
+            if isinstance(stmt.else_body, list):
+                _check_no_or_skip(stmt.else_body, context, errors)
+            elif isinstance(stmt.else_body, IfStmt):
+                _check_no_or_skip([stmt.else_body], context, errors)
+
 
 def _event_key(event) -> str:
     """Generate a string key for an event expression (for grouping)."""
@@ -782,7 +817,7 @@ def _validate_break_continue(stmts: list, in_loop: bool, context: str, errors: C
         elif isinstance(stmt, EveryBlock):
             _validate_break_continue(stmt.body, True, context, errors)
         elif isinstance(stmt, OnBlock):
-            _validate_break_continue(stmt.body, in_loop, context, errors)
+            _validate_break_continue(stmt.body, True, context, errors)
         elif isinstance(stmt, TimeoutBlock):
             _validate_break_continue(stmt.try_body, in_loop, context, errors)
             _validate_break_continue(stmt.fallback_body, in_loop, context, errors)

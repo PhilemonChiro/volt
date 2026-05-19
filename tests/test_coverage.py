@@ -351,6 +351,272 @@ c_has(c, "%ld", "int format specifier")
 
 
 # ============================================================
+print("\n=== ROUND 32: storage type dispatch, match desugar, for step ===\n")
+# ============================================================
+
+# Storage.load_float dispatches correctly
+c, e = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+setup {
+    storage.save("temp", 98.6)
+    var t: float = storage.load_float("temp")
+}
+""", "storage_float.volt")
+check("storage.save float dispatches", c and "storage_save_float" in c)
+check("storage.load_float dispatches", c and "storage_load_float" in c)
+
+# Storage.load_str dispatches correctly
+c2, e2 = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+setup {
+    storage.save("name", "volt")
+    var n: string = storage.load_str("name")
+}
+""", "storage_str.volt")
+check("storage.save str dispatches", c2 and "storage_save_str" in c2)
+check("storage.load_str dispatches", c2 and "storage_load_str" in c2)
+
+# Match statement desugars to if-else chain
+c3, e3 = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+enum Mode { idle, running, error }
+setup {
+    var m: Mode = Mode.idle
+    match(m) {
+        .idle -> led.off()
+        .running -> led.on()
+        _ -> led.toggle()
+    }
+}
+""", "match_desugar.volt")
+check("match compiles", c3 is not None)
+if c3:
+    # First arm (idle) should be checked first in the if-else chain
+    idle_pos = c3.find("MODE_IDLE")
+    running_pos = c3.find("MODE_RUNNING")
+    check("match arms in correct order", idle_pos < running_pos,
+          f"idle at {idle_pos}, running at {running_pos}")
+
+# For loop with negative literal step
+c4, e4 = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+setup {
+    for i in 10..0 step -2 {
+        led.toggle()
+    }
+}
+""", "for_neg.volt")
+check("for negative step compiles", c4 is not None)
+if c4:
+    check("negative step uses > comparator", "i > " in c4 or "i >=" in c4,
+          "should count down with > comparison")
+
+# For loop with positive literal step
+c5, e5 = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+setup {
+    for i in 0..100 step 5 {
+        led.toggle()
+    }
+}
+""", "for_pos.volt")
+check("for positive step compiles", c5 is not None)
+if c5:
+    check("positive step uses < comparator", "i < " in c5 or "i <=" in c5)
+
+# Shared variable compound assign uses atomics
+c6, e6 = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+shared var counter: int = 0
+task inc {
+    every 100ms strict {
+        counter += 1
+    }
+}
+task dec {
+    every 200ms strict {
+        counter -= 1
+    }
+}
+""", "shared_compound.volt")
+check("shared compound assign compiles", c6 is not None)
+if c6:
+    check("shared += uses atomic_fetch_add", "atomic_fetch_add" in c6)
+    check("shared -= uses atomic_fetch_sub", "atomic_fetch_sub" in c6)
+
+# ============================================================
+print("\n=== Channel try_receive and helpers ===\n")
+# ============================================================
+
+c_ch, _ = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+channel queue: int[8]
+task producer {
+    every 1s { queue.send(42) }
+}
+task consumer {
+    every 100ms {
+        if queue.has_data() {
+            var val: int = queue.receive()
+        }
+    }
+}
+""", "channel_ops.volt")
+check("channel compiles", c_ch is not None)
+if c_ch:
+    check("try_receive generated", "queue_try_receive" in c_ch)
+    check("has_data generated", "queue_has_data" in c_ch)
+    check("send generated", "queue_send" in c_ch)
+    check("receive generated", "queue_receive" in c_ch)
+    check("count generated", "queue_count" in c_ch)
+
+# ============================================================
+print("\n=== STM32 codegen ===\n")
+# ============================================================
+
+c_stm, e_stm = compile_volt("""
+chip stm32f103
+hardware {
+    pin led: Output = 13
+}
+setup {
+    led.on()
+}
+""", "stm32_basic.volt")
+check("STM32 compiles", c_stm is not None)
+if c_stm:
+    check("STM32 uses app_main", "void app_main(void)" in c_stm)
+    check("STM32 pin_set_output", "pin_set_output(13)" in c_stm)
+
+c_stm2, _ = compile_volt("""
+chip stm32f103
+hardware {
+    pin led: Output = 13
+}
+task blink {
+    every 500ms {
+        led.toggle()
+    }
+}
+""", "stm32_task.volt")
+check("STM32 task compiles", c_stm2 is not None)
+if c_stm2:
+    check("STM32 has protothread", "VOLT_YIELD_LABEL" in c_stm2)
+    check("STM32 has task table", "volt_run(_tasks," in c_stm2)
+
+# ============================================================
+print("\n=== Enum variant resolution in match ===\n")
+# ============================================================
+
+c_em, _ = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+enum State { idle, active, error }
+setup {
+    var s: State = State.idle
+    match(s) {
+        .idle -> led.off()
+        .active -> led.on()
+        .error -> led.toggle()
+    }
+}
+""", "enum_match.volt")
+check("enum match compiles", c_em is not None)
+if c_em:
+    check("match uses STATE_IDLE", "STATE_IDLE" in c_em)
+    check("match uses STATE_ACTIVE", "STATE_ACTIVE" in c_em)
+    check("match uses STATE_ERROR", "STATE_ERROR" in c_em)
+
+# ============================================================
+print("\n=== Include detection with or-expressions and when guards ===\n")
+# ============================================================
+
+# wifi.connect() or retry — must still detect wifi usage
+c_ow, _ = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+setup {
+    wifi.connect("ssid", "pass") or retry(5)
+    mqtt.connect("mqtt://broker") or retry(3)
+}
+""", "or_include.volt")
+check("or-wrapped wifi detected", c_ow is not None and 'wifi.h' in c_ow)
+check("or-wrapped mqtt detected", c_ow is not None and 'mqtt.h' in c_ow)
+
+# when guard — must detect wifi usage
+c_wg, _ = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+task sender {
+    every 10s when wifi.is_connected() {
+        mqtt.send("topic", "data") or skip
+        led.toggle()
+    }
+}
+""", "when_include.volt")
+check("when-guard wifi detected", c_wg is not None and 'wifi.h' in c_wg)
+check("or-skip mqtt in body detected", c_wg is not None and 'mqtt.h' in c_wg)
+
+# http and ble with or-expressions
+c_hb, _ = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+setup {
+    ble.advertise("VoltDevice") or skip
+}
+""", "ble_or.volt")
+check("or-skip ble detected", c_hb is not None and 'ble.h' in c_hb)
+
+# ============================================================
+print("\n=== Critical task IRAM_ATTR — esp_attr.h include ===\n")
+# ============================================================
+
+# ESP32 with critical task — must include esp_attr.h for IRAM_ATTR
+c_crit, _ = compile_volt("""
+chip esp32
+hardware { pin motor: PWM = 5 }
+every 1ms strict {
+    motor.set_pwm(0)
+}
+""", "critical_esp32.volt")
+check("esp32 critical task compiles", c_crit is not None)
+if c_crit:
+    check("esp32 critical includes esp_attr.h", 'esp_attr.h' in c_crit)
+    check("esp32 critical uses IRAM_ATTR", 'IRAM_ATTR' in c_crit)
+
+# ESP32 WITHOUT critical task — must NOT include esp_attr.h (no IRAM_ATTR needed)
+c_nocrit, _ = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+every 500ms {
+    led.toggle()
+}
+""", "no_critical_esp32.volt")
+check("esp32 no-critical compiles", c_nocrit is not None)
+if c_nocrit:
+    check("esp32 no-critical skips esp_attr.h", 'esp_attr.h' not in c_nocrit)
+
+# RP2040 critical task — must NOT include esp_attr.h (Pico SDK)
+c_rp, _ = compile_volt("""
+chip rp2040
+hardware { pin motor: PWM = 5 }
+every 1ms strict {
+    motor.set_pwm(0)
+}
+""", "critical_rp2040.volt")
+check("rp2040 critical compiles", c_rp is not None)
+if c_rp:
+    check("rp2040 critical skips esp_attr.h", 'esp_attr.h' not in c_rp)
+    check("rp2040 critical skips IRAM_ATTR", 'IRAM_ATTR' not in c_rp)
+
+# ============================================================
 # Summary
 # ============================================================
 

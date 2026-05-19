@@ -266,8 +266,10 @@ METHOD_TYPES = {
     "Storage": {
         "save": (VOID, [("key", STRING), ("value", None)]),  # None = any type (dispatched at codegen)
         "load": (INT, [("key", STRING)]),
+        "load_float": (FLOAT, [("key", STRING)]),
+        "load_str": (STRING, [("key", STRING)]),
         "push": (VOID, [("list_name", STRING), ("value", INT)]),
-        "drain": (STRING, [("list_name", STRING)]),
+        "drain": (INT, [("list_name", STRING)]),  # returns count of items drained
         "list_count": (INT, [("list_name", STRING)]),
         "list_clear": (VOID, [("list_name", STRING)]),
     },
@@ -596,6 +598,7 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                     stmt.region, "TYPE MISMATCH",
                     f"Variable `{stmt.name}` declared as `{stmt.type_name}` "
                     f"but assigned `{val_type}`.",
+                    hint=f"Change the type to `{val_type}` or convert the value with `{stmt.type_name}(value)`.",
                 )
         else:
             # Infer type from value
@@ -717,6 +720,7 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
             errors.error(
                 stmt.condition.region, "TYPE MISMATCH",
                 f"While condition must be `bool`, got `{cond_type}`.",
+                hint="Use a comparison like `x > 0` or a boolean function.",
             )
         _check_stmts(stmt.body, scope, errors, expected_return)
 
@@ -839,9 +843,17 @@ def _infer(expr, scope: Scope, errors: CompilerErrors) -> str:
                scope.lookup(left_type) and scope.lookup(left_type).kind == "enum":
                 result = BOOL
             else:
+                hint = None
+                if left_type == INT and right_type == FLOAT:
+                    hint = "Convert with `float(value)` to match types."
+                elif left_type == FLOAT and right_type == INT:
+                    hint = "Convert with `int(value)` to match types."
+                elif left_type == STRING and right_type != STRING:
+                    hint = f"Convert to string with string interpolation: \"{{value}}\"."
                 errors.error(
                     expr.region, "TYPE MISMATCH",
                     f"Cannot use `{expr.op}` between `{left_type}` and `{right_type}`.",
+                    hint=hint,
                 )
                 return ERROR_TYPE
 

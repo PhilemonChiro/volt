@@ -67,7 +67,56 @@ When the audit is large, spin up concurrent agents as:
  - keep uptodate  the  documentation and readme accordingly
  - update  the ide accordingly too
 
-### 8. Commit and repeat
+### 8. Test requirements for new features
+
+Every new feature MUST have tests at all applicable levels:
+
+#### A. Compiler tests (Python — `tests/test_*.py`)
+| Test file | What it covers | When to add |
+|-----------|---------------|-------------|
+| `test_parser.py` | Grammar rules, AST construction | New syntax, operators, blocks |
+| `test_resolver.py` | Name resolution, scope chains, duplicate detection | New declarations, scope rules |
+| `test_checker.py` | Type checking, operator rules, method signatures | New types, operators, builtins |
+| `test_analyzer.py` | Yield detection, shared state, task validation, ISR safety | New yield points, task tiers, concurrency |
+| `test_transformer.py` | Function inlining, yield labels, multi-every split, match desugar, variable renaming | New transform passes, inlining edge cases |
+| `test_hardware.py` | Pin validation, chip constraints, strapping pins, ADC/WiFi conflicts | New chips, pin modes, peripherals |
+| `test_codegen / test_coverage.py` | C output patterns, atomics, storage dispatch, channels, enums | New codegen paths, builtins, type dispatch |
+| `test_errors.py` | Error message content and hints | New error messages |
+| `test_security.py` | Format string safety, injection prevention, input validation | New string handling, user-facing output |
+
+#### B. Target-specific tests
+| Test file | What it covers | When to add |
+|-----------|---------------|-------------|
+| `test_rp2040.py` | `int main`, `stdio_init_all`, Pico pin ranges, no WiFi/BLE | Any RP2040-specific codegen |
+| `test_esp8266.py` | ESP8266 pin constraints, limited GPIO | Any ESP8266-specific behavior |
+| `test_programs.py` | Cross-chip compilation, chip-specific output | New chip targets |
+
+#### C. Integration tests
+| Test file | What it covers | When to add |
+|-----------|---------------|-------------|
+| `test_endtoend.py` | Full pipeline: parse → resolve → check → analyze → transform → codegen | Any pipeline change |
+| `test_multifeature.py` | Complex programs combining 3+ features (state machines + sensors + storage, channels + shared vars + tasks) | New feature interactions |
+| `test_framework.py` | Generated C compiles against framework headers with gcc | New framework functions, API changes, new device drivers |
+
+#### D. Test patterns
+- **Positive test**: Program compiles, C output contains expected pattern
+- **Negative test**: Program fails with expected error message
+- **Regression test**: Exact C output matches expected string (for bugs that were fixed)
+- **Framework test**: Generated C passes `gcc -Wall -Werror` against stub headers
+
+#### E. Running tests
+```bash
+# All tests (must be 100% green before commit)
+for f in tests/test_*.py; do python3 "$f"; done
+
+# Single file
+python3 tests/test_transformer.py
+
+# Count total
+for f in tests/test_*.py; do python3 "$f" 2>&1 | grep RESULTS; done
+```
+
+### 9. Commit and repeat
 - Run full test suite (must be 100% green)
 - Commit with descriptive message listing what was fixed
 - Push to create a recoverable point

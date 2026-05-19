@@ -208,6 +208,71 @@ c_has(c, "or skip", "skip on sensor fail")
 
 
 # ============================================================
+print("\n=== or skip — skip counter codegen ===\n")
+# ============================================================
+
+c, e = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+task worker {
+    every 500ms {
+        led.toggle() or skip
+    }
+}
+""", "skip_counter.volt")
+check("or skip compiles", c is not None)
+if c:
+    c_has(c, "continue;", "skip generates continue")
+    c_has(c, "_skip_count_", "skip counter declared")
+    c_has(c, "VOLT_OK", "checks error return")
+
+# or restart
+c2, e2 = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+task worker {
+    every 1s {
+        led.on() or restart
+    }
+}
+""", "or_restart.volt")
+check("or restart compiles", c2 is not None)
+if c2:
+    c_has(c2, "system_restart()", "restart on failure")
+
+# or retry with count
+c3, e3 = compile_volt("""
+chip esp32
+hardware { pin led: Output = 2 }
+task worker {
+    every 1s {
+        led.on() or retry(5)
+    }
+}
+""", "or_retry5.volt")
+check("or retry(5) compiles", c3 is not None)
+if c3:
+    c_has(c3, "_retry < 5", "retry loop with count 5")
+    c_has(c3, "VOLT_OK", "checks error in retry")
+
+
+# ============================================================
+print("\n=== or skip in variable init ===\n")
+# ============================================================
+
+c4, e4 = compile_volt("""
+chip esp32
+hardware { pin btn: Input = 4 }
+task reader {
+    every 2s {
+        var val: int = btn.read() or skip
+    }
+}
+""", "var_or_skip.volt")
+check("var init or skip compiles", c4 is not None)
+
+
+# ============================================================
 # Summary
 # ============================================================
 

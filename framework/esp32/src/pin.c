@@ -265,11 +265,14 @@ volt_error_t pin_set_pwm(uint8_t pin)
     uint8_t ch = next_pwm_channel++;
     pwm_channel_map[pin] = ch;
 
-    // Configure LEDC timer (shared by all channels on same timer)
+    // Each pair of channels shares a timer (0-1 → T0, 2-3 → T1, 4-5 → T2, 6-7 → T3)
+    // This lets pin_tone() change frequency on one pin without affecting others
+    uint8_t timer_id = ch / 2;
+
     ledc_timer_config_t timer_cfg = {
         .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_8_BIT,  // 0-255
-        .timer_num = LEDC_TIMER_0,
+        .timer_num = timer_id,
         .freq_hz = 1000,  // 1kHz default
         .clk_cfg = LEDC_AUTO_CLK,
     };
@@ -279,7 +282,7 @@ volt_error_t pin_set_pwm(uint8_t pin)
     ledc_channel_config_t ch_cfg = {
         .speed_mode = LEDC_LOW_SPEED_MODE,
         .channel = ch,
-        .timer_sel = LEDC_TIMER_0,
+        .timer_sel = timer_id,
         .gpio_num = pin,
         .duty = 0,
         .hpoint = 0,
@@ -316,7 +319,8 @@ volt_error_t pin_tone(uint8_t pin, uint32_t frequency_hz)
         ledc_set_duty(LEDC_LOW_SPEED_MODE, ch, 0);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
     } else {
-        ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, frequency_hz);
+        uint8_t timer_id = ch / 2;
+        ledc_set_freq(LEDC_LOW_SPEED_MODE, timer_id, frequency_hz);
         ledc_set_duty(LEDC_LOW_SPEED_MODE, ch, 128); // 50% duty = square wave
         ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
     }

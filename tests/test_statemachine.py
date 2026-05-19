@@ -111,7 +111,7 @@ c_has(c, "pin_write(2, LOW)", "led.off() in entry")
 c_has(c, "pin_write(2, HIGH)", "led.on() in entry")
 # Exit actions
 c_has(c, "// Exit current state", "has exit section")
-c_has(c, 'log_info("leaving on state")', "exit action generated")
+c_has(c, 'log_info("leaving on state", "%s", "")', "exit action generated")
 
 
 # ============================================================
