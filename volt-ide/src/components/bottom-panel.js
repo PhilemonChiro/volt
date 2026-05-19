@@ -253,7 +253,11 @@ export function setProblems(diags) {
     }
 
     if (diags.length === 0) {
-        el.innerHTML = '<div class="bp-empty">No problems detected.</div>';
+        el.innerHTML = `<div class="bp-empty">
+            <svg class="empty-illustration" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--ok);opacity:0.7"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div class="empty-title">All clear</div>
+            <div class="empty-hint">No problems detected in this file.</div>
+        </div>`;
         return;
     }
 

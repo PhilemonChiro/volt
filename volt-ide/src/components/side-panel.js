@@ -31,9 +31,20 @@ export function toggle(panel) {
 export function open(panel) {
     activePanel = panel;
 
-    // Show side panel
+    // Reveal side panel (CSS transitions width 0 → 280)
     const side = document.getElementById("sidePanel");
-    if (side) side.style.display = "flex";
+    if (side) {
+        const wasHidden = side.style.display === "none" || side.style.display === "";
+        side.style.display = "flex";
+        if (wasHidden) {
+            // First-show this session: start collapsed, then expand next frame
+            side.classList.add("is-closed");
+            side.offsetWidth;  // force reflow
+            requestAnimationFrame(() => side.classList.remove("is-closed"));
+        } else {
+            side.classList.remove("is-closed");
+        }
+    }
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
@@ -41,42 +52,57 @@ export function open(panel) {
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
-    // Show correct body, hide others
+    // Swap visible body — fade-in via .is-active class (CSS keyframe)
     ["panelHardware", "panelTasks", "panelOutline"].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = "none";
+        if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
     const bodyMap = { hardware: "panelHardware", tasks: "panelTasks", outline: "panelOutline" };
     const body = document.getElementById(bodyMap[panel]);
-    if (body) body.style.display = "";
+    if (body) {
+        body.style.display = "";
+        // Re-add the class on the next frame so the keyframe restarts
+        requestAnimationFrame(() => body.classList.add("is-active"));
+    }
 
     // Title
     const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
-    // Render with last known AST
     if (lastAST) render(lastAST);
 
-    // Tell Monaco to relayout (editor width changed)
-    relayoutEditor();
+    relayoutEditorThroughTransition();
 }
 
 export function close() {
     activePanel = null;
     const side = document.getElementById("sidePanel");
-    if (side) side.style.display = "none";
+    if (side) {
+        side.classList.add("is-closed");
+        // Hide after the transition so display:flex isn't reclaimed mid-animation
+        setTimeout(() => {
+            if (side.classList.contains("is-closed")) side.style.display = "none";
+        }, 320);  // slightly longer than --dur-slow (280ms)
+    }
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    relayoutEditor();
+    relayoutEditorThroughTransition();
 }
 
-function relayoutEditor() {
-    requestAnimationFrame(() => {
-        if (typeof monaco !== "undefined") {
-            const editors = monaco.editor.getEditors();
-            if (editors.length > 0) editors[0].layout();
-        }
-    });
+// Monaco needs explicit layout() — drive it on every frame for the duration
+// of the panel transition so the editor flows smoothly with the panel width.
+function relayoutEditorThroughTransition() {
+    if (typeof monaco === "undefined") return;
+    const editors = monaco.editor.getEditors();
+    if (!editors.length) return;
+    const ed = editors[0];
+    const start = performance.now();
+    const duration = 320;  // matches --dur-slow + safety margin
+    function tick(now) {
+        ed.layout();
+        if (now - start < duration) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
 }
 
 // Called when compiler produces new AST data
@@ -106,7 +132,11 @@ function renderHardware(ast) {
     const devices = ast.devices || [];
 
     if (pins.length === 0 && buses.length === 0 && devices.length === 0) {
-        el.innerHTML = '<div class="panel-empty">No hardware declared.<br>Add a <code>hardware { }</code> block.</div>';
+        el.innerHTML = `<div class="panel-empty">
+            <svg class="empty-illustration" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/></svg>
+            <div class="empty-title">No hardware yet</div>
+            <div class="empty-hint">Add a <code>hardware { }</code> block to declare pins, buses, or devices.</div>
+        </div>`;
         return;
     }
 
@@ -171,7 +201,11 @@ function renderTasks(ast) {
     const channels = ast.channels || [];
 
     if (tasks.length === 0 && machines.length === 0 && channels.length === 0) {
-        el.innerHTML = '<div class="panel-empty">No tasks or machines.<br>Add a <code>task</code> block.</div>';
+        el.innerHTML = `<div class="panel-empty">
+            <svg class="empty-illustration" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <div class="empty-title">No tasks running</div>
+            <div class="empty-hint">Add a <code>task</code> or <code>every</code> block to schedule work.</div>
+        </div>`;
         return;
     }
 
@@ -198,8 +232,8 @@ function renderTasks(ast) {
                 <span class="hw-detail">${(m.states || []).length} states</span>
             </div>`;
             for (const state of (m.states || [])) {
-                html += `<div class="hw-item" style="padding-left:24px">
-                    <span class="hw-icon">S</span>
+                html += `<div class="hw-item is-nested">
+                    <span class="hw-icon">·</span>
                     <span class="hw-name">${esc(state)}</span>
                 </div>`;
             }
@@ -243,7 +277,11 @@ function renderOutline(ast) {
         items.push({ icon: "C", cls: "var", name: ch.name, detail: `channel<${ch.elem_type}>`, line: 0 });
 
     if (items.length === 0) {
-        el.innerHTML = '<div class="panel-empty">No symbols found.</div>';
+        el.innerHTML = `<div class="panel-empty">
+            <svg class="empty-illustration" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <div class="empty-title">Nothing to outline</div>
+            <div class="empty-hint">Symbols appear here as you declare pins, tasks, machines, and enums.</div>
+        </div>`;
         return;
     }
 
