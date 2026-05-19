@@ -96,16 +96,36 @@ def _resolve_includes(source: str, filename: str, errors) -> str:
     return resolve(source, base_dir, 0)
 
 
-def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, CompilerErrors]:
+def compile_volt(
+    source: str,
+    filename: str = "main.volt",
+    progress=None,
+) -> tuple[str | None, CompilerErrors]:
     """
     Compile Volt source to C code.
+
     Returns (c_code, errors). c_code is None if there are errors.
+
+    Args:
+        source: Volt source text.
+        filename: source filename (used for #line directives + volt.toml lookup).
+        progress: optional callback(phase: str, pct: int) called after each pass.
+                  Phases: include, parse, resolve, check, hardware, analyze,
+                  transform, codegen. pct climbs 5 → 100.
     """
+    def _emit(phase, pct):
+        if progress is not None:
+            try:
+                progress(phase, pct)
+            except Exception:
+                pass  # progress is advisory; never break compilation on it
+
     errors = CompilerErrors()
 
     # Preprocess: resolve include statements
     source = _resolve_includes(source, filename, errors)
     errors.set_source(source)
+    _emit("include", 5)
 
     # Pass 1: Parse
     try:
@@ -117,6 +137,7 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
             str(e).split('\n')[0],
         )
         return None, errors
+    _emit("parse", 30)
 
     # Chip resolution: volt.toml is the source of truth.
     # chip in .volt file is accepted for backward compat but deprecated.
@@ -143,11 +164,13 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
     scope = resolve(program, errors)
     if errors.has_errors:
         return None, errors
+    _emit("resolve", 45)
 
     # Pass 3: Type check
     check_types(program, scope, errors)
     if errors.has_errors:
         return None, errors
+    _emit("check", 60)
 
     # Load chip spec (if chip declaration exists)
     chip = None
@@ -163,17 +186,21 @@ def compile_volt(source: str, filename: str = "main.volt") -> tuple[str | None, 
     # Continue even with hardware warnings (only stop on errors)
     if errors.has_errors:
         return None, errors
+    _emit("hardware", 70)
 
     # Pass 5: Analyze (task classification, yield analysis, ISR safety)
     analyze(program, scope, errors)
     if errors.has_errors:
         return None, errors
+    _emit("analyze", 80)
 
     # Pass 6: Transform (lift vars, inline yields, desugar)
     program = transform(program)
+    _emit("transform", 88)
 
     # Pass 7: Generate C
     c_code = generate(program, filename)
+    _emit("codegen", 100)
 
     return c_code, errors
 

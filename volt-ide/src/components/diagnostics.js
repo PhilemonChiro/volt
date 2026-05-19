@@ -5,7 +5,7 @@ let onResultCallback = null;
 
 export function scheduleCheck(source) {
     clearTimeout(timer);
-    timer = setTimeout(() => runCheck(source), 500);
+    timer = setTimeout(() => runCheck(source), 250);
 }
 
 export function onResult(callback) {

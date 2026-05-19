@@ -27,6 +27,23 @@ function streamCommand(cmd, stage, emit, envExtra) {
         const pctRange = { build: [30, 60], flash: [65, 95] };
         const [pctStart, pctEnd] = pctRange[stage] || [0, 100];
 
+        // CMake configure has no [N/M] progress, so we approximate from the
+        // sequence of "-- ..." status lines it prints. Each recognized milestone
+        // bumps the percentage a little + relays the line as a sub-status.
+        let cmakeConfigureSeen = 0;
+        const CMAKE_MILESTONES = [
+            { re: /-- The C compiler identification/i,        label: "Detecting C compiler" },
+            { re: /-- The CXX compiler identification/i,      label: "Detecting C++ compiler" },
+            { re: /-- Detecting C compile features/i,         label: "Detecting compiler features" },
+            { re: /-- Check for working C compiler/i,         label: "Checking C compiler" },
+            { re: /-- Found Python/i,                         label: "Found Python" },
+            { re: /-- Found Git/i,                            label: "Found Git" },
+            { re: /-- Build type:/i,                          label: "Setting build type" },
+            { re: /-- Configuring done/i,                     label: "Configuring done" },
+            { re: /-- Generating done/i,                      label: "Generating done" },
+            { re: /-- Build files have been written/i,        label: "Build files written" },
+        ];
+
         function processLine(raw) {
             const line = raw.toString().trim();
             if (!line) return;
@@ -49,6 +66,22 @@ function streamCommand(cmd, stage, emit, envExtra) {
 
                 emit(stage, label, pct);
                 return;
+            }
+
+            // CMake configure milestones — provide feedback during the silent
+            // 5-15s window before ninja [N/M] lines start showing.
+            for (const { re, label } of CMAKE_MILESTONES) {
+                if (re.test(line)) {
+                    cmakeConfigureSeen++;
+                    // Climb gently from pctStart toward halfway to pctEnd
+                    const budget = Math.max(1, Math.floor((pctEnd - pctStart) / 4));
+                    const pct = Math.min(
+                        pctStart + budget,
+                        pctStart + Math.ceil((cmakeConfigureSeen / CMAKE_MILESTONES.length) * budget),
+                    );
+                    emit(stage, `CMake: ${label}`, pct);
+                    return;
+                }
             }
 
             // Parse esptool flash progress: "Writing at 0x... (N %)" only during flash stage
