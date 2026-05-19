@@ -1,0 +1,105 @@
+name: Build IDE Releases
+
+# Triggers:
+#   - Push a tag like v0.1.0       → builds all three platforms + creates a GitHub Release
+#   - Manual ("Run workflow" in Actions tab) → builds only what you ask for, attaches as artifacts
+#
+# Each platform job runs on its native runner so native modules (serialport)
+# compile correctly and no cross-build wrangling is needed.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Which platforms to build"
+        required: true
+        default: "all"
+        type: choice
+        options: [all, linux, windows, macos]
+
+jobs:
+  # ---------------------------------------------------------------
+  linux:
+    if: ${{ github.event_name == 'push' || inputs.platforms == 'all' || inputs.platforms == 'linux' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install
+        working-directory: volt-ide
+        run: npm ci
+      - name: Build
+        working-directory: volt-ide
+        run: npm run pack:linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            volt-ide/dist/*.AppImage
+            volt-ide/dist/*.deb
+
+  # ---------------------------------------------------------------
+  windows:
+    if: ${{ github.event_name == 'push' || inputs.platforms == 'all' || inputs.platforms == 'windows' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install
+        working-directory: volt-ide
+        run: npm ci
+      - name: Build (native Windows — produces NSIS + portable)
+        working-directory: volt-ide
+        # Use full Windows targets here (NSIS) since Wine is not in the picture.
+        # We override the config's portable-only restriction by passing targets directly.
+        run: npx electron-builder --win nsis portable --config.win.signAndEditExecutable=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            volt-ide/dist/*.exe
+
+  # ---------------------------------------------------------------
+  macos:
+    if: ${{ github.event_name == 'push' || inputs.platforms == 'all' || inputs.platforms == 'macos' }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install
+        working-directory: volt-ide
+        run: npm ci
+      - name: Build (arm64 + x64 universal-style DMGs)
+        working-directory: volt-ide
+        run: npm run pack:mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            volt-ide/dist/*.dmg
+
+  # ---------------------------------------------------------------
+  # Attach all artifacts to a GitHub Release when a tag triggered the run.
+  release:
+    needs: [linux, windows, macos]
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/linux/*
+            artifacts/windows/*
+            artifacts/macos/*
+          generate_release_notes: true
+          draft: true
