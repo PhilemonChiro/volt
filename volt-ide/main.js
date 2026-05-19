@@ -235,13 +235,8 @@ ipcMain.handle("settings_open_file", () => {
 
 // ============================================================
 // Device library — reads the JSON catalog in <repo>/devices/*/*.json
+// (devicesDir() defined above, near getVoltSrc())
 // ============================================================
-function devicesDir() {
-    const dev = path.join(__dirname, "..", "devices");
-    if (fs.existsSync(dev)) return dev;
-    return path.join(os.homedir(), ".volt", "sdk", "devices");
-}
-
 ipcMain.handle("devices_list", () => {
     const root = devicesDir();
     if (!fs.existsSync(root)) return [];
@@ -269,9 +264,17 @@ ipcMain.handle("device_source", (_, chip, sourceFile) => {
     }
     const c = (chip || "esp32").toLowerCase();
     const platform = c.includes("rp2040") || c.includes("pico") ? "rp2040" : "esp32";
-    const dev = path.join(__dirname, "..", "framework", platform, "src", sourceFile);
-    const installed = path.join(os.homedir(), ".volt", "sdk", "framework", platform, "src", sourceFile);
-    for (const candidate of [dev, installed]) {
+    const candidates = [
+        // dev mode
+        path.join(__dirname, "..", "framework", platform, "src", sourceFile),
+        // packaged app
+        ...(process.resourcesPath
+            ? [path.join(process.resourcesPath, "sdk", "framework", platform, "src", sourceFile)]
+            : []),
+        // installed SDK
+        path.join(os.homedir(), ".volt", "sdk", "framework", platform, "src", sourceFile),
+    ];
+    for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {
             return { path: candidate, content: fs.readFileSync(candidate, "utf-8") };
         }
@@ -280,9 +283,27 @@ ipcMain.handle("device_source", (_, chip, sourceFile) => {
 });
 
 function getVoltSrc() {
+    // 1. Dev mode — repo layout (volt-ide/../src/volt/...)
     const dev = path.join(__dirname, "..", "src");
     if (fs.existsSync(path.join(dev, "volt", "compiler", "voltc.py"))) return dev;
+    // 2. Packaged app — bundled SDK lives under process.resourcesPath
+    if (process.resourcesPath) {
+        const bundled = path.join(process.resourcesPath, "sdk", "src");
+        if (fs.existsSync(path.join(bundled, "volt", "compiler", "voltc.py"))) return bundled;
+    }
+    // 3. User-installed SDK
     return path.join(os.homedir(), ".volt", "sdk", "src");
+}
+
+function devicesDir() {
+    // dev → repo/devices, packaged → resources/sdk/devices, installed → ~/.volt/sdk/devices
+    const dev = path.join(__dirname, "..", "devices");
+    if (fs.existsSync(dev)) return dev;
+    if (process.resourcesPath) {
+        const bundled = path.join(process.resourcesPath, "sdk", "devices");
+        if (fs.existsSync(bundled)) return bundled;
+    }
+    return path.join(os.homedir(), ".volt", "sdk", "devices");
 }
 
 const VOLT_SRC = getVoltSrc();
