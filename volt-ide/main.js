@@ -5,8 +5,17 @@ const os = require("os");
 
 app.commandLine.appendSwitch("no-sandbox");
 
-const PROJECTS_DIR = path.join(os.homedir(), "Volt");
+const DEFAULT_PROJECTS_DIR = path.join(os.homedir(), "Volt");
 const RECENTS_FILE = path.join(os.homedir(), ".volt", "recent-projects.json");
+
+// Resolves the current projects directory from settings (or falls back).
+function projectsDir() {
+    try {
+        const fromSettings = require("./src/main/settings.js").get("projects.projectsDir");
+        if (fromSettings && fromSettings.trim()) return fromSettings;
+    } catch (_) {}
+    return DEFAULT_PROJECTS_DIR;
+}
 let win = null;
 
 // ---- Recent projects (cross-platform, any directory) ----
@@ -82,9 +91,10 @@ ipcMain.handle("create_project", (_, name, chip) => {
     if (!name || !/^[a-zA-Z0-9_\- ]+$/.test(name)) {
         throw new Error("Invalid project name — use letters, numbers, dashes, underscores only");
     }
-    fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-    const dir = path.join(PROJECTS_DIR, name);
-    if (!dir.startsWith(PROJECTS_DIR)) throw new Error("Invalid project name");
+    const root = projectsDir();
+    fs.mkdirSync(root, { recursive: true });
+    const dir = path.join(root, name);
+    if (!dir.startsWith(root)) throw new Error("Invalid project name");
     if (fs.existsSync(dir)) throw new Error(`Project '${name}' already exists`);
 
     fs.mkdirSync(dir, { recursive: true });
@@ -104,10 +114,11 @@ ipcMain.handle("list_projects", () => {
     const seen = new Set();
     const results = [];
 
-    // 1. Scan ~/Volt/ (default project directory)
-    if (fs.existsSync(PROJECTS_DIR)) {
-        for (const d of fs.readdirSync(PROJECTS_DIR)) {
-            const dir = path.join(PROJECTS_DIR, d);
+    // 1. Scan the configured projects directory (default ~/Volt)
+    const root = projectsDir();
+    if (fs.existsSync(root)) {
+        for (const d of fs.readdirSync(root)) {
+            const dir = path.join(root, d);
             if (!fs.existsSync(path.join(dir, "main.volt"))) continue;
             let chip = "esp32";
             const toml = path.join(dir, "volt.toml");
@@ -195,6 +206,31 @@ ipcMain.handle("browse_folder", async () => {
 // ============================================================
 const { execSync, spawn } = require("child_process");
 const readline = require("readline");
+const settings = require("./src/main/settings.js");
+
+// ============================================================
+// Settings IPC
+// ============================================================
+ipcMain.handle("settings_schema", () => settings.SCHEMA);
+ipcMain.handle("settings_all",    () => settings.all());
+ipcMain.handle("settings_set", (_, key, value) => {
+    const updated = settings.set(key, value);
+    if (win) win.webContents.send("settings:changed", { key, value: updated });
+    return updated;
+});
+ipcMain.handle("settings_reset", () => {
+    const fresh = settings.reset();
+    if (win) win.webContents.send("settings:changed", { key: "*", value: fresh });
+    return fresh;
+});
+ipcMain.handle("settings_open_file", () => {
+    const { shell } = require("electron");
+    const file = settings.file();
+    // Make sure the file exists before opening it
+    if (!fs.existsSync(file)) settings.save();
+    shell.openPath(file);
+    return file;
+});
 
 function getVoltSrc() {
     const dev = path.join(__dirname, "..", "src");
@@ -416,7 +452,8 @@ ipcMain.handle("start_monitor", (_, port, baud) => {
         try { activePort.close(); } catch (_) {}
     }
     try {
-        activePort = new SerialPort({ path: port, baudRate: baud || 115200 });
+        const fallbackBaud = settings.get("serial.defaultBaud") || 115200;
+        activePort = new SerialPort({ path: port, baudRate: baud || fallbackBaud });
         const parser = activePort.pipe(new ReadlineParser());
         parser.on("data", (line) => {
             if (win) win.webContents.send("serial:data", { line });

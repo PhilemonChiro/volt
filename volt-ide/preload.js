@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld("volt", {
     runProject: (projectPath, voltFile, port, chip) =>
         ipcRenderer.invoke("run_project", projectPath, voltFile, port, chip),
 
+    // Settings
+    settingsSchema:    () => ipcRenderer.invoke("settings_schema"),
+    settingsAll:       () => ipcRenderer.invoke("settings_all"),
+    settingsSet:       (key, value) => ipcRenderer.invoke("settings_set", key, value),
+    settingsReset:     () => ipcRenderer.invoke("settings_reset"),
+    settingsOpenFile:  () => ipcRenderer.invoke("settings_open_file"),
+    onSettingsChanged: (callback) =>
+        ipcRenderer.on("settings:changed", (_, data) => callback(data)),
+
     // Events from main process
     onSerial: (callback) => ipcRenderer.on("serial:data", (_, data) => callback(data)),
     onSerialDisconnected: (callback) => ipcRenderer.on("serial:disconnected", (_, port) => callback(port)),

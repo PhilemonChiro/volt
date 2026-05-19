@@ -29,6 +29,7 @@ from volt.compiler.voltc import compile_volt
 from volt.compiler.parser import parse
 from volt.compiler.resolver import resolve
 from volt.compiler.checker import check_types
+from volt.compiler.analyzer import analyze
 from volt.compiler.errors import CompilerErrors
 from volt.compiler.formatter import format_source
 from volt.compiler.ast_nodes import (
@@ -50,16 +51,33 @@ def handle_compile_full(req, emit_progress=None):
 
     c_code, errors = compile_volt(source, filename, progress=emit_progress)
 
-    # Re-parse to extract AST (compile_volt doesn't return the program)
+    # Re-parse to extract AST (compile_volt doesn't return the program).
+    # Each pass is wrapped independently so a failure in (say) analyze
+    # doesn't wipe out the parse result — the side panel still gets
+    # tasks/machines/pins from whatever stage succeeded.
     program = None
+    scope = None
     try:
+        program = parse(source)
+    except Exception:
+        program = None
+
+    if program is not None:
         errs2 = CompilerErrors()
         errs2.set_source(source)
-        program = parse(source)
-        scope = resolve(program, errs2)
-        check_types(program, scope, errs2)
-    except Exception:
-        pass
+        try:
+            scope = resolve(program, errs2)
+        except Exception:
+            scope = None
+        if scope is not None:
+            try:
+                check_types(program, scope, errs2)
+            except Exception:
+                pass
+            try:
+                analyze(program, scope, errs2)
+            except Exception:
+                pass
 
     result = {
         "diagnostics": [{
