@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const toolchain = require("./toolchain");
+const settings = require("./settings");
 
 function frameworkDir(chip) {
     const c = chip.toLowerCase();
@@ -44,12 +45,15 @@ function streamCommand(cmd, stage, emit, envExtra) {
             { re: /-- Build files have been written/i,        label: "Build files written" },
         ];
 
+        const verbose = settings.get("build.verboseBuild") === true;
+
         function processLine(raw) {
             const line = raw.toString().trim();
             if (!line) return;
 
-            // Filter noise
-            if (isBuildNoise(line)) return;
+            // Filter noise unless verbose mode is on
+            if (!verbose && isBuildNoise(line)) return;
+            if (verbose) emit("info", line);
 
             // Parse ninja/make [N/M] progress
             const stepMatch = line.match(/\[(\d+)\/(\d+)\]\s*(.*)/);

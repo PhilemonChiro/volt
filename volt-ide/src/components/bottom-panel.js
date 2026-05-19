@@ -1,9 +1,27 @@
 // Bottom panel — Output (with build progress), Serial Monitor (with ESP-IDF log parsing), Problems
 
+import * as settings from "../services/settings.js";
+
 let activeTab = "output";
-let showTimestamps = false;
+let showTimestamps = settings.get("serial.showTimestamps", true);
+let autoScroll = settings.get("serial.autoScroll", true);
 let monitorPaused = false;
 let buildProgressEl = null;
+
+// Keep our locals in sync when the user changes them in Settings.
+settings.onChange((key, value) => {
+    if (key === "*" || key === "serial.showTimestamps") {
+        showTimestamps = settings.get("serial.showTimestamps", true);
+        document.querySelectorAll(".serial-ts").forEach(el => {
+            el.style.display = showTimestamps ? "" : "none";
+        });
+        const btn = document.getElementById("bpTimestamp");
+        if (btn) btn.classList.toggle("active", showTimestamps);
+    }
+    if (key === "*" || key === "serial.autoScroll") {
+        autoScroll = settings.get("serial.autoScroll", true);
+    }
+});
 
 export function init(container) {
     container.innerHTML = `
@@ -64,14 +82,14 @@ export function init(container) {
         if (activeTab === "output") clearProgress();
     };
 
-    // Timestamp toggle (serial monitor)
+    // Timestamp toggle (serial monitor) — persists via settings; the
+    // onChange handler keeps the local + DOM in sync.
     container.querySelector("#bpTimestamp").onclick = function() {
-        showTimestamps = !showTimestamps;
-        this.classList.toggle("active", showTimestamps);
-        document.querySelectorAll(".serial-ts").forEach(el => {
-            el.style.display = showTimestamps ? "" : "none";
-        });
+        settings.set("serial.showTimestamps", !showTimestamps);
     };
+    // Reflect persisted state on the button when the panel first appears
+    const tsBtn = container.querySelector("#bpTimestamp");
+    if (tsBtn) tsBtn.classList.toggle("active", showTimestamps);
 
     // Pause toggle (serial monitor)
     container.querySelector("#bpPause").onclick = function() {
@@ -119,7 +137,7 @@ export function appendOutput(text, level) {
         `<span>${esc(clean)}</span>`;
 
     output.appendChild(entry);
-    output.scrollTop = output.scrollHeight;
+    if (autoScroll) output.scrollTop = output.scrollHeight;
     while (output.children.length > 2000) output.removeChild(output.firstChild);
 }
 
@@ -225,7 +243,7 @@ export function appendMonitor(text) {
         esc(msg);
 
     output.appendChild(line);
-    output.scrollTop = output.scrollHeight;
+    if (autoScroll) output.scrollTop = output.scrollHeight;
     // Cap at 5000 lines
     while (output.children.length > 5000) output.removeChild(output.firstChild);
 }
