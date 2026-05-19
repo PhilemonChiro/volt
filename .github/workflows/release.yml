@@ -31,7 +31,8 @@ jobs:
         with: { node-version: 20 }
       - name: Install
         working-directory: volt-ide
-        run: npm ci
+        # npm install (not ci) — package-lock.json is gitignored in this repo
+        run: npm install --no-audit --no-fund
       - name: Build
         working-directory: volt-ide
         run: npm run pack:linux
@@ -52,7 +53,8 @@ jobs:
         with: { node-version: 20 }
       - name: Install
         working-directory: volt-ide
-        run: npm ci
+        # npm install (not ci) — package-lock.json is gitignored in this repo
+        run: npm install --no-audit --no-fund
       - name: Build (native Windows — produces NSIS + portable)
         working-directory: volt-ide
         # Use full Windows targets here (NSIS) since Wine is not in the picture.
@@ -74,7 +76,8 @@ jobs:
         with: { node-version: 20 }
       - name: Install
         working-directory: volt-ide
-        run: npm ci
+        # npm install (not ci) — package-lock.json is gitignored in this repo
+        run: npm install --no-audit --no-fund
       - name: Build (arm64 + x64 universal-style DMGs)
         working-directory: volt-ide
         run: npm run pack:mac
