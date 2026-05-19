@@ -11,7 +11,26 @@ import * as deviceSelector from "./components/device-selector.js";
 import * as chipSelector from "./components/chip-selector.js";
 import * as bottomPanel from "./components/bottom-panel.js";
 import * as sidePanel from "./components/side-panel.js";
+import * as settingsDialog from "./components/settings.js";
+import * as settings from "./services/settings.js";
 import { readFile, saveFile } from "./services/projects.js";
+
+// Hydrate the settings cache as early as possible so other components can
+// read get() synchronously by the time they need it.
+settings.init().then(() => {
+    applyBodyClassSettings();
+});
+
+// Settings that map to body-level classes (motion, density, etc.)
+function applyBodyClassSettings() {
+    document.body.classList.toggle(
+        "reduce-motion",
+        !!settings.get("appearance.reduceMotion", false),
+    );
+}
+settings.onChange((key) => {
+    if (key === "*" || key.startsWith("appearance.")) applyBodyClassSettings();
+});
 
 console.log("[volt] app.js loading...");
 
@@ -187,17 +206,18 @@ async function onSave() {
 
 // ---- Wire toolbar ----
 toolbar.init({
-    onNew:     () => wizard.show((path) => loadProject(path)),
-    onOpen:    () => openProject(),
-    onClose:   () => closeProject(),
-    onRun:     () => onRun(),
-    onMonitor: () => onMonitor(),
-    onCheck:   () => onCheck(),
-    onFormat:  () => {
+    onNew:      () => wizard.show((path) => loadProject(path)),
+    onOpen:     () => openProject(),
+    onClose:    () => closeProject(),
+    onRun:      () => onRun(),
+    onMonitor:  () => onMonitor(),
+    onCheck:    () => onCheck(),
+    onFormat:   () => {
         const editors = monaco.editor.getEditors();
         if (editors.length > 0) editors[0].getAction("editor.action.formatDocument")?.run();
     },
-    onSave:    () => onSave(),
+    onSave:     () => onSave(),
+    onSettings: () => settingsDialog.show(),
 });
 
 // ---- Wire welcome ----

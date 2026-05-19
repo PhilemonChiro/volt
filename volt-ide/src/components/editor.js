@@ -1,6 +1,7 @@
 // Editor component — Monaco with Volt syntax highlighting
 
 import * as langFeatures from "./language-features.js";
+import * as settings from "../services/settings.js";
 
 let editor = null;
 let currentFile = null;
@@ -140,27 +141,31 @@ export function init(container, { onContentChange, onCursorChange }) {
     // Register language features (autocomplete, hover, signatures)
     langFeatures.register();
 
+    // Initial Monaco options sourced from settings (with defaults as fallback).
     editor = monaco.editor.create(container, {
         value: "",
         language: "volt",
         theme: "volt-dark",
         fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-        fontSize: 14,
-        lineHeight: 24,
-        fontLigatures: true,
+        fontSize:        settings.get("editor.fontSize", 14),
+        lineHeight:      settings.get("editor.lineHeight", 24),
+        fontLigatures:   settings.get("editor.fontLigatures", true),
+        tabSize:         settings.get("editor.tabSize", 4),
+        renderWhitespace: settings.get("editor.renderWhitespace", "none"),
+        cursorSmoothCaretAnimation:
+            settings.get("editor.smoothCursor", true) ? "on" : "off",
+        bracketPairColorization: {
+            enabled: settings.get("editor.bracketPairs", true),
+        },
         automaticLayout: true,
         minimap: { enabled: false },
         padding: { top: 12, bottom: 12 },
         scrollBeyondLastLine: false,
-        renderWhitespace: "none",
-        tabSize: 4,
         cursorBlinking: "smooth",
-        cursorSmoothCaretAnimation: "on",
         smoothScrolling: true,
         roundedSelection: true,
         renderLineHighlight: "all",
         renderLineHighlightOnlyWhenFocus: true,
-        bracketPairColorization: { enabled: true },
         guides: {
             bracketPairs: false,
             indentation: true,
@@ -171,6 +176,26 @@ export function init(container, { onContentChange, onCursorChange }) {
             horizontalScrollbarSize: 10,
             useShadows: false,
         },
+    });
+
+    // Apply live setting changes that Monaco supports without re-creating.
+    settings.onChange((key, value) => {
+        if (!editor) return;
+        if (key === "*" || key.startsWith("editor.")) {
+            const v = (k, d) => settings.get(k, d);
+            editor.updateOptions({
+                fontSize:        v("editor.fontSize", 14),
+                lineHeight:      v("editor.lineHeight", 24),
+                fontLigatures:   v("editor.fontLigatures", true),
+                renderWhitespace: v("editor.renderWhitespace", "none"),
+                cursorSmoothCaretAnimation:
+                    v("editor.smoothCursor", true) ? "on" : "off",
+                bracketPairColorization: { enabled: v("editor.bracketPairs", true) },
+            });
+            // tabSize lives on the model, not the editor
+            const model = editor.getModel();
+            if (model) model.updateOptions({ tabSize: v("editor.tabSize", 4) });
+        }
     });
 
     // Content change → diagnostics path (which also updates the side panels via

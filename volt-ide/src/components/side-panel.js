@@ -107,7 +107,7 @@ function relayoutEditorThroughTransition() {
 
 // Called when compiler produces new AST data
 export function update(ast) {
-    if (!ast) return;  // Skip null/undefined AST (e.g. compile failed)
+    if (!ast) return;
     lastAST = ast;
     if (activePanel) render(ast);
 }
@@ -253,6 +253,7 @@ function renderTasks(ast) {
         html += "</div>";
     }
 
+    el.innerHTML = html;
     bindLineClicks(el);
 }
 
