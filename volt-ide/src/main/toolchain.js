@@ -362,7 +362,7 @@ function espIdfPath(chip) {
     return path.join(TOOLCHAINS_DIR, "esp-idf");
 }
 
-function ensureEspIdf(chip, legacy) {
+async function ensureEspIdf(chip, legacy) {
     const emit = makeEmit(legacy);
     const log = emit.log;
     ensureDir(TOOLCHAINS_DIR);
@@ -379,21 +379,9 @@ function ensureEspIdf(chip, legacy) {
     if (process.platform === "linux") {
         run("sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 2>&1", log);
     } else if (process.platform === "darwin") {
-        // ensureCmakeNinja is async but our runner is sync. Use a tiny event
-        // loop drain to wait for it before continuing.
-        let cnDone = false, cnOk = false;
-        ensureCmakeNinja(emit).then(ok => { cnOk = ok; cnDone = true; });
-        const start = Date.now();
-        // Synchronously wait for cmake+ninja download (timeout 5 min)
-        const deasync = (ms) => {
-            const end = Date.now() + ms;
-            while (!cnDone && Date.now() < end) {
-                try { execSync("sleep 0.1", { stdio: "ignore" }); } catch (_) {}
-            }
-        };
-        deasync(300000);
-        if (!cnDone || !cnOk) {
-            emit.stageError("deps", "cmake/ninja install failed or timed out");
+        const ok = await ensureCmakeNinja(emit);
+        if (!ok) {
+            emit.stageError("deps", "cmake/ninja install failed");
             return false;
         }
     }
@@ -458,7 +446,7 @@ function ensureEspIdf(chip, legacy) {
 // Public API
 // ================================================================
 
-function ensureToolchain(chip, legacy) {
+async function ensureToolchain(chip, legacy) {
     const emit = makeEmit(legacy);
     const log = emit.log;
     const c = chip.toLowerCase();
@@ -466,7 +454,7 @@ function ensureToolchain(chip, legacy) {
         return ensureRP2040(emit);
     }
     if (c.includes("8266") || c.includes("esp32") || c.includes("esp")) {
-        return ensureEspIdf(c, emit);
+        return await ensureEspIdf(c, emit);
     }
     if (c.includes("stm32")) {
         emit.stage("check"); emit.stageDone("check");
