@@ -34,32 +34,32 @@ const MANIFEST = {
     "arm-gnu-toolchain-13.2-darwin-arm64": {
         upstream: "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-darwin-arm64-arm-none-eabi.tar.xz",
         mirror:   `${MIRROR_BASE}/arm-gnu-toolchain-13.2-darwin-arm64.tar.xz`,
-        sha256:   null,
-        sizeBytes: null,
+        sha256:   "39c44f8af42695b7b871df42e346c09fee670ea8dfc11f17083e296ea2b0d279",
+        sizeBytes: 129557320,
     },
     "arm-gnu-toolchain-13.2-darwin-x86_64": {
         upstream: "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-darwin-x86_64-arm-none-eabi.tar.xz",
         mirror:   `${MIRROR_BASE}/arm-gnu-toolchain-13.2-darwin-x86_64.tar.xz`,
-        sha256:   null,
-        sizeBytes: null,
+        sha256:   "075faa4f3e8eb45e59144858202351a28706f54a6ec17eedd88c9fb9412372cc",
+        sizeBytes: 139345848,
     },
     "arm-gnu-toolchain-13.2-linux-x64": {
         upstream: "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi.tar.xz",
         mirror:   `${MIRROR_BASE}/arm-gnu-toolchain-13.2-linux-x64.tar.xz`,
-        sha256:   null,
-        sizeBytes: null,
+        sha256:   "6cd1bbc1d9ae57312bcd169ae283153a9572bd6a8e4eeae2fedfbc33b115fdbb",
+        sizeBytes: 179347712,
     },
     "cmake-3.30.5-macos-universal": {
         upstream: "https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5-macos-universal.tar.gz",
         mirror:   `${MIRROR_BASE}/cmake-3.30.5-macos-universal.tar.gz`,
-        sha256:   null,
-        sizeBytes: null,
+        sha256:   "3d603e507c7579b13518ef752b4ffcf3ed479fba80ee171d7d85da8153e869d0",
+        sizeBytes: 76493076,
     },
     "ninja-1.12.1-mac": {
         upstream: "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip",
         mirror:   `${MIRROR_BASE}/ninja-1.12.1-mac.zip`,
-        sha256:   null,
-        sizeBytes: null,
+        sha256:   "89a287444b5b3e98f88a945afa50ce937b8ffd1dcc59c555ad9b1baf855298c9",
+        sizeBytes: 281130,
     },
 };
 
