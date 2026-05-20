@@ -540,14 +540,24 @@ function pinTooltip(p) {
 }
 
 // ============================================================
-// Pan + zoom (unchanged from v2.0.27 — wheel anchored, drag to pan)
+// Pan + zoom (wheel anchored, drag to pan).
+// Zoom/pan state persists across re-renders so an edit doesn't reset
+// the user's view — they can stay zoomed into a region of the board
+// while they type.
 // ============================================================
+let _zoomState = { scale: 1, tx: 0, ty: 0 };  // module-scoped, survives renders
+let _zoomListenersBound = false;
+
 function attachZoomPan(svg) {
     const container = document.getElementById("pinoutCanvas");
     const host = document.getElementById("pinoutSvgHost");
-    _vp = { svg, container, host, scale: 1, tx: 0, ty: 0 };
-    container.addEventListener("wheel", onWheel, { passive: false });
-    container.addEventListener("pointerdown", onPointerDown);
+    // Reuse the persisted scale/pan rather than resetting on each render
+    _vp = { svg, container, host, ..._zoomState };
+    if (!_zoomListenersBound) {
+        container.addEventListener("wheel", onWheel, { passive: false });
+        container.addEventListener("pointerdown", onPointerDown);
+        _zoomListenersBound = true;
+    }
     apply();
 }
 function onWheel(e) {
@@ -603,6 +613,10 @@ function resetView() {
 function apply() {
     if (!_vp) return;
     _vp.host.style.transform = `translate(${_vp.tx}px, ${_vp.ty}px) scale(${_vp.scale})`;
+    // Persist so the next render (after an edit) picks the same view back up
+    _zoomState.scale = _vp.scale;
+    _zoomState.tx    = _vp.tx;
+    _zoomState.ty    = _vp.ty;
 }
 
 function escapeHtml(s) {
