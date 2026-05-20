@@ -1,6 +1,6 @@
 {
   "name": "volt-ide",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "description": "Volt IDE — embedded development that reads like English",
   "main": "main.js",
   "homepage": "https://github.com/pchiro/volt",
@@ -16,6 +16,7 @@
     "stage:sdk":      "node scripts/stage-sdk.js",
     "build:icons":    "node scripts/build-icons.js",
     "bundle:python":  "node scripts/bundle-python.js",
+    "publish:toolchains": "node scripts/publish-toolchains.js",
     "prepack":        "npm run stage:sdk && npm run build:icons",
     "pack:linux":     "npm run prepack && npm run bundle:python && electron-builder --linux",
     "pack:win":       "npm run prepack && npm run bundle:python && electron-builder --win",

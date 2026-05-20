@@ -5,7 +5,7 @@ const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const https = require("https");
+const mirror = require("./toolchain-mirror");
 
 const TOOLCHAINS_DIR = path.join(os.homedir(), ".volt", "toolchains");
 
@@ -57,27 +57,6 @@ function buildPathPrefix() {
     return parts.join(path.delimiter);
 }
 
-// Download a URL to dest with redirect-following. Promise-based.
-function downloadFile(url, dest) {
-    return new Promise((resolve, reject) => {
-        const out = fs.createWriteStream(dest);
-        function get(u, hops) {
-            if (hops > 5) return reject(new Error("too many redirects"));
-            https.get(u, (res) => {
-                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    res.resume();
-                    return get(new URL(res.headers.location, u).href, hops + 1);
-                }
-                if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode} for ${u}`));
-                res.pipe(out);
-                out.on("finish", () => out.close(() => resolve()));
-                out.on("error", reject);
-            }).on("error", reject);
-        }
-        get(url, 0);
-    });
-}
-
 // Ensure portable cmake + ninja are installed under TOOLCHAINS_DIR.
 // macOS only — Linux uses apt (handled separately), Windows uses Espressif's
 // installer that bundles its own.
@@ -88,12 +67,14 @@ async function ensureArmGcc(emit) {
     if (process.platform !== "darwin") return true;
     if (armGccBin()) { emit.log("ARM GCC already present"); return true; }
     ensureDir(TOOLCHAINS_DIR);
-    const arch = process.arch === "arm64" ? "darwin-arm64" : "darwin-x86_64";
-    const url = `https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-${arch}-arm-none-eabi.tar.xz`;
+    const key = process.arch === "arm64"
+        ? "arm-gnu-toolchain-13.2-darwin-arm64"
+        : "arm-gnu-toolchain-13.2-darwin-x86_64";
     const tmp = path.join(TOOLCHAINS_DIR, "_arm-gnu.tar.xz");
-    emit.log(`Downloading ARM GCC 13.2 (≈280 MB) for ${arch} ...`);
+    emit.log(`Fetching ARM GCC 13.2 (~280 MB)…`);
+    const ok = await mirror.downloadAsset(key, tmp, emit, mirror.getPreference());
+    if (!ok) { emit.log("ERROR: ARM GCC download failed from all sources"); return false; }
     try {
-        await downloadFile(url, tmp);
         const out = path.join(TOOLCHAINS_DIR, "arm-gnu-toolchain");
         fs.mkdirSync(out, { recursive: true });
         execSync(`tar -xJf "${tmp}" -C "${out}" --strip-components=1`, { stdio: "pipe" });
@@ -101,7 +82,8 @@ async function ensureArmGcc(emit) {
         emit.log("ARM GCC installed");
         return true;
     } catch (e) {
-        emit.log(`ERROR: ARM GCC download failed: ${e.message}`);
+        emit.log(`ERROR: ARM GCC extract failed: ${e.message}`);
+        try { fs.unlinkSync(tmp); } catch (_) {}
         return false;
     }
 }
@@ -112,18 +94,19 @@ async function ensureCmakeNinja(emit) {
     const arch = process.arch === "arm64" ? "arm64" : "x86_64";
 
     if (!cmakeBin()) {
-        emit.log("Downloading cmake (≈70 MB) ...");
-        const url = `https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5-macos-universal.tar.gz`;
+        emit.log("Fetching cmake (~70 MB)…");
         const tmp = path.join(TOOLCHAINS_DIR, "_cmake.tar.gz");
+        const ok = await mirror.downloadAsset("cmake-3.30.5-macos-universal", tmp, emit, mirror.getPreference());
+        if (!ok) { emit.log("ERROR: cmake download failed from all sources"); return false; }
         try {
-            await downloadFile(url, tmp);
             const out = path.join(TOOLCHAINS_DIR, "cmake");
             fs.mkdirSync(out, { recursive: true });
             execSync(`tar -xzf "${tmp}" -C "${out}" --strip-components=1`, { stdio: "pipe" });
             fs.unlinkSync(tmp);
             emit.log("cmake installed");
         } catch (e) {
-            emit.log(`ERROR: cmake download failed: ${e.message}`);
+            emit.log(`ERROR: cmake extract failed: ${e.message}`);
+            try { fs.unlinkSync(tmp); } catch (_) {}
             return false;
         }
     } else {
@@ -131,18 +114,19 @@ async function ensureCmakeNinja(emit) {
     }
 
     if (!ninjaBin()) {
-        emit.log("Downloading ninja ...");
-        const url = `https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip`;
+        emit.log("Fetching ninja…");
         const tmp = path.join(TOOLCHAINS_DIR, "_ninja.zip");
+        const ok = await mirror.downloadAsset("ninja-1.12.1-mac", tmp, emit, mirror.getPreference());
+        if (!ok) { emit.log("ERROR: ninja download failed from all sources"); return false; }
         try {
-            await downloadFile(url, tmp);
             const out = path.join(TOOLCHAINS_DIR, "ninja");
             fs.mkdirSync(out, { recursive: true });
             execSync(`unzip -o "${tmp}" -d "${out}" >/dev/null && chmod +x "${out}/ninja"`, { stdio: "pipe" });
             fs.unlinkSync(tmp);
             emit.log("ninja installed");
         } catch (e) {
-            emit.log(`ERROR: ninja download failed: ${e.message}`);
+            emit.log(`ERROR: ninja extract failed: ${e.message}`);
+            try { fs.unlinkSync(tmp); } catch (_) {}
             return false;
         }
     } else {

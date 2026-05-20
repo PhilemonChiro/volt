@@ -58,6 +58,14 @@ const SCHEMA = {
                               label: "ESP-IDF path", hint: "Empty = auto-detect (~/esp/esp-idf or $IDF_PATH)." },
             picoSdkPath:    { type: "path",   default: "",
                               label: "Pico SDK path", hint: "Empty = auto-detect (~/pico/pico-sdk or $PICO_SDK_PATH)." },
+            toolchainSource:{ type: "enum",   default: "auto",
+                              options: [
+                                  {value: "auto",     label: "Auto (Volt mirror, fall back to upstream)"},
+                                  {value: "mirror",   label: "Volt mirror only"},
+                                  {value: "upstream", label: "Upstream only (Arm.com, Kitware, …)"},
+                              ],
+                              label: "Toolchain download source",
+                              hint: "Mirror = pinned, controlled versions from the Volt GitHub release. Upstream = official vendor sites." },
         },
     },
     serial: {
