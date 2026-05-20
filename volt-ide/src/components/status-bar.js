@@ -14,3 +14,8 @@ export function setBuild(text) {
     const el = document.getElementById("statusLine");
     if (el) el.textContent = text;
 }
+
+export function setVersion(v) {
+    const el = document.getElementById("statusVersion");
+    if (el && v) el.textContent = `v${v}`;
+}

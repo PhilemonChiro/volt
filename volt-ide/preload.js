@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("volt", {
     ready: true,
 
+    // App metadata
+    getVersion: () => ipcRenderer.invoke("app_version"),
+
     // Window controls
     minimize: () => ipcRenderer.invoke("win_minimize"),
     maximize: () => ipcRenderer.invoke("win_maximize"),
