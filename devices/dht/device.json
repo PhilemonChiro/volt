@@ -17,5 +17,53 @@
       "params": [],
       "description": "Humidity %"
     }
-  }
+  },
+  "manufacturer": "Aosong",
+  "datasheet": "https://www.mouser.com/datasheet/2/758/DHT11-Technical-Data-Sheet-Translated-Version-1143054.pdf",
+  "specs": {
+    "voltage": "3.3V \u2013 5.5V",
+    "current": "0.3 mA measuring, 60 \u03bcA standby",
+    "temp": "0\u00b0C to +50\u00b0C \u00b12\u00b0C",
+    "humidity": "20 \u2013 80% RH \u00b15%",
+    "sample_rate": "Once per second (max)"
+  },
+  "wiring": {
+    "pins": [
+      {
+        "label": "VCC",
+        "type": "power",
+        "note": "3.3V or 5V"
+      },
+      {
+        "label": "DATA",
+        "type": "data",
+        "note": "Pull-up 4.7k\u03a9\u201310k\u03a9 to VCC"
+      },
+      {
+        "label": "NC",
+        "type": "data",
+        "note": "Not connected on 3-pin modules; tie to GND on bare-chip 4-pin"
+      },
+      {
+        "label": "GND",
+        "type": "ground",
+        "note": ""
+      }
+    ]
+  },
+  "tips": [
+    "DHT11 is the cheap variant \u2014 wide tolerance, integer resolution.",
+    "Single-wire protocol is timing-critical; can be unreliable on FreeRTOS without disabling interrupts during read.",
+    "If you need accuracy, use DHT22 instead."
+  ],
+  "alternatives": [
+    {
+      "name": "DHT22",
+      "note": "Same sensor family, \u00b10.5\u00b0C / \u00b12% RH \u2014 usually worth the small price difference."
+    },
+    {
+      "name": "AHT20",
+      "note": "I\u00b2C, smaller, more accurate, cheaper \u2014 recommended for new designs."
+    }
+  ]
 }

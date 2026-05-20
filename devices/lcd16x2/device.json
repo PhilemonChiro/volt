@@ -7,9 +7,96 @@
   "c_prefix": "hd44780",
   "c_source": "",
   "methods": {
-    "clear":      { "returns": "void", "params": [], "description": "Clear the display" },
-    "print":      { "returns": "void", "params": [{"name":"text","type":"string"}], "description": "Print text at cursor" },
-    "set_cursor": { "returns": "void", "params": [{"name":"col","type":"int"},{"name":"row","type":"int"}], "description": "Move cursor (col 0-15, row 0-1)" },
-    "backlight":  { "returns": "void", "params": [{"name":"on","type":"int"}], "description": "Toggle backlight on/off" }
-  }
+    "clear": {
+      "returns": "void",
+      "params": [],
+      "description": "Clear the display"
+    },
+    "print": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "description": "Print text at cursor"
+    },
+    "set_cursor": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "col",
+          "type": "int"
+        },
+        {
+          "name": "row",
+          "type": "int"
+        }
+      ],
+      "description": "Move cursor (col 0-15, row 0-1)"
+    },
+    "backlight": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "on",
+          "type": "int"
+        }
+      ],
+      "description": "Toggle backlight on/off"
+    }
+  },
+  "manufacturer": "Generic (HD44780 + PCF8574 backpack)",
+  "datasheet": "https://www.sparkfun.com/datasheets/LCD/HD44780.pdf",
+  "specs": {
+    "voltage": "5V (logic and backlight)",
+    "current": "1.5 mA + ~20 mA backlight",
+    "characters": "16 columns \u00d7 2 rows",
+    "interface_speed": "I\u00b2C up to 100 kHz (backpack)"
+  },
+  "wiring": {
+    "pins": [
+      {
+        "label": "VCC",
+        "type": "power",
+        "note": "3.3V or 5V"
+      },
+      {
+        "label": "GND",
+        "type": "ground",
+        "note": ""
+      },
+      {
+        "label": "SDA",
+        "type": "data",
+        "note": "Pull-up to VCC (often on breakout board)"
+      },
+      {
+        "label": "SCL",
+        "type": "clock",
+        "note": "Pull-up to VCC"
+      },
+      {
+        "label": "Backlight jumper",
+        "type": "power",
+        "note": "Pull to disable backlight"
+      }
+    ]
+  },
+  "tips": [
+    "Address is usually 0x27 or 0x3F depending on backpack vendor \u2014 scan the bus if unsure.",
+    "Adjust the contrast pot on the backpack until characters are clearly visible.",
+    "Backlight current is significant (~20 mA) \u2014 disable when you don't need it for battery projects."
+  ],
+  "alternatives": [
+    {
+      "name": "LCD20x4",
+      "note": "Same chip, more characters."
+    },
+    {
+      "name": "SSD1306",
+      "note": "128\u00d764 OLED if you need graphics or sharper text."
+    }
+  ]
 }

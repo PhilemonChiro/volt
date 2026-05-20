@@ -36,5 +36,62 @@
       ],
       "description": "Set one pin"
     }
-  }
+  },
+  "manufacturer": "Texas Instruments / NXP",
+  "datasheet": "https://www.ti.com/lit/ds/symlink/pcf8574.pdf",
+  "specs": {
+    "voltage": "2.5V \u2013 6.0V",
+    "current": "10 \u03bcA standby",
+    "io_pins": "8 quasi-bidirectional",
+    "interface_speed": "I\u00b2C up to 100 kHz"
+  },
+  "wiring": {
+    "pins": [
+      {
+        "label": "VCC",
+        "type": "power",
+        "note": "3.3V or 5V"
+      },
+      {
+        "label": "GND",
+        "type": "ground",
+        "note": ""
+      },
+      {
+        "label": "SDA",
+        "type": "data",
+        "note": "Pull-up to VCC (often on breakout board)"
+      },
+      {
+        "label": "SCL",
+        "type": "clock",
+        "note": "Pull-up to VCC"
+      },
+      {
+        "label": "A0..A2",
+        "type": "data",
+        "note": "Address select (8 unique addresses 0x20 \u2013 0x27)"
+      },
+      {
+        "label": "INT",
+        "type": "data",
+        "note": "Falls on any input change \u2014 wake-on-press for buttons"
+      }
+    ]
+  },
+  "tips": [
+    "Quasi-bidirectional pins: weak high-side pull-up, strong low-side drive. To use as input, write 1 first then read.",
+    "Total of 8 chips on one bus \u2192 64 GPIO over two MCU pins.",
+    "Most LCD I\u00b2C backpacks are PCF8574 underneath."
+  ],
+  "alternatives": [
+    {
+      "name": "MCP23017",
+      "note": "16 pins, true push-pull outputs, faster (1.7 MHz)."
+    },
+    {
+      "name": "PCF8575",
+      "note": "16-bit version of the same chip."
+    }
+  ]
 }

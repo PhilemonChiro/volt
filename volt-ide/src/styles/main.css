@@ -2491,6 +2491,110 @@ kbd {
 }
 .device-detail-close:hover { color: var(--t1); background: var(--bg-3); }
 
+/* Byline — manufacturer + datasheet link sit just below the title */
+.device-byline {
+    display: flex;
+    gap: var(--s-2);
+    align-items: center;
+    color: var(--t3);
+    font-size: var(--fs-11);
+    letter-spacing: var(--tracking-snug);
+    margin-bottom: var(--s-2);
+}
+.device-byline-link {
+    color: var(--volt);
+    text-decoration: none;
+    cursor: pointer;
+}
+.device-byline-link:hover { text-decoration: underline; }
+
+/* Spec grid: key/value pairs, two columns */
+.device-specs {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: var(--s-4);
+    row-gap: var(--s-1);
+    margin: 0 0 var(--s-3) 0;
+}
+.device-specs dt {
+    color: var(--t3);
+    font-size: var(--fs-11);
+    font-variant-numeric: tabular-nums;
+}
+.device-specs dd {
+    margin: 0;
+    color: var(--t2);
+    font-size: var(--fs-12);
+    font-family: var(--mono);
+}
+
+/* Wiring — colored chip per pin type */
+.device-wiring {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--s-3) 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+}
+.device-wire {
+    display: grid;
+    grid-template-columns: 80px 80px 1fr;
+    gap: var(--s-3);
+    align-items: center;
+    font-size: var(--fs-12);
+}
+.device-wire-pin {
+    font-family: var(--mono);
+    color: var(--t1);
+    font-weight: 600;
+}
+.device-wire-type {
+    font-size: var(--fs-10);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--t3);
+}
+.device-wire-power  .device-wire-type { color: #ef4444; }
+.device-wire-ground .device-wire-type { color: var(--t3); }
+.device-wire-data   .device-wire-type { color: var(--volt); }
+.device-wire-clock  .device-wire-type { color: #f59e0b; }
+.device-wire-note   { color: var(--t3); font-size: var(--fs-11); }
+
+/* Tips — bullet list with a small marker */
+.device-tips, .device-alts {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--s-3) 0;
+}
+.device-tips li, .device-alts li {
+    position: relative;
+    padding-left: var(--s-4);
+    color: var(--t2);
+    font-size: var(--fs-12);
+    line-height: var(--lh-base);
+    margin-bottom: var(--s-1);
+}
+.device-tips li::before, .device-alts li::before {
+    content: "•";
+    position: absolute;
+    left: 4px;
+    color: var(--volt);
+}
+.device-alt-name {
+    font-family: var(--mono);
+    color: var(--t1);
+    font-weight: 600;
+}
+
+/* Examples — each example has a small title above its code */
+.device-example { margin-bottom: var(--s-3); }
+.device-example-title {
+    font-size: var(--fs-11);
+    color: var(--t3);
+    margin-bottom: var(--s-1);
+}
+
 .device-detail-body {
     padding: var(--s-4) var(--s-5);
     overflow-y: auto;

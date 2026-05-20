@@ -671,6 +671,21 @@ function addDevice(device, { withSample }) {
 
 // ============================================================
 // Detail dialog — read-only, reached via "View details…"
+//
+// Renders a rich view of the device. Sections appear only when the
+// underlying field exists in device.json, so backfilling metadata in
+// any device.json improves its detail page with no code changes.
+//
+// Schema (all optional except name/methods):
+//   manufacturer  string
+//   datasheet     URL string
+//   description   string
+//   specs         { voltage, current, range, accuracy, sample_rate, ... }
+//   wiring        { pins: [{ label, type: "power|ground|data|clock|...", note }] }
+//   tips          string[]    bullet points for pitfalls / good-to-know
+//   examples      [{ title, code }]
+//   alternatives  [{ name, note }]
+//   methods       { name: { returns, params: [{name, type}], description } }
 // ============================================================
 function openDetailDialog(device) {
     const existing = document.getElementById("deviceDetailOverlay");
@@ -684,6 +699,32 @@ function openDetailDialog(device) {
     const ifaceText = iface === "I2C" ? "I²C" : iface;
     const addr = device.default_address || "";
 
+    // ----- Specs grid (flat key/value pairs from device.specs) -----
+    const specs = device.specs || {};
+    const specsHtml = Object.keys(specs).length
+        ? `<dl class="device-specs">
+             ${Object.entries(specs).map(([k, v]) => `
+                 <dt>${esc(prettifySpec(k))}</dt>
+                 <dd>${esc(String(v))}</dd>
+             `).join("")}
+           </dl>`
+        : "";
+
+    // ----- Wiring pin list -----
+    const wiringPins = (device.wiring && device.wiring.pins) || [];
+    const wiringHtml = wiringPins.length
+        ? `<ul class="device-wiring">
+             ${wiringPins.map(p => `
+                 <li class="device-wire device-wire-${esc(p.type || "data")}">
+                     <span class="device-wire-pin">${esc(p.label || "")}</span>
+                     <span class="device-wire-type">${esc(p.type || "")}</span>
+                     ${p.note ? `<span class="device-wire-note">${esc(p.note)}</span>` : ""}
+                 </li>
+             `).join("")}
+           </ul>`
+        : "";
+
+    // ----- Methods table -----
     const methods = device.methods || {};
     const methodsHtml = Object.keys(methods).length
         ? `<table class="device-methods">
@@ -696,6 +737,43 @@ function openDetailDialog(device) {
              `).join("")}
            </table>`
         : `<div class="device-methods-empty">No documented methods.</div>`;
+
+    // ----- Tips / pitfalls -----
+    const tips = device.tips || [];
+    const tipsHtml = tips.length
+        ? `<ul class="device-tips">
+             ${tips.map(t => `<li>${esc(t)}</li>`).join("")}
+           </ul>`
+        : "";
+
+    // ----- Examples (rich code samples with titles) -----
+    let examples = device.examples;
+    if (!Array.isArray(examples) || examples.length === 0) {
+        // Fall back to the auto-generated snippet so users always see one example
+        examples = [{ title: "Quick example", code: buildSnippet(device) }];
+    }
+    const examplesHtml = examples.map(ex => `
+        <div class="device-example">
+            <div class="device-example-title">${esc(ex.title || "Example")}</div>
+            <pre class="device-detail-snippet"><code>${esc(ex.code || "")}</code></pre>
+        </div>
+    `).join("");
+
+    // ----- Alternatives -----
+    const alts = device.alternatives || [];
+    const altsHtml = alts.length
+        ? `<ul class="device-alts">
+             ${alts.map(a => `
+                 <li><span class="device-alt-name">${esc(a.name || "")}</span>${a.note ? ` — ${esc(a.note)}` : ""}</li>
+             `).join("")}
+           </ul>`
+        : "";
+
+    // ----- Header byline (manufacturer + datasheet link) -----
+    const byline = [];
+    if (device.manufacturer) byline.push(`<span class="device-byline-mfr">${esc(device.manufacturer)}</span>`);
+    if (device.datasheet)    byline.push(`<a class="device-byline-link" href="#" data-href="${esc(device.datasheet)}">Datasheet ↗</a>`);
+    const bylineHtml = byline.length ? `<div class="device-byline">${byline.join(" · ")}</div>` : "";
 
     overlay.innerHTML = `
         <div class="device-detail-dialog">
@@ -710,17 +788,34 @@ function openDetailDialog(device) {
                 <button class="device-detail-close" id="deviceDetailClose" aria-label="Close">&times;</button>
             </div>
             <div class="device-detail-body">
+                ${bylineHtml}
                 ${device.description ? `<p class="device-detail-desc">${esc(device.description)}</p>` : ""}
+
+                ${specsHtml ? `<div class="device-detail-section-title">Specs</div>${specsHtml}` : ""}
+                ${wiringHtml ? `<div class="device-detail-section-title">Wiring</div>${wiringHtml}` : ""}
 
                 <div class="device-detail-section-title">Methods</div>
                 ${methodsHtml}
 
-                <div class="device-detail-section-title">Example</div>
-                <pre class="device-detail-snippet"><code>${esc(buildSnippet(device))}</code></pre>
+                <div class="device-detail-section-title">Examples</div>
+                ${examplesHtml}
+
+                ${tipsHtml ? `<div class="device-detail-section-title">Tips & gotchas</div>${tipsHtml}` : ""}
+                ${altsHtml ? `<div class="device-detail-section-title">Alternatives</div>${altsHtml}` : ""}
             </div>
         </div>
     `;
     document.body.appendChild(overlay);
+
+    // Datasheet links open in the user's external browser (not inside Electron)
+    overlay.querySelectorAll(".device-byline-link[data-href]").forEach(a => {
+        a.onclick = (e) => {
+            e.preventDefault();
+            const url = a.getAttribute("data-href");
+            if (url && window.volt && window.volt.openExternal) window.volt.openExternal(url);
+            else if (url) window.open(url, "_blank");
+        };
+    });
 
     const close = () => {
         overlay.classList.add("is-closing");
@@ -731,6 +826,11 @@ function openDetailDialog(device) {
     document.addEventListener("keydown", function esc(e) {
         if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
     });
+}
+
+function prettifySpec(key) {
+    // operating_temp → "Operating temp"; "voltage" → "Voltage"
+    return String(key).replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // ============================================================

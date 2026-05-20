@@ -264,6 +264,17 @@ ipcMain.handle("settings_open_file", () => {
     return file;
 });
 
+// Open arbitrary URL in the user's external default browser. Used by the
+// device-library detail dialog for datasheet links.
+ipcMain.handle("open_external", (_, url) => {
+    const { shell } = require("electron");
+    if (typeof url !== "string") return false;
+    // Allow only http(s) — never file:// or arbitrary schemes
+    if (!/^https?:\/\//i.test(url)) return false;
+    shell.openExternal(url);
+    return true;
+});
+
 // ============================================================
 // Device library — reads the JSON catalog in <repo>/devices/*/*.json
 // (devicesDir() defined above, near getVoltSrc())

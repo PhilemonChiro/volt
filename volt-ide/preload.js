@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld("volt", {
 
     // Device library
     devicesList:   () => ipcRenderer.invoke("devices_list"),
+    openExternal:  (url) => ipcRenderer.invoke("open_external", url),
     deviceSource:  (chip, sourceFile) => ipcRenderer.invoke("device_source", chip, sourceFile),
 
     // Events from main process
