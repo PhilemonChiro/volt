@@ -218,7 +218,10 @@ export async function render(chip, assignedPins, hardware) {
         _skeleton.refs[gpio] = {
             g,
             varLabel: g.querySelector(".bp-var-label"),
-            devLabel: g.querySelector(".bp-dev-label"),
+            devList:  g.querySelector(".bp-dev-list"),
+            varX:     parseFloat(g.getAttribute("data-varx") || "0"),
+            varY:     parseFloat(g.getAttribute("data-vary") || "0"),
+            anchor:   g.getAttribute("data-anchor") || "start",
         };
     });
 
@@ -263,25 +266,79 @@ function applyAssignments() {
             refs.varLabel.setAttribute("data-line", a && a.line ? a.line : 0);
         }
 
-        // Devices label (only on the primary lane of a bus)
-        let devicesText = "";
+        // Device list (only on the primary lane of a bus). One row per
+        // device, stacked vertically below the role label, showing name +
+        // type. Clear and easy to scan when multiple devices share a bus.
+        let devices = [];
         if (a && kind === "bus" && _state.hardware && _state.hardware.devices) {
             const bus = (_state.hardware.buses || []).find(b => b.name === a.name);
             if (bus) {
                 const firstRole = Object.keys(bus.roles || {})[0];
                 if (firstRole === a.role) {
-                    devicesText = _state.hardware.devices
-                        .filter(d => d.bus === a.name)
-                        .map(d => d.name)
-                        .join(" · ");
+                    devices = _state.hardware.devices.filter(d => d.bus === a.name);
                 }
             }
         }
-        if (refs.devLabel) {
-            refs.devLabel.style.display = devicesText ? "" : "none";
-            if (refs.devLabel.textContent !== devicesText) refs.devLabel.textContent = devicesText;
-        }
+        if (refs.devList) updateDevList(refs, devices);
     }
+}
+
+// Build/update the per-pin device list. Each device becomes one <g>:
+//   <text> with the device name (bus-accent) followed by a dimmer
+//   <tspan> with the type. Rows stack at 12px pitch under the var label.
+function updateDevList(refs, devices) {
+    const list = refs.devList;
+    if (!list) return;
+    if (!devices.length) {
+        list.style.display = "none";
+        // Avoid keeping stale children — clear if any
+        while (list.firstChild) list.removeChild(list.firstChild);
+        return;
+    }
+    list.style.display = "";
+
+    // Diff-and-rewrite: if device names+types match in order, keep DOM
+    // intact to avoid flicker; otherwise rebuild.
+    const want = devices.map(d => `${d.name}|${d.type}|${d.address || ""}|${d.line || 0}`).join(";");
+    if (list.getAttribute("data-snap") === want) return;
+    list.setAttribute("data-snap", want);
+
+    while (list.firstChild) list.removeChild(list.firstChild);
+    const xmlns = "http://www.w3.org/2000/svg";
+    const baseY = refs.varY + 12;
+    devices.forEach((d, i) => {
+        const y = baseY + i * 12;
+        const t = document.createElementNS(xmlns, "text");
+        t.setAttribute("x", String(refs.varX));
+        t.setAttribute("y", String(y));
+        t.setAttribute("text-anchor", refs.anchor);
+        t.setAttribute("class", "bp-dev-item");
+        t.setAttribute("data-line", String(d.line || 0));
+        t.setAttribute("data-name", d.name);
+        // Name in bus accent; type in dimmer tspan with a separator dot
+        const name = document.createElementNS(xmlns, "tspan");
+        name.setAttribute("class", "bp-dev-name");
+        name.textContent = d.name;
+        const sep = document.createElementNS(xmlns, "tspan");
+        sep.setAttribute("class", "bp-dev-sep");
+        sep.setAttribute("dx", "4");
+        sep.textContent = "·";
+        const ty = document.createElementNS(xmlns, "tspan");
+        ty.setAttribute("class", "bp-dev-type");
+        ty.setAttribute("dx", "4");
+        ty.textContent = d.type;
+        t.appendChild(name);
+        t.appendChild(sep);
+        t.appendChild(ty);
+        if (d.address) {
+            const addr = document.createElementNS(xmlns, "tspan");
+            addr.setAttribute("class", "bp-dev-addr");
+            addr.setAttribute("dx", "4");
+            addr.textContent = "@ " + d.address;
+            t.appendChild(addr);
+        }
+        list.appendChild(t);
+    });
 }
 
 // ============================================================
@@ -412,9 +469,10 @@ function drawBoard(board, assigned) {
 }
 
 
-// Static skeleton emitter. Always renders ALL elements (including
-// dormant var-label + dev-label hidden via style="display:none") so
-// later mutation only needs to flip styles + textContent.
+// Static skeleton emitter. Always renders ALL static elements plus a
+// dormant <g> placeholder for the dynamic device list (filled per-pin
+// in applyAssignments). Position metadata is stored as data-* so
+// mutations don't need a position lookup.
 function drawPin(p, side, edgeX, y, _ignored) {
     const gpio = String(p.gpio ?? "").trim();
     const type = p.type || "io";
@@ -424,15 +482,15 @@ function drawPin(p, side, edgeX, y, _ignored) {
 
     return `
         <g class="pinout-pin pin-type-${type}" data-gpio="${escapeHtml(gpio)}"
-           data-name="" data-kind="" data-line="0">
+           data-name="" data-kind="" data-line="0"
+           data-varx="${varX}" data-vary="${y + 4}" data-anchor="${labelAnchor}">
             <title>${escapeHtml(pinTooltip(p))}</title>
             <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
             <circle cx="${edgeX}" cy="${y}" r="8" class="bp-pin-ring"/>
             <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(p.label)}</text>
             <text x="${varX}" y="${y + 4}" class="bp-var-label"
                   text-anchor="${labelAnchor}" data-line="0" style="display:none"></text>
-            <text x="${varX}" y="${y + 16}" class="bp-dev-label"
-                  text-anchor="${labelAnchor}" style="display:none"></text>
+            <g class="bp-dev-list" style="display:none"></g>
         </g>
     `;
 }
@@ -455,6 +513,15 @@ function bindPinClicks(svg, board, assignedPins) {
     }
     svg.querySelectorAll(".pinout-pin").forEach(g => {
         g.addEventListener("click", (e) => {
+            // Clicking a device row dispatches a jump to that device's line,
+            // not the pin popover. Identify by .bp-dev-item ancestor.
+            const devItem = e.target.closest(".bp-dev-item");
+            if (devItem) {
+                e.stopPropagation();
+                const name = devItem.getAttribute("data-name");
+                if (name) document.dispatchEvent(new CustomEvent("pinout:jump", { detail: { name } }));
+                return;
+            }
             e.stopPropagation();
             const gpio = g.getAttribute("data-gpio");
             const pin  = pinByGpio[gpio] || pinByLabel[g.querySelector("text.bp-pin-label")?.textContent?.trim() || ""];

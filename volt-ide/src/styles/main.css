@@ -2749,15 +2749,21 @@ kbd {
 .pinout-pin.is-assigned.is-bus .bp-pin-label,
 .pinout-pin.is-assigned.is-bus .bp-var-label { fill: var(--bp-bus-accent); }
 
-/* Secondary line below a bus pin's role label — the list of devices
-   that share this bus. Slightly smaller, dimmer than the role label. */
-.bp-dev-label {
-    fill: var(--bp-bus-accent);
+/* Per-device row beneath a bus's primary lane.
+   Format: <name> · <type> [@ <address>]
+   - name in bus-accent (matches the lane it rides on)
+   - separator + type/address dimmer for visual hierarchy */
+.bp-dev-item {
     font-family: var(--mono);
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.02em;
-    opacity: 0.78;
+    cursor: pointer;
 }
+.bp-dev-name { fill: var(--bp-bus-accent); font-weight: 600; }
+.bp-dev-sep  { fill: var(--bp-line-soft); }
+.bp-dev-type { fill: var(--bp-line); opacity: 0.75; }
+.bp-dev-addr { fill: var(--bp-line-soft); font-size: 9px; }
+.bp-dev-item:hover .bp-dev-name { text-decoration: underline; }
 
 /* Conflict — duplicate GPIO assignments. Red ring overrides the assigned
    ring so the user can't miss it. */
