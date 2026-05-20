@@ -52,7 +52,27 @@ function saveRecent(projectPath) {
     fs.writeFileSync(RECENTS_FILE, JSON.stringify(trimmed, null, 2));
 }
 
+// On macOS, the bundled Python interpreter inherits the quarantine xattr
+// from the .dmg download. Even after the user "approves" the .app via
+// Gatekeeper, individual binaries inside can still be killed when spawned.
+// Self-heal at startup: recursively clear quarantine from our resources.
+// Idempotent — does nothing if already cleared.
+function clearMacOSQuarantine() {
+    if (process.platform !== "darwin" || !process.resourcesPath) return;
+    const { execFile } = require("child_process");
+    const target = path.join(process.resourcesPath, "sdk");
+    if (!fs.existsSync(target)) return;
+    execFile("xattr", ["-rd", "com.apple.quarantine", target], (err) => {
+        if (err) {
+            // Not fatal — first launch this may fail if files weren't tagged.
+            console.warn("[startup] xattr clear (non-fatal):", err.message);
+        }
+    });
+}
+
 app.whenReady().then(() => {
+    clearMacOSQuarantine();
+
     win = new BrowserWindow({
         width: 1280,
         height: 800,
