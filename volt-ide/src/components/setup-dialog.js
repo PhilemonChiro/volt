@@ -412,17 +412,25 @@ function updateStage(overlay, s) {
         iconSlot.innerHTML = wantIcon;
         iconSlot.setAttribute("data-status", s.status);
     }
+    // git-clone progress bounces 0→100→0 across submodules / resolve-deltas.
+    // Switch the bar to an indeterminate barber-pole while we get those
+    // events. The detail line still shows the objects counter so the user
+    // sees real progress; the percent label is hidden too (it's noise).
+    const indeterminate = s.status === "running" && typeof s.detail === "string" && s.detail.startsWith("git:");
+
     const metaEl = row.querySelector(".setup-stage-meta");
-    const metaText = s.status === "done"    ? humanDuration(s.durationMs)
-                   : s.status === "running" ? Math.round(s.subPct) + "%"
-                   : s.status === "failed"  ? "failed"
+    const metaText = s.status === "done"      ? humanDuration(s.durationMs)
+                   : s.status === "running"   ? (indeterminate ? "…" : Math.round(s.subPct) + "%")
+                   : s.status === "failed"    ? "failed"
                    : "";
     if (metaEl && metaEl.textContent !== metaText) metaEl.textContent = metaText;
     if (metaEl) {
         metaEl.classList.toggle("setup-stage-meta-err", s.status === "failed");
     }
+    const subbar = row.querySelector(".setup-stage-subbar");
+    if (subbar) subbar.classList.toggle("is-indeterminate", indeterminate);
     const sub = row.querySelector(".setup-stage-subfill");
-    if (sub) sub.style.width = (s.status === "running" ? Math.round(s.subPct) : (s.status === "done" ? 100 : 0)) + "%";
+    if (sub) sub.style.width = (s.status === "running" && !indeterminate ? Math.round(s.subPct) : (s.status === "done" ? 100 : 0)) + "%";
     const detail = row.querySelector(".setup-stage-detail");
     const detailText = (s.status === "running" && s.detail) ? s.detail : "";
     if (detail && detail.textContent !== detailText) detail.textContent = detailText;

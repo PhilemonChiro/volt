@@ -228,6 +228,9 @@ function makeEmit(legacy) {
     }
     const logFn = typeof legacy === "function" ? legacy : () => {};
     let currentStageId = null;
+    // idf_tools.py tool-install tracking. Reset on each stage start.
+    let toolPlan = null;       // [name, name, ...] from "Installing tools: a, b, c"
+    let toolsInstalled = 0;
     const emit = {
         log: (msg) => {
             logFn(msg);
@@ -243,6 +246,33 @@ function makeEmit(legacy) {
             // curl/wget: " 45%  300M/700M"
             m = s.match(/(\d+)%\s+([\d.]+[KMG]?)\s*\/\s*([\d.]+[KMG]?)/);
             if (m) { emit.progress(currentStageId, +m[1], `${m[2]} / ${m[3]}`); return; }
+            // idf_tools.py — tool plan announcement (sets the total)
+            //   "Installing tools: xtensa-esp-elf, riscv32-esp-elf, esp32ulp-elf, …"
+            m = s.match(/^Installing tools:\s+(.+)$/);
+            if (m) {
+                toolPlan = m[1].split(",").map(t => t.trim()).filter(Boolean);
+                toolsInstalled = 0;
+                emit.progress(currentStageId, 0, `0 / ${toolPlan.length} tools`);
+                return;
+            }
+            // idf_tools.py — a tool starts installing or is skipped (already cached)
+            //   "Installing xtensa-esp-elf@esp-14.2.0_20241119"
+            //   "Skipping cmake@3.30.2-3-gcc31810 (already installed)"
+            if (toolPlan) {
+                m = s.match(/^(?:Installing|Skipping)\s+([^\s@]+)@/);
+                if (m) {
+                    toolsInstalled++;
+                    const pct = Math.min(100, Math.floor(toolsInstalled / toolPlan.length * 100));
+                    emit.progress(currentStageId, pct, `tool ${toolsInstalled} / ${toolPlan.length}: ${m[1]}`);
+                    return;
+                }
+                // Post-tool stage of idf_tools: Python virtualenv setup
+                // (~7-10s, no inherent progress). Don't reset our pct.
+                if (/^(Installing Python|Setting up Python|Successfully installed)/i.test(s)) {
+                    emit.progress(currentStageId, 100, `Python venv: ${s.slice(0, 60)}`);
+                    return;
+                }
+            }
             // apt: "Reading package lists..." / "Setting up <pkg>"
             if (/^Setting up\b/.test(s)) emit.progress(currentStageId, 75, s.slice(0, 80));
             if (/^Reading package lists/.test(s)) emit.progress(currentStageId, 10, s.slice(0, 80));
@@ -250,6 +280,8 @@ function makeEmit(legacy) {
         },
         stage: (id) => {
             currentStageId = id;
+            toolPlan = null;
+            toolsInstalled = 0;
             logFn(`__STAGE__:${id}:start`);
         },
         stageDone: (id) => {

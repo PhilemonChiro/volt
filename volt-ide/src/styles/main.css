@@ -2689,6 +2689,30 @@ kbd {
     border-radius: var(--r-pill);
     transition: width var(--dur-base) var(--ease-out);
 }
+
+/* Indeterminate "barber-pole" stripe for stages where we don't have a
+   meaningful percent (currently: git-clone progress where the counter
+   resets per submodule). The detail line still shows the objects counter
+   so the user can see something is happening; this just stops the bar
+   from bouncing 0→100→0 in a misleading way. */
+.setup-stage-subbar.is-indeterminate {
+    background-image: repeating-linear-gradient(
+        45deg,
+        var(--volt) 0,
+        var(--volt) 6px,
+        var(--bg-3) 6px,
+        var(--bg-3) 12px
+    );
+    background-size: 17px 17px;
+    animation: setup-stage-barber 0.9s linear infinite;
+}
+.setup-stage-subbar.is-indeterminate .setup-stage-subfill {
+    display: none;
+}
+@keyframes setup-stage-barber {
+    from { background-position: 0 0; }
+    to   { background-position: 17px 0; }
+}
 .setup-stage-detail {
     margin-top: var(--s-1);
     margin-left: 28px;
