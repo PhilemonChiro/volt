@@ -126,12 +126,22 @@ export function open(panel) {
         // Library is data-driven by the device catalog, not the editor AST
         import("./library.js").then(m => m.renderInto(body));
     } else if (panel === "pinout") {
-        // Pinout uses the current chip + the latest parsed hardware pins
+        // Pinout uses a regex extract of the CURRENT editor source — so
+        // pins, buses, and devices are all picked up immediately even if
+        // the file was loaded and not yet edited (onContentChange fires
+        // on edits only, never on initial setValue).
         import("./pinout-panel.js").then(m => {
             m.init(body);
             const chip = (window.chipSelector && window.chipSelector.getChip()) ||
                          (document.getElementById("chipLabel") || {}).textContent || "esp32";
-            m.render(chip.toLowerCase(), (lastAST && lastAST.pins) || []);
+            let assignments = [], hw = null;
+            try {
+                const editors = (typeof monaco !== "undefined") ? monaco.editor.getEditors() : [];
+                const source = editors.length ? editors[0].getValue() : "";
+                hw = m.extractHardware(source);
+                assignments = Object.values(hw.pinByGpio);
+            } catch (_) { /* fall through to empty */ }
+            m.render(chip.toLowerCase(), assignments, hw);
         });
     } else if (lastAST) {
         render(lastAST);
