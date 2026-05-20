@@ -48,7 +48,7 @@ export function open(panel) {
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    const btnMap = { hardware: "toggleHardware", tasks: "toggleTasks", outline: "toggleOutline" };
+    const btnMap = { hardware: "toggleHardware", tasks: "toggleTasks", outline: "toggleOutline", library: "toggleLibrary" };
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
