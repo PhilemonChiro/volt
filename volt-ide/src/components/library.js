@@ -249,18 +249,30 @@ function busFor(device) {
     return { i2c: "i2c0", spi: "spi0", uart: "uart0" }[iface] || null;
 }
 
+// Volt grammar (grammar.lark):
+//   bus_decl:    "bus"    NAME ":" NAME "(" named_args? ")"
+//   sensor_decl: "device" NAME ":" NAME "on" NAME "at" expr
+// So devices use 'on <bus> at <addr>' (NEVER '=') and buses use named
+// args (sda/scl/sck/...). The 'at' clause is required even when the
+// device has no real address — for SPI / GPIO devices it's the CS pin
+// or the GPIO pin number.
 function buildDeclaration(device, name) {
     const iface = (device.interface || "").toLowerCase();
     const bus = busFor(device);
     if (iface === "i2c" && bus) {
-        const addr = device.default_address || "";
-        return `device ${name}: ${device.name} = ${bus}(${addr})`;
+        const addr = device.default_address || "0x00";
+        return `device ${name}: ${device.name} on ${bus} at ${addr}`;
     }
-    if ((iface === "spi" || iface === "uart") && bus) {
-        return `device ${name}: ${device.name} = ${bus}`;
+    if (iface === "spi" && bus) {
+        // SPI devices need a CS pin in the 'at' slot
+        return `device ${name}: ${device.name} on ${bus} at 5  // CS pin`;
     }
-    // gpio devices need a pin argument the user must provide
-    return `device ${name}: ${device.name} = /* pin */`;
+    if (iface === "uart" && bus) {
+        // UART devices don't have an address but grammar still requires 'at'
+        return `device ${name}: ${device.name} on ${bus} at 0`;
+    }
+    // GPIO (1-wire / analog / digital) — needs a pin declared first
+    return `device ${name}: ${device.name} on gpio_pin at 4  // change pin`;
 }
 
 function buildSnippet(device) {
@@ -268,9 +280,10 @@ function buildSnippet(device) {
     const iface = (device.interface || "").toLowerCase();
     const bus = busFor(device);
     let busLine = "";
-    if (iface === "i2c" && bus)  busLine = `    bus ${bus}: I2C = (21, 22)\n`;
-    if (iface === "spi" && bus)  busLine = `    bus ${bus}: SPI = (18, 19, 23, 5)\n`;
-    if (iface === "uart" && bus) busLine = `    bus ${bus}: UART = (16, 17)\n`;
+    // bus_decl uses NAMED args, no '=' sign. Standard ESP32 pin assignments.
+    if (iface === "i2c"  && bus) busLine = `    bus ${bus}: I2C(sda: 21, scl: 22)\n`;
+    if (iface === "spi"  && bus) busLine = `    bus ${bus}: SPI(sck: 18, mosi: 23, miso: 19)\n`;
+    if (iface === "uart" && bus) busLine = `    bus ${bus}: UART(tx: 17, rx: 16)\n`;
 
     const decl = "    " + buildDeclaration(device, name);
     return `hardware {\n${busLine}${decl}\n}\n\n${buildSampleBlock(device, name)}`;
@@ -636,9 +649,10 @@ function addDevice(device, { withSample }) {
 
     let busInsert = "";
     if (needBus && bus) {
-        if (iface === "i2c")  busInsert = `    bus ${bus}: I2C = (21, 22)\n`;
-        if (iface === "spi")  busInsert = `    bus ${bus}: SPI = (18, 19, 23, 5)\n`;
-        if (iface === "uart") busInsert = `    bus ${bus}: UART = (16, 17)\n`;
+        // Named-args bus declarations matching the Volt grammar.
+        if (iface === "i2c")  busInsert = `    bus ${bus}: I2C(sda: 21, scl: 22)\n`;
+        if (iface === "spi")  busInsert = `    bus ${bus}: SPI(sck: 18, mosi: 23, miso: 19)\n`;
+        if (iface === "uart") busInsert = `    bus ${bus}: UART(tx: 17, rx: 16)\n`;
     }
 
     if (hwMatch) {

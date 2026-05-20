@@ -24,6 +24,7 @@ export function init(container) {
     container.innerHTML = `
         <div class="pinout-canvas" id="pinoutCanvas">
             <div class="pinout-svg-host" id="pinoutSvgHost"></div>
+            <div class="pinout-popover" id="pinoutPopover" style="display:none"></div>
         </div>
         <div class="pinout-controls">
             <button class="pinout-ctrl" id="pinoutZoomOut"  title="Zoom out">−</button>
@@ -34,6 +35,18 @@ export function init(container) {
     document.getElementById("pinoutZoomIn").onclick    = () => zoomBy(1.25);
     document.getElementById("pinoutZoomOut").onclick   = () => zoomBy(0.8);
     document.getElementById("pinoutZoomReset").onclick = () => resetView();
+
+    // Dismiss popover on outside-click or Escape
+    document.addEventListener("pointerdown", (e) => {
+        const pop = document.getElementById("pinoutPopover");
+        if (!pop || pop.style.display === "none") return;
+        if (pop.contains(e.target)) return;
+        if (e.target.closest(".pinout-pin")) return;   // re-click on another pin
+        closePopover();
+    }, true);
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closePopover();
+    });
 }
 
 export async function render(chip, assignedPins) {
@@ -50,7 +63,7 @@ export async function render(chip, assignedPins) {
     host.innerHTML = drawBoard(board, _state.assigned);
     const svg = host.querySelector("svg");
     if (svg) {
-        bindPinClicks(svg, _state.assigned);
+        bindPinClicks(svg, board, _state.assigned);
         attachZoomPan(svg);
     }
 }
@@ -166,14 +179,17 @@ function drawBoard(board, assigned) {
         ...board.columns[1].map((p, i) => drawPin(p, "right", boardR, topPad + i * PITCH, assignedByGpio)),
     ].join("");
 
-    const cy = (boardT + boardB) / 2;
+    // Title above the board — single line, mono, restrained
+    const titleY = boardT - 10;
+    const totalH = innerH + 18;   // room for title above
     return `
-        <svg class="pinout-svg" viewBox="0 0 ${totalW} ${innerH}" preserveAspectRatio="xMidYMid meet">
-            <rect x="${boardL}" y="${boardT}" width="${boardR - boardL}" height="${boardB - boardT}"
-                  rx="10" ry="10" class="bp-board" fill="none"/>
-            <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle"
-                  class="bp-board-label">${escapeHtml(board.name)}</text>
-            ${pinsSvg}
+        <svg class="pinout-svg" viewBox="0 0 ${totalW} ${totalH}" preserveAspectRatio="xMidYMid meet">
+            <text x="${cx}" y="${titleY + 18}" text-anchor="middle" class="bp-board-label">${escapeHtml(board.name)}</text>
+            <g transform="translate(0 22)">
+                <rect x="${boardL}" y="${boardT}" width="${boardR - boardL}" height="${boardB - boardT}"
+                      rx="10" ry="10" class="bp-board" fill="none"/>
+                ${pinsSvg}
+            </g>
         </svg>
     `;
 }
@@ -205,18 +221,125 @@ function drawPin(p, side, edgeX, y, assignedByGpio) {
     `;
 }
 
-function bindPinClicks(svg, assignedPins) {
+function bindPinClicks(svg, board, assignedPins) {
     const byGpio = {};
     for (const a of assignedPins) {
         const gpio = String(a.gpio ?? a.pin_number ?? a.pin ?? "").trim();
         if (gpio) byGpio[gpio] = a;
     }
+    // Build pin lookup from chip defs (the JSON loaded for this board)
+    const pinByGpio = {};
+    const pinByLabel = {};
+    for (const col of board.columns) {
+        for (const p of col) {
+            const g = String(p.gpio ?? "").trim();
+            if (g) pinByGpio[g] = p;
+            pinByLabel[p.label] = p;
+        }
+    }
     svg.querySelectorAll(".pinout-pin").forEach(g => {
-        g.addEventListener("click", () => {
-            const a = byGpio[g.getAttribute("data-gpio")];
-            if (a) document.dispatchEvent(new CustomEvent("pinout:jump", { detail: { name: a.name } }));
+        g.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const gpio = g.getAttribute("data-gpio");
+            const pin  = pinByGpio[gpio] || pinByLabel[g.querySelector("text.bp-pin-label")?.textContent?.trim() || ""];
+            if (!pin) return;
+            const assigned = gpio ? byGpio[gpio] : null;
+            openPopover(g, pin, assigned);
         });
     });
+}
+
+// ============================================================
+// Pin info popover — opens on click, shows everything we know
+// about the pin from chip defs (label, GPIO, type, alt functions,
+// notes) + assigned variable + "Jump to declaration" action.
+// ============================================================
+function openPopover(pinEl, pin, assigned) {
+    const pop = document.getElementById("pinoutPopover");
+    const canvas = document.getElementById("pinoutCanvas");
+    if (!pop || !canvas) return;
+
+    pop.innerHTML = renderPopoverHTML(pin, assigned);
+    pop.style.display = "";
+
+    // Position next to the pin element. Use the pin's screen rect
+    // (which already includes the pan/zoom transform).
+    const pinRect = pinEl.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const popW = pop.offsetWidth;
+    const popH = pop.offsetHeight;
+
+    // Prefer the side opposite the board centre — if pin is on the left
+    // half, popup goes right of it, and vice versa.
+    const pinCenterX = pinRect.left + pinRect.width / 2 - canvasRect.left;
+    const canvasMidX = canvasRect.width / 2;
+    let x = (pinCenterX < canvasMidX)
+        ? pinRect.right - canvasRect.left + 12
+        : pinRect.left  - canvasRect.left - popW - 12;
+    let y = pinRect.top - canvasRect.top + pinRect.height / 2 - popH / 2;
+
+    // Clamp to canvas bounds
+    x = Math.max(8, Math.min(x, canvasRect.width  - popW - 8));
+    y = Math.max(8, Math.min(y, canvasRect.height - popH - 8));
+    pop.style.left = x + "px";
+    pop.style.top  = y + "px";
+
+    // Wire the Jump-to-declaration button
+    const jumpBtn = pop.querySelector("[data-action='jump']");
+    if (jumpBtn && assigned) {
+        jumpBtn.onclick = () => {
+            document.dispatchEvent(new CustomEvent("pinout:jump", { detail: { name: assigned.name } }));
+            closePopover();
+        };
+    }
+    const closeBtn = pop.querySelector("[data-action='close']");
+    if (closeBtn) closeBtn.onclick = closePopover;
+}
+
+function closePopover() {
+    const pop = document.getElementById("pinoutPopover");
+    if (pop) { pop.style.display = "none"; pop.innerHTML = ""; }
+}
+
+function renderPopoverHTML(pin, assigned) {
+    const gpio = pin.gpio ? `GPIO ${pin.gpio}` : "";
+    const alts = (pin.alt && pin.alt.length)
+        ? `<div class="pp-section">
+             <div class="pp-section-title">Alternate functions</div>
+             <ul class="pp-alts">
+                ${pin.alt.map(a => `<li>${escapeHtml(a)}</li>`).join("")}
+             </ul>
+           </div>`
+        : "";
+    const note = pin.note
+        ? `<div class="pp-section">
+             <div class="pp-section-title">Note</div>
+             <div class="pp-note">${escapeHtml(pin.note)}</div>
+           </div>`
+        : "";
+    const assignedBlock = assigned
+        ? `<div class="pp-assigned">
+             <span class="pp-assigned-label">Assigned to</span>
+             <span class="pp-assigned-name">${escapeHtml(assigned.name)}</span>
+             ${assigned.mode ? `<span class="pp-assigned-mode">${escapeHtml(assigned.mode)}</span>` : ""}
+             <button class="pp-btn pp-btn-primary" data-action="jump">Jump to declaration</button>
+           </div>`
+        : `<div class="pp-unassigned">Not assigned. Use <code>pin name = ${escapeHtml(pin.gpio || pin.label)}</code> in your hardware block.</div>`;
+    return `
+        <div class="pp-head">
+            <div class="pp-head-title">
+                <span class="pp-pin-label">${escapeHtml(pin.label)}</span>
+                ${gpio ? `<span class="pp-pin-gpio">${gpio}</span>` : ""}
+            </div>
+            <button class="pp-close" data-action="close" aria-label="Close">×</button>
+        </div>
+        <div class="pp-body">
+            ${pin.type ? `<div class="pp-type pp-type-${escapeHtml(pin.type)}">${escapeHtml(pin.type)}</div>` : ""}
+            ${alts}
+            ${note}
+            ${assignedBlock}
+        </div>
+    `;
 }
 
 function pinTooltip(p) {
@@ -247,7 +370,7 @@ function onWheel(e) {
 let _drag = null;
 function onPointerDown(e) {
     if (e.button !== 0) return;
-    if (e.target.closest(".pinout-pin.is-assigned, .pinout-led, .pinout-button")) return;
+    if (e.target.closest(".pinout-pin, .pinout-popover")) return;
     _vp.container.setPointerCapture(e.pointerId);
     _vp.container.classList.add("is-panning");
     _drag = { x: e.clientX, y: e.clientY, startTx: _vp.tx, startTy: _vp.ty };

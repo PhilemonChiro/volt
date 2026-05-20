@@ -2733,6 +2733,142 @@ kbd {
 .pinout-pin.pin-type-reserved .bp-pin-outer { stroke: #4d5562; stroke-dasharray: 2 2; }
 .pinout-pin.pin-type-reserved .bp-pin-label { text-decoration: line-through; opacity: 0.55; }
 
+/* ── Pin info popover ───────────────────────────────────────
+   Opens on pin click; shows everything from the chip defs. */
+.pinout-popover {
+    position: absolute;
+    z-index: 20;
+    min-width: 220px;
+    max-width: 280px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-3);
+    box-shadow: var(--elev-pop);
+    color: var(--t1);
+    font-size: var(--fs-12);
+    overflow: hidden;
+    animation: pp-in var(--dur-fast) var(--ease-out);
+}
+@keyframes pp-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.pp-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--s-2) var(--s-3);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-1);
+}
+.pp-head-title { display: flex; align-items: baseline; gap: var(--s-2); }
+.pp-pin-label {
+    font-family: var(--mono);
+    font-size: var(--fs-14);
+    font-weight: 600;
+    color: var(--t1);
+}
+.pp-pin-gpio {
+    font-family: var(--mono);
+    font-size: var(--fs-11);
+    color: var(--volt);
+    letter-spacing: 0.04em;
+}
+.pp-close {
+    background: transparent;
+    color: var(--t3);
+    font-size: var(--fs-16);
+    line-height: 1;
+    width: 22px; height: 22px;
+    border-radius: var(--r-2);
+}
+.pp-close:hover { color: var(--t1); background: var(--bg-3); }
+
+.pp-body { padding: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }
+.pp-section-title {
+    font-size: var(--fs-10);
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+}
+.pp-type {
+    display: inline-block;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: var(--r-pill);
+    background: var(--bg-3);
+    color: var(--t2);
+    width: fit-content;
+}
+.pp-type.pp-type-power   { background: rgba(210,118,118,0.18); color: #d27676; }
+.pp-type.pp-type-ground  { background: rgba(122,133,149,0.18); color: #7a8595; }
+.pp-type.pp-type-input   { background: rgba(146,176,200,0.18); color: #92b0c8; }
+.pp-type.pp-type-control { background: rgba(201,163,106,0.18); color: #c9a36a; }
+.pp-type.pp-type-reserved{ background: rgba(77,85,98,0.16);    color: #6b6e74; }
+
+.pp-alts {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-family: var(--mono);
+    color: var(--t2);
+    font-size: var(--fs-11);
+    line-height: 1.5;
+}
+.pp-alts li { padding-left: var(--s-3); position: relative; }
+.pp-alts li::before {
+    content: "·";
+    position: absolute;
+    left: 4px;
+    color: var(--t3);
+}
+.pp-note {
+    color: var(--t2);
+    font-size: var(--fs-11);
+    line-height: var(--lh-base);
+}
+
+.pp-assigned {
+    margin-top: var(--s-2);
+    padding: var(--s-2) var(--s-3);
+    background: rgba(43,124,179,0.08);
+    border: 1px solid rgba(43,124,179,0.28);
+    border-radius: var(--r-2);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+.pp-assigned-label { font-size: var(--fs-10); color: var(--t3); text-transform: uppercase; letter-spacing: 0.08em; }
+.pp-assigned-name  { font-family: var(--mono); color: var(--volt); font-weight: 600; font-size: var(--fs-13); }
+.pp-assigned-mode  { font-size: var(--fs-10); color: var(--t3); }
+.pp-btn {
+    margin-top: 4px;
+    background: var(--volt);
+    color: white;
+    border: 0;
+    padding: 5px 10px;
+    border-radius: var(--r-2);
+    font-size: var(--fs-11);
+    cursor: pointer;
+}
+.pp-btn:hover { background: var(--volt-hover, #2b7cb3); }
+
+.pp-unassigned {
+    font-size: var(--fs-11);
+    color: var(--t3);
+    line-height: var(--lh-base);
+    padding-top: var(--s-1);
+}
+.pp-unassigned code {
+    font-family: var(--mono);
+    background: var(--bg-3);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--t2);
+}
+
 
 /* Zoom controls — floating bottom-right corner of the canvas */
 .pinout-controls {
