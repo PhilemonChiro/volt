@@ -143,7 +143,21 @@ function handleEvent(state, event, overlay) {
             break;
         }
     }
-    if (!state.finished) renderUpdate(overlay, state);
+    if (!state.finished) scheduleRender(state, overlay);
+}
+
+// Coalesce DOM updates to once per animation frame. install.sh can emit
+// hundreds of log lines per second; rebuilding the stage list innerHTML on
+// every one of them locks up the renderer. Batch into rAF so we paint
+// at most 60 fps regardless of event volume.
+let _rafQueued = false;
+function scheduleRender(state, overlay) {
+    if (_rafQueued) return;
+    _rafQueued = true;
+    requestAnimationFrame(() => {
+        _rafQueued = false;
+        if (state && overlay) renderUpdate(overlay, state);
+    });
 }
 
 function completeInstall(state, success, errorMessage) {
@@ -176,8 +190,11 @@ function render(overlay, state) {
                     <div class="setup-subtitle">First-time setup for your chip. This won't happen again on this device.</div>
                 </div>
                 <div class="setup-header-actions">
-                    <button class="setup-icon-btn" id="setupMinimize" title="Run in background" aria-label="Minimize">
+                    <button class="setup-icon-btn" id="setupMinimize" title="Hide dialog (install keeps running)" aria-label="Minimize">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="19"/></svg>
+                    </button>
+                    <button class="setup-icon-btn" id="setupClose" title="Close (will ask before cancelling install)" aria-label="Close">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
                     </button>
                 </div>
             </div>
@@ -200,6 +217,11 @@ function render(overlay, state) {
     `;
 
     overlay.querySelector("#setupMinimize").onclick = () => toggleMinimize();
+    overlay.querySelector("#setupClose").onclick = () => {
+        // X button — if install still running, ask first; if done, just close
+        if (state.finished) closeDialog(state);
+        else confirmCancel(state);
+    };
     overlay.querySelector("#setupBackground").onclick = () => toggleMinimize();
     overlay.querySelector("#setupLogToggle").onclick = () => toggleLog(state);
     overlay.querySelector("#setupCancel").onclick = () => confirmCancel(state);
