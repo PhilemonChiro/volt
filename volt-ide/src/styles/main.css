@@ -2733,11 +2733,25 @@ kbd {
 .pinout-pin.pin-type-reserved .bp-pin-outer { stroke: #4d5562; stroke-dasharray: 2 2; }
 .pinout-pin.pin-type-reserved .bp-pin-label { text-decoration: line-through; opacity: 0.55; }
 
+/* Bus-pin styling — distinct from regular pin assignments. Uses a
+   teal/cyan accent so it reads as 'shared resource' vs 'private pin'. */
+:root {
+    --bp-bus-accent: #4ec9b0;   /* teal — VS Code's type-name green */
+}
+.pinout-pin.is-assigned.is-bus .bp-pin-outer {
+    fill: var(--bp-bus-accent);
+    stroke: var(--bp-bus-accent);
+}
+.pinout-pin.is-assigned.is-bus .bp-pin-ring { stroke: var(--bp-bus-accent); }
+.pinout-pin.is-assigned.is-bus .bp-pin-label,
+.pinout-pin.is-assigned.is-bus .bp-var-label { fill: var(--bp-bus-accent); }
+
 /* Conflict — duplicate GPIO assignments. Red ring overrides the assigned
    ring so the user can't miss it. */
 .pinout-pin.is-conflict .bp-pin-outer { fill: #e34d4d; stroke: #e34d4d; }
 .pinout-pin.is-conflict .bp-pin-ring  { stroke: #e34d4d; stroke-width: 2; animation: pin-conflict-pulse 1.4s ease-in-out infinite; }
-.pinout-pin.is-conflict .bp-pin-label { fill: #e34d4d; font-weight: 600; }
+.pinout-pin.is-conflict .bp-pin-label,
+.pinout-pin.is-conflict .bp-var-label { fill: #e34d4d; font-weight: 600; }
 @keyframes pin-conflict-pulse {
     0%, 100% { stroke-opacity: 0.7; }
     50%      { stroke-opacity: 1; }

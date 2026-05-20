@@ -49,38 +49,103 @@ export function init(container) {
     });
 }
 
-// Lightweight regex extractor — pulls pin assignments out of the editor
-// source even when the full compiler can't parse it. Lets the pinout
-// reflect what the user is typing in real time, not only on debounced
-// compile cycles.
+// Lightweight regex extractor — pulls pin/bus/device declarations out of
+// the editor source even when the full compiler can't parse it. Lets the
+// pinout reflect what the user is typing in real time, not only on the
+// debounced compile cycle.
 //
 // Scope is the hardware { … } block only (so a `pin` keyword inside a
-// comment or string elsewhere can't fire). Matches:
-//     pin <name>: <Mode> = <N>      with explicit mode
-//     pin <name> = <N>              shorthand
+// comment or string elsewhere can't fire).
 //
-// Returns: [{ name, gpio, mode, line }]   line is 1-based.
-export function extractPinsFromSource(source) {
-    if (typeof source !== "string") return [];
+// Matches:
+//     pin <name> [: <Mode>] = <N>
+//     bus <name>: <I2C|SPI|UART>(role: N, role: N, …)
+//     device <name>: <Type> on <bus> at <addr>
+//
+// Returns:
+//   {
+//     pins:    [{ name, kind:"pin", gpio, mode, line }],
+//     buses:   [{ name, kind:"bus", busType:"I2C"|"SPI"|"UART",
+//                 roles: { sda:21, scl:22 }, line }],
+//     devices: [{ name, type, bus, address, line }],
+//     // flattened assignments by gpio (for board highlighting):
+//     pinByGpio: { "21": {name,kind,role,...}, … }
+//   }
+export function extractHardware(source) {
+    if (typeof source !== "string") return { pins: [], buses: [], devices: [], pinByGpio: {} };
     const m = source.match(/hardware\s*\{([\s\S]*?)\}/);
-    if (!m) return [];
+    if (!m) return { pins: [], buses: [], devices: [], pinByGpio: {} };
     const block = m[1];
     const blockStart = m.index + m[0].indexOf("{") + 1;
-    const pins = [];
-    const re = /^\s*pin\s+([a-zA-Z_][a-zA-Z_0-9]*)(?:\s*:\s*([A-Za-z]+))?\s*=\s*(\d+)\s*$/gm;
+
+    const pins = [], buses = [], devices = [], pinByGpio = {};
+    const lineOf = (offset) => source.slice(0, blockStart + offset).split("\n").length;
+
+    // pin <name>[: Mode] = <N>
+    const pinRe = /^\s*pin\s+([a-zA-Z_][a-zA-Z_0-9]*)(?:\s*:\s*([A-Za-z]+))?\s*=\s*(\d+)\s*$/gm;
     let mm;
-    while ((mm = re.exec(block)) !== null) {
-        // Resolve 1-based line number in the original source
-        const absPos = blockStart + mm.index;
-        const line = source.slice(0, absPos).split("\n").length;
-        pins.push({
+    while ((mm = pinRe.exec(block)) !== null) {
+        const pin = {
             name: mm[1],
+            kind: "pin",
             mode: mm[2] || "Output",
             gpio: String(parseInt(mm[3], 10)),
-            line,
+            line: lineOf(mm.index),
+        };
+        pins.push(pin);
+        if (!pinByGpio[pin.gpio]) pinByGpio[pin.gpio] = pin;
+    }
+
+    // bus <name>: TYPE(role: N, role: N, ...)
+    const busRe = /^\s*bus\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(I2C|SPI|UART|i2c|spi|uart)\s*\(([^)]*)\)/gm;
+    while ((mm = busRe.exec(block)) !== null) {
+        const roles = {};
+        const inner = mm[3] || "";
+        for (const rolePair of inner.split(",")) {
+            const r = rolePair.match(/^\s*([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(\d+)\s*$/);
+            if (r) roles[r[1].toLowerCase()] = parseInt(r[2], 10);
+        }
+        const bus = {
+            name: mm[1],
+            kind: "bus",
+            busType: mm[2].toUpperCase(),
+            roles,
+            line: lineOf(mm.index),
+        };
+        buses.push(bus);
+        for (const [role, gpio] of Object.entries(roles)) {
+            const gpioKey = String(gpio);
+            // Don't overwrite a user's direct `pin foo = N` assignment with
+            // a bus claim — if both exist, that's a conflict (user error).
+            if (!pinByGpio[gpioKey]) {
+                pinByGpio[gpioKey] = {
+                    name: bus.name, kind: "bus", role,
+                    busType: bus.busType, gpio: gpioKey, line: bus.line,
+                };
+            }
+        }
+    }
+
+    // device <name>: <Type> on <bus> at <addr>
+    const devRe = /^\s*device\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*([A-Za-z_][A-Za-z_0-9]*)\s+on\s+([a-zA-Z_][a-zA-Z_0-9]*)\s+at\s+([^\s].*?)\s*$/gm;
+    while ((mm = devRe.exec(block)) !== null) {
+        devices.push({
+            name: mm[1],
+            type: mm[2],
+            bus: mm[3],
+            address: mm[4].trim(),
+            line: lineOf(mm.index),
         });
     }
-    return pins;
+
+    return { pins, buses, devices, pinByGpio };
+}
+
+// Back-compat alias — old callers asking for just pins still work.
+// Returns the flat by-GPIO assignment list (pins + bus roles together).
+export function extractPinsFromSource(source) {
+    const h = extractHardware(source);
+    return Object.values(h.pinByGpio);
 }
 
 // Detect duplicate GPIO assignments → returns Set<string> of conflicting gpios
@@ -107,11 +172,13 @@ export function setHighlight(gpio) {
     if (target) target.classList.add("is-cursor");
 }
 
-export async function render(chip, assignedPins) {
+export async function render(chip, assignedPins, hardware) {
     if (!_root) return;
     _state.chip = (chip || "").toLowerCase();
     _state.assigned = assignedPins || [];
     _state.conflicts = findConflicts(_state.assigned);
+    // Optional full hardware extract → enables the bus popover details
+    _state.hardware = hardware || null;
 
     const board = await loadBoard(_state.chip);
     const host  = document.getElementById("pinoutSvgHost");
@@ -263,14 +330,24 @@ function drawPin(p, side, edgeX, y, assignedByGpio) {
     const labelAnchor = side === "left" ? "end" : "start";
     const varX = side === "left" ? labelX - 56 : labelX + 56;
 
-    const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}${conflict ? " is-conflict" : ""}`;
+    // Pin kind drives the visual: 'pin' = volt accent, 'bus' = bus accent
+    const kindCls = assigned ? `is-${assigned.kind || "pin"}` : "";
+    const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}${conflict ? " is-conflict" : ""} ${kindCls}`;
+    // Variable label text — bus roles show "i2c0:sda" so the user sees
+    // both the bus name AND which lane this pin carries
+    const labelText = assigned
+        ? (assigned.kind === "bus"
+            ? `${assigned.name}:${assigned.role || "?"}`
+            : assigned.name)
+        : "";
     const varLabelSvg = assigned
         ? `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}"
-                 data-line="${assigned.line || 0}">${escapeHtml(assigned.name)}</text>`
+                 data-line="${assigned.line || 0}">${escapeHtml(labelText)}</text>`
         : "";
 
     return `
         <g class="${cls}" data-gpio="${escapeHtml(gpio)}" data-name="${escapeHtml(assigned ? assigned.name : "")}"
+           data-kind="${assigned ? assigned.kind : ""}"
            data-line="${assigned && assigned.line ? assigned.line : 0}">
             <title>${escapeHtml(pinTooltip(p))}</title>
             <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
@@ -385,14 +462,38 @@ function renderPopoverHTML(pin, assigned) {
              <div class="pp-note">${escapeHtml(pin.note)}</div>
            </div>`
         : "";
-    const assignedBlock = assigned
-        ? `<div class="pp-assigned">
-             <span class="pp-assigned-label">Assigned to</span>
-             <span class="pp-assigned-name">${escapeHtml(assigned.name)}</span>
-             ${assigned.mode ? `<span class="pp-assigned-mode">${escapeHtml(assigned.mode)}</span>` : ""}
-             <button class="pp-btn pp-btn-primary" data-action="jump">Jump to declaration</button>
-           </div>`
-        : `<div class="pp-unassigned">Not assigned. Use <code>pin name = ${escapeHtml(pin.gpio || pin.label)}</code> in your hardware block.</div>`;
+    let assignedBlock;
+    if (assigned && assigned.kind === "bus") {
+        // List devices that ride on this bus (from the hardware extract)
+        const devices = (_state.hardware && _state.hardware.devices) || [];
+        const onThisBus = devices.filter(d => d.bus === assigned.name);
+        const devicesHtml = onThisBus.length
+            ? `<ul class="pp-alts">
+                 ${onThisBus.map(d => `<li>${escapeHtml(d.name)} <span style="color:var(--t3)">${escapeHtml(d.type)} @ ${escapeHtml(d.address)}</span></li>`).join("")}
+               </ul>`
+            : `<div class="pp-note" style="font-size:11px">No devices declared on this bus yet.</div>`;
+        assignedBlock = `
+            <div class="pp-assigned pp-bus">
+                <span class="pp-assigned-label">Bus role · ${escapeHtml(assigned.busType || "")}</span>
+                <span class="pp-assigned-name">${escapeHtml(assigned.name)} → ${escapeHtml(assigned.role || "")}</span>
+                <button class="pp-btn pp-btn-primary" data-action="jump">Jump to bus declaration</button>
+            </div>
+            <div class="pp-section">
+                <div class="pp-section-title">Devices on ${escapeHtml(assigned.name)}</div>
+                ${devicesHtml}
+            </div>
+        `;
+    } else if (assigned) {
+        assignedBlock = `
+            <div class="pp-assigned">
+                <span class="pp-assigned-label">Assigned to</span>
+                <span class="pp-assigned-name">${escapeHtml(assigned.name)}</span>
+                ${assigned.mode ? `<span class="pp-assigned-mode">${escapeHtml(assigned.mode)}</span>` : ""}
+                <button class="pp-btn pp-btn-primary" data-action="jump">Jump to declaration</button>
+            </div>`;
+    } else {
+        assignedBlock = `<div class="pp-unassigned">Not assigned. Use <code>pin name = ${escapeHtml(pin.gpio || pin.label)}</code> in your hardware block.</div>`;
+    }
     return `
         <div class="pp-head">
             <div class="pp-head-title">

@@ -58,22 +58,33 @@ function showEditor() {
                 toolbar.setSaveUnsaved(true);
                 setFileModified(true);
                 diagnostics.scheduleCheck(source);
-                // Live pin refresh — regex extraction runs even on broken
-                // syntax, so the pinout reflects keystrokes immediately.
+                // Live pin/bus/device refresh — regex extraction runs even
+                // on broken syntax, so the pinout reflects keystrokes
+                // immediately.
                 import("./components/pinout-panel.js").then(m => {
                     const chip = (chipSelector.getChip() || "esp32").toLowerCase();
-                    const pins = m.extractPinsFromSource(source);
-                    m.render(chip, pins);
+                    const hw = m.extractHardware(source);
+                    const assignments = Object.values(hw.pinByGpio);
+                    m.render(chip, assignments, hw);
                 }).catch(() => {});
             },
             onCursorChange: (line, col) => {
                 statusBar.setLine(line, col);
-                // Cursor on a pin line → highlight that pin on the board
+                // Cursor on a pin / bus / device line → highlight pin(s)
+                // on the board. For a bus line we highlight all of its pins.
                 import("./components/pinout-panel.js").then(m => {
                     const source = editor.getValue();
-                    const pins = m.extractPinsFromSource(source);
-                    const hit = pins.find(p => p.line === line);
-                    m.setHighlight(hit ? hit.gpio : null);
+                    const hw = m.extractHardware(source);
+                    let gpio = null;
+                    for (const p of Object.values(hw.pinByGpio)) {
+                        if (p.line === line) { gpio = p.gpio; break; }
+                    }
+                    // If cursor is on a bus line, highlight the bus's first pin
+                    if (!gpio) {
+                        const bus = hw.buses.find(b => b.line === line);
+                        if (bus) gpio = String(Object.values(bus.roles)[0] || "");
+                    }
+                    m.setHighlight(gpio || null);
                 }).catch(() => {});
             },
         });
@@ -542,8 +553,10 @@ document.addEventListener("pinout:jump", (e) => {
     if (!name) return;
     const model = ed.getModel();
     if (!model) return;
-    // Find the line where `pin <name>` is declared
-    const re = new RegExp(`^\\s*pin\\s+${name.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`);
+    // Find the declaration — could be `pin <name>`, `bus <name>`, or
+    // `device <name>`. Match any of the three.
+    const safe = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^\\s*(?:pin|bus|device)\\s+${safe}\\b`);
     const lines = model.getLinesContent();
     for (let i = 0; i < lines.length; i++) {
         if (re.test(lines[i])) {
