@@ -201,7 +201,9 @@ function extractArchive(archivePath, outDir, format, log) {
         else if (format === "zip")    argv = ["unzip", "-o", archivePath, "-d", outDir];
         else                          return resolve({ ok: false, error: `unknown archive format: ${format}` });
 
-        if (log) log(`extracting ${path.basename(archivePath)} (${format})…`);
+        // makeEmit picks up the "extract:" prefix and forwards a stage_progress
+        // event that the dialog treats as indeterminate (barber-pole).
+        if (log) log(`extract: ${path.basename(archivePath)}`);
         const child = spawn(argv[0], argv.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
         let stderr = "";
         child.stdout.on("data", () => {}); // suppress unzip's per-file noise from the dialog log
@@ -246,6 +248,11 @@ function makeEmit(legacy) {
             // curl/wget: " 45%  300M/700M"
             m = s.match(/(\d+)%\s+([\d.]+[KMG]?)\s*\/\s*([\d.]+[KMG]?)/);
             if (m) { emit.progress(currentStageId, +m[1], `${m[2]} / ${m[3]}`); return; }
+            // tar / unzip — no byte progress is available. Fire one
+            // progress event with an "extract:" detail; the dialog uses it
+            // to switch the bar to indeterminate barber-pole.
+            m = s.match(/^extract:\s+(.+)/);
+            if (m) { emit.progress(currentStageId, 0, `extract: ${m[1]}`); return; }
             // idf_tools.py — tool plan announcement (sets the total)
             //   "Installing tools: xtensa-esp-elf, riscv32-esp-elf, esp32ulp-elf, …"
             m = s.match(/^Installing tools:\s+(.+)$/);

@@ -83,7 +83,9 @@ function joinPath(dir, file) {
     return dir.replace(/[/\\]$/, "") + sep + file;
 }
 
+let _fileModified = false;
 function setFileModified(modified) {
+    _fileModified = !!modified;
     const el = document.getElementById("infoFileName");
     if (el) el.classList.toggle("modified", modified);
     // Update window title
@@ -250,6 +252,12 @@ welcome.init(document.getElementById("welcome"), {
 });
 
 function closeProject() {
+    if (!currentProject) return;
+    const projName = basename(currentProject);
+    const msg = _fileModified
+        ? `Unsaved changes in ${projName} will be lost. Close project anyway?`
+        : `Close project ${projName}?`;
+    if (!confirm(msg)) return;
     currentProject = null;
     currentFile = null;
     showWelcome();

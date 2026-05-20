@@ -412,11 +412,12 @@ function updateStage(overlay, s) {
         iconSlot.innerHTML = wantIcon;
         iconSlot.setAttribute("data-status", s.status);
     }
-    // git-clone progress bounces 0→100→0 across submodules / resolve-deltas.
-    // Switch the bar to an indeterminate barber-pole while we get those
-    // events. The detail line still shows the objects counter so the user
-    // sees real progress; the percent label is hidden too (it's noise).
-    const indeterminate = s.status === "running" && typeof s.detail === "string" && s.detail.startsWith("git:");
+    // Use indeterminate barber-pole when we know work is happening but
+    // can't get a meaningful percent:
+    //   - "git:"     — git clone (counter resets per submodule + deltas)
+    //   - "extract:" — tar/unzip extracting an archive (no per-file %)
+    const indeterminate = s.status === "running" && typeof s.detail === "string" &&
+        (s.detail.startsWith("git:") || s.detail.startsWith("extract:"));
 
     const metaEl = row.querySelector(".setup-stage-meta");
     const metaText = s.status === "done"      ? humanDuration(s.durationMs)
