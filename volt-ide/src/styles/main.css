@@ -2733,6 +2733,38 @@ kbd {
 .pinout-pin.pin-type-reserved .bp-pin-outer { stroke: #4d5562; stroke-dasharray: 2 2; }
 .pinout-pin.pin-type-reserved .bp-pin-label { text-decoration: line-through; opacity: 0.55; }
 
+/* Conflict — duplicate GPIO assignments. Red ring overrides the assigned
+   ring so the user can't miss it. */
+.pinout-pin.is-conflict .bp-pin-outer { fill: #e34d4d; stroke: #e34d4d; }
+.pinout-pin.is-conflict .bp-pin-ring  { stroke: #e34d4d; stroke-width: 2; animation: pin-conflict-pulse 1.4s ease-in-out infinite; }
+.pinout-pin.is-conflict .bp-pin-label { fill: #e34d4d; font-weight: 600; }
+@keyframes pin-conflict-pulse {
+    0%, 100% { stroke-opacity: 0.7; }
+    50%      { stroke-opacity: 1; }
+}
+
+/* Cursor-on-this-pin highlight (editor cursor is on the pin's declaration) */
+.pinout-pin.is-cursor .bp-pin-ring {
+    stroke: var(--bp-accent);
+    stroke-width: 2;
+    animation: pin-cursor-pulse 1.2s ease-in-out infinite;
+}
+@keyframes pin-cursor-pulse {
+    0%, 100% { stroke-opacity: 0.5; transform: scale(1); transform-box: fill-box; transform-origin: center; }
+    50%      { stroke-opacity: 1;   transform: scale(1.25); transform-box: fill-box; transform-origin: center; }
+}
+
+/* Hover-line decoration the editor adds when a pin is hovered on the
+   board. Sits in the Monaco model overlay layer. */
+.pinout-hover-line {
+    background: rgba(43,124,179,0.10);
+}
+.pinout-hover-gutter {
+    background: var(--volt);
+    width: 3px !important;
+    margin-left: 3px;
+}
+
 /* ── Pin info popover ───────────────────────────────────────
    Opens on pin click; shows everything from the chip defs. */
 .pinout-popover {

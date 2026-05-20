@@ -49,10 +49,69 @@ export function init(container) {
     });
 }
 
+// Lightweight regex extractor — pulls pin assignments out of the editor
+// source even when the full compiler can't parse it. Lets the pinout
+// reflect what the user is typing in real time, not only on debounced
+// compile cycles.
+//
+// Scope is the hardware { … } block only (so a `pin` keyword inside a
+// comment or string elsewhere can't fire). Matches:
+//     pin <name>: <Mode> = <N>      with explicit mode
+//     pin <name> = <N>              shorthand
+//
+// Returns: [{ name, gpio, mode, line }]   line is 1-based.
+export function extractPinsFromSource(source) {
+    if (typeof source !== "string") return [];
+    const m = source.match(/hardware\s*\{([\s\S]*?)\}/);
+    if (!m) return [];
+    const block = m[1];
+    const blockStart = m.index + m[0].indexOf("{") + 1;
+    const pins = [];
+    const re = /^\s*pin\s+([a-zA-Z_][a-zA-Z_0-9]*)(?:\s*:\s*([A-Za-z]+))?\s*=\s*(\d+)\s*$/gm;
+    let mm;
+    while ((mm = re.exec(block)) !== null) {
+        // Resolve 1-based line number in the original source
+        const absPos = blockStart + mm.index;
+        const line = source.slice(0, absPos).split("\n").length;
+        pins.push({
+            name: mm[1],
+            mode: mm[2] || "Output",
+            gpio: String(parseInt(mm[3], 10)),
+            line,
+        });
+    }
+    return pins;
+}
+
+// Detect duplicate GPIO assignments → returns Set<string> of conflicting gpios
+export function findConflicts(assignedPins) {
+    const seen = {};
+    const conflicts = new Set();
+    for (const p of assignedPins) {
+        const g = String(p.gpio ?? p.pin_number ?? p.pin ?? "").trim();
+        if (!g) continue;
+        if (seen[g]) conflicts.add(g);
+        else seen[g] = p;
+    }
+    return conflicts;
+}
+
+// Highlight one pin (e.g. the one matching the editor's cursor line).
+// Pass null to clear.
+export function setHighlight(gpio) {
+    const svg = document.querySelector("#pinoutSvgHost svg");
+    if (!svg) return;
+    svg.querySelectorAll(".pinout-pin.is-cursor").forEach(g => g.classList.remove("is-cursor"));
+    if (gpio == null) return;
+    const target = svg.querySelector(`.pinout-pin[data-gpio="${CSS.escape(String(gpio))}"]`);
+    if (target) target.classList.add("is-cursor");
+}
+
 export async function render(chip, assignedPins) {
     if (!_root) return;
     _state.chip = (chip || "").toLowerCase();
     _state.assigned = assignedPins || [];
+    _state.conflicts = findConflicts(_state.assigned);
 
     const board = await loadBoard(_state.chip);
     const host  = document.getElementById("pinoutSvgHost");
@@ -198,20 +257,21 @@ function drawBoard(board, assigned) {
 function drawPin(p, side, edgeX, y, assignedByGpio) {
     const gpio = String(p.gpio ?? "").trim();
     const assigned = gpio ? assignedByGpio[gpio] : null;
+    const conflict = gpio && _state.conflicts && _state.conflicts.has(gpio);
     const type = p.type || "io";
-    // Pin marker sits ON the board edge; label outside; variable name
-    // further outside.
     const labelX = side === "left" ? edgeX - 10 : edgeX + 10;
     const labelAnchor = side === "left" ? "end" : "start";
     const varX = side === "left" ? labelX - 56 : labelX + 56;
 
-    const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}`;
+    const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}${conflict ? " is-conflict" : ""}`;
     const varLabelSvg = assigned
-        ? `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}">${escapeHtml(assigned.name)}</text>`
+        ? `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}"
+                 data-line="${assigned.line || 0}">${escapeHtml(assigned.name)}</text>`
         : "";
 
     return `
-        <g class="${cls}" data-gpio="${escapeHtml(gpio)}" data-name="${escapeHtml(assigned ? assigned.name : "")}">
+        <g class="${cls}" data-gpio="${escapeHtml(gpio)}" data-name="${escapeHtml(assigned ? assigned.name : "")}"
+           data-line="${assigned && assigned.line ? assigned.line : 0}">
             <title>${escapeHtml(pinTooltip(p))}</title>
             <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
             <circle cx="${edgeX}" cy="${y}" r="8" class="bp-pin-ring"/>
@@ -245,6 +305,14 @@ function bindPinClicks(svg, board, assignedPins) {
             if (!pin) return;
             const assigned = gpio ? byGpio[gpio] : null;
             openPopover(g, pin, assigned);
+        });
+        // Hover → tell the editor to highlight the declaration line
+        g.addEventListener("pointerenter", () => {
+            const line = parseInt(g.getAttribute("data-line"), 10);
+            if (line > 0) document.dispatchEvent(new CustomEvent("pinout:hover", { detail: { line } }));
+        });
+        g.addEventListener("pointerleave", () => {
+            document.dispatchEvent(new CustomEvent("pinout:hover", { detail: { line: 0 } }));
         });
     });
 }

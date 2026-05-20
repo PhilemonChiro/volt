@@ -58,9 +58,23 @@ function showEditor() {
                 toolbar.setSaveUnsaved(true);
                 setFileModified(true);
                 diagnostics.scheduleCheck(source);
+                // Live pin refresh — regex extraction runs even on broken
+                // syntax, so the pinout reflects keystrokes immediately.
+                import("./components/pinout-panel.js").then(m => {
+                    const chip = (chipSelector.getChip() || "esp32").toLowerCase();
+                    const pins = m.extractPinsFromSource(source);
+                    m.render(chip, pins);
+                }).catch(() => {});
             },
             onCursorChange: (line, col) => {
                 statusBar.setLine(line, col);
+                // Cursor on a pin line → highlight that pin on the board
+                import("./components/pinout-panel.js").then(m => {
+                    const source = editor.getValue();
+                    const pins = m.extractPinsFromSource(source);
+                    const hit = pins.find(p => p.line === line);
+                    m.setHighlight(hit ? hit.gpio : null);
+                }).catch(() => {});
             },
         });
         editorReady = true;
@@ -495,6 +509,50 @@ window.volt.onBuild("progress", ({ stage, message, percent }) => {
     bottomPanel.updatePipelineStage(stage, message, percent);
     if (stage === "build" || stage === "flash" || stage === "compile") {
         statusBar.setBuild(message);
+    }
+});
+
+// ── Pinout ↔ editor bidirectional sync ──────────────────────────
+// hover a pin on the board → flash its declaration line in the editor
+let _pinoutHoverDecos = null;
+document.addEventListener("pinout:hover", (e) => {
+    if (typeof monaco === "undefined") return;
+    const eds = monaco.editor.getEditors();
+    if (!eds.length) return;
+    const ed = eds[0];
+    const line = (e.detail && e.detail.line) || 0;
+    if (!_pinoutHoverDecos) _pinoutHoverDecos = ed.createDecorationsCollection([]);
+    if (line > 0) {
+        _pinoutHoverDecos.set([{
+            range: new monaco.Range(line, 1, line, 1),
+            options: { isWholeLine: true, className: "pinout-hover-line", linesDecorationsClassName: "pinout-hover-gutter" }
+        }]);
+    } else {
+        _pinoutHoverDecos.set([]);
+    }
+});
+
+// click a pin → scroll/focus its declaration line
+document.addEventListener("pinout:jump", (e) => {
+    if (typeof monaco === "undefined") return;
+    const eds = monaco.editor.getEditors();
+    if (!eds.length) return;
+    const ed = eds[0];
+    const name = e.detail && e.detail.name;
+    if (!name) return;
+    const model = ed.getModel();
+    if (!model) return;
+    // Find the line where `pin <name>` is declared
+    const re = new RegExp(`^\\s*pin\\s+${name.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`);
+    const lines = model.getLinesContent();
+    for (let i = 0; i < lines.length; i++) {
+        if (re.test(lines[i])) {
+            const ln = i + 1;
+            ed.revealLineInCenter(ln);
+            ed.setPosition({ lineNumber: ln, column: 1 });
+            ed.focus();
+            return;
+        }
     }
 });
 
