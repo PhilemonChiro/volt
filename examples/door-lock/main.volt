@@ -82,7 +82,7 @@ machine door_lock {
             led.off()
             door = DoorState.locked
             log("lock", "LOCKED")
-            mqtt.send_int("door/status", 0) or skip
+            mqtt.send_int("door/status", 0)
         }
         after 1s -> locked
     }
@@ -94,7 +94,7 @@ machine door_lock {
             door = DoorState.unlocked
             total_unlocks += 1
             log("lock", "UNLOCKED")
-            mqtt.send_int("door/status", 1) or skip
+            mqtt.send_int("door/status", 1)
             buzzer.beep_success()
         }
         after 30s -> locked
@@ -104,11 +104,11 @@ machine door_lock {
         enter {
             buzzer.beep_alarm()
             log("lock", "ALERT — too many failed attempts!")
-            mqtt.send_int("door/alert", 1) or skip
+            mqtt.send_int("door/alert", 1)
         }
         exit {
             attempt_count = 0
-            mqtt.send_int("door/alert", 0) or skip
+            mqtt.send_int("door/alert", 0)
         }
         after 60s -> locked
     }
