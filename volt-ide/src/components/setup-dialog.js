@@ -56,7 +56,7 @@ function stagesFor(chip, platform) {
         return [
             { id: "check",       label: "Check system",                                weight: 2  },
             { id: "deps",        label: isMac ? "Install CMake + Ninja" : "Install system deps (apt)", weight: 8 },
-            { id: "clone-idf",   label: "Download ESP-IDF from GitHub",                weight: 35 },
+            { id: "clone-idf",   label: "Download ESP-IDF",                            weight: 35 },
             { id: "install-idf", label: "Install xtensa compiler + Python tools",      weight: 50 },
             { id: "env",         label: "Wrap up",                                     weight: 5  },
         ];

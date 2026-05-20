@@ -1,7 +1,7 @@
 // Toolchain auto-setup — downloads and configures build tools per chip
 // Ported from Tauri toolchain.rs
 
-const { execSync, spawnSync } = require("child_process");
+const { execSync, spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -74,18 +74,17 @@ async function ensureArmGcc(emit) {
     emit.log(`Fetching ARM GCC 13.2 (~280 MB)…`);
     const ok = await mirror.downloadAsset(key, tmp, emit, mirror.getPreference());
     if (!ok) { emit.log("ERROR: ARM GCC download failed from all sources"); return false; }
-    try {
-        const out = path.join(TOOLCHAINS_DIR, "arm-gnu-toolchain");
-        fs.mkdirSync(out, { recursive: true });
-        execSync(`tar -xJf "${tmp}" -C "${out}" --strip-components=1`, { stdio: "pipe" });
-        fs.unlinkSync(tmp);
-        emit.log("ARM GCC installed");
-        return true;
-    } catch (e) {
-        emit.log(`ERROR: ARM GCC extract failed: ${e.message}`);
+    const out = path.join(TOOLCHAINS_DIR, "arm-gnu-toolchain");
+    fs.mkdirSync(out, { recursive: true });
+    const ex = await extractArchive(tmp, out, "tar.xz", emit.log);
+    if (!ex.ok) {
+        emit.log(`ERROR: ARM GCC extract failed: ${ex.error}`);
         try { fs.unlinkSync(tmp); } catch (_) {}
         return false;
     }
+    try { fs.unlinkSync(tmp); } catch (_) {}
+    emit.log("ARM GCC installed");
+    return true;
 }
 
 async function ensureCmakeNinja(emit) {
@@ -98,17 +97,16 @@ async function ensureCmakeNinja(emit) {
         const tmp = path.join(TOOLCHAINS_DIR, "_cmake.tar.gz");
         const ok = await mirror.downloadAsset("cmake-3.30.5-macos-universal", tmp, emit, mirror.getPreference());
         if (!ok) { emit.log("ERROR: cmake download failed from all sources"); return false; }
-        try {
-            const out = path.join(TOOLCHAINS_DIR, "cmake");
-            fs.mkdirSync(out, { recursive: true });
-            execSync(`tar -xzf "${tmp}" -C "${out}" --strip-components=1`, { stdio: "pipe" });
-            fs.unlinkSync(tmp);
-            emit.log("cmake installed");
-        } catch (e) {
-            emit.log(`ERROR: cmake extract failed: ${e.message}`);
+        const out = path.join(TOOLCHAINS_DIR, "cmake");
+        fs.mkdirSync(out, { recursive: true });
+        const ex = await extractArchive(tmp, out, "tar.gz", emit.log);
+        if (!ex.ok) {
+            emit.log(`ERROR: cmake extract failed: ${ex.error}`);
             try { fs.unlinkSync(tmp); } catch (_) {}
             return false;
         }
+        try { fs.unlinkSync(tmp); } catch (_) {}
+        emit.log("cmake installed");
     } else {
         emit.log("cmake already present");
     }
@@ -118,17 +116,19 @@ async function ensureCmakeNinja(emit) {
         const tmp = path.join(TOOLCHAINS_DIR, "_ninja.zip");
         const ok = await mirror.downloadAsset("ninja-1.12.1-mac", tmp, emit, mirror.getPreference());
         if (!ok) { emit.log("ERROR: ninja download failed from all sources"); return false; }
-        try {
-            const out = path.join(TOOLCHAINS_DIR, "ninja");
-            fs.mkdirSync(out, { recursive: true });
-            execSync(`unzip -o "${tmp}" -d "${out}" >/dev/null && chmod +x "${out}/ninja"`, { stdio: "pipe" });
-            fs.unlinkSync(tmp);
-            emit.log("ninja installed");
-        } catch (e) {
-            emit.log(`ERROR: ninja extract failed: ${e.message}`);
+        const out = path.join(TOOLCHAINS_DIR, "ninja");
+        fs.mkdirSync(out, { recursive: true });
+        const ex = await extractArchive(tmp, out, "zip", emit.log);
+        if (!ex.ok) {
+            emit.log(`ERROR: ninja extract failed: ${ex.error}`);
             try { fs.unlinkSync(tmp); } catch (_) {}
             return false;
         }
+        try {
+            fs.chmodSync(path.join(out, "ninja"), 0o755);
+            fs.unlinkSync(tmp);
+        } catch (_) {}
+        emit.log("ninja installed");
     } else {
         emit.log("ninja already present");
     }
@@ -144,14 +144,75 @@ function hasCommand(name) {
     } catch { return false; }
 }
 
+// Async streaming command runner. Uses spawn() so:
+//  - main process event loop stays free (IPC + window events keep flowing)
+//  - stdout/stderr is forwarded line-by-line in real time (no end-of-process
+//    flood, progress regexes in makeEmit fire as data arrives)
+//  - long-running commands (install.sh, git clone) don't freeze the IDE
+//
+// Returns Promise<{ ok, output, code }>. All callers must await.
+// `log` is the legacy plain-log callback OR the emit's log fn — either way,
+// each line is passed through individually so makeEmit's progress regex
+// catches them.
 function run(cmd, log) {
     if (log) log(cmd);
-    try {
-        const out = execSync(cmd, { timeout: 600000, maxBuffer: 10 * 1024 * 1024 });
-        return { ok: true, output: out.toString() };
-    } catch (e) {
-        return { ok: false, output: e.stderr ? e.stderr.toString() : e.message };
-    }
+    return new Promise((resolve) => {
+        const child = spawn("bash", ["-c", cmd], {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: process.env,
+        });
+        let output = "";
+        const pipeStream = (stream) => {
+            let buf = "";
+            stream.setEncoding("utf-8");
+            stream.on("data", (chunk) => {
+                buf += chunk;
+                let nl;
+                while ((nl = buf.indexOf("\n")) !== -1) {
+                    const line = buf.slice(0, nl);
+                    buf = buf.slice(nl + 1);
+                    output += line + "\n";
+                    if (log) log(line);
+                }
+            });
+            stream.on("end", () => {
+                if (buf) {
+                    output += buf;
+                    if (log) log(buf);
+                }
+            });
+        };
+        pipeStream(child.stdout);
+        pipeStream(child.stderr);
+        child.on("error", (e) => resolve({ ok: false, output: e.message, code: -1 }));
+        child.on("close", (code) => resolve({ ok: code === 0, output, code }));
+    });
+}
+
+// Async streaming extract. Same rationale as run() — tar -xJf on the 280 MB
+// Arm GCC tarball blocks for ~6 s, which is long enough that the dialog
+// timer pauses and any in-flight log lines get queued. Using spawn keeps
+// main responsive and lets us pass progress messages through.
+function extractArchive(archivePath, outDir, format, log) {
+    return new Promise((resolve) => {
+        let argv;
+        if (format === "tar.xz")      argv = ["tar", "-xJf", archivePath, "-C", outDir, "--strip-components=1"];
+        else if (format === "tar.gz") argv = ["tar", "-xzf", archivePath, "-C", outDir, "--strip-components=1"];
+        else if (format === "zip")    argv = ["unzip", "-o", archivePath, "-d", outDir];
+        else                          return resolve({ ok: false, error: `unknown archive format: ${format}` });
+
+        if (log) log(`extracting ${path.basename(archivePath)} (${format})…`);
+        const child = spawn(argv[0], argv.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
+        let stderr = "";
+        child.stdout.on("data", () => {}); // suppress unzip's per-file noise from the dialog log
+        child.stderr.setEncoding("utf-8");
+        child.stderr.on("data", (chunk) => { stderr += chunk; });
+        child.on("error", (e) => resolve({ ok: false, error: e.message }));
+        child.on("close", (code) => {
+            if (code === 0) resolve({ ok: true });
+            else resolve({ ok: false, error: stderr.trim() || `${argv[0]} exited ${code}` });
+        });
+    });
 }
 
 // Wraps a legacy log(string) callback into an emit object the new flow uses.
@@ -236,7 +297,7 @@ async function ensureRP2040(legacy) {
     if (process.platform === "linux") {
         if (!hasCommand("arm-none-eabi-gcc")) {
             log("Installing ARM GCC toolchain via apt...");
-            const r = run("sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi 2>&1", log);
+            const r = await run("sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi 2>&1", log);
             if (!r.ok) {
                 log("ERROR: Failed to install ARM GCC. Run manually: sudo apt install gcc-arm-none-eabi");
                 emit.stageError("arm-gcc", "apt install failed");
@@ -263,7 +324,7 @@ async function ensureRP2040(legacy) {
     if (process.platform === "linux") {
         if (!hasCommand("cmake")) {
             log("Installing cmake via apt...");
-            const r = run("sudo apt-get install -y cmake 2>&1", log);
+            const r = await run("sudo apt-get install -y cmake 2>&1", log);
             if (!r.ok) { emit.stageError("cmake", "apt install failed"); return false; }
         } else {
             log("cmake already installed");
@@ -286,7 +347,7 @@ async function ensureRP2040(legacy) {
             try { fs.rmSync(sdk, { recursive: true, force: true }); } catch (_) {}
         }
         log("Downloading Raspberry Pi Pico SDK...");
-        const r = run(`git clone --depth=1 --recurse-submodules --shallow-submodules https://github.com/raspberrypi/pico-sdk.git "${sdk}" 2>&1`, log);
+        const r = await run(`git clone --depth=1 --recurse-submodules --shallow-submodules https://github.com/raspberrypi/pico-sdk.git "${sdk}" 2>&1`, log);
         if (!r.ok) {
             emit.stageError("clone-sdk", "git clone failed (check internet)");
             return false;
@@ -302,7 +363,7 @@ async function ensureRP2040(legacy) {
     if (process.platform === "linux") {
         if (!hasCommand("picotool")) {
             log("Installing picotool for direct flashing...");
-            if (!installPicotool(emit)) {
+            if (!(await installPicotool(emit))) {
                 log("picotool install failed — you can still flash via BOOTSEL mode");
                 emit.stageError("picotool", "build failed (BOOTSEL still works)");
             } else {
@@ -321,7 +382,7 @@ async function ensureRP2040(legacy) {
     // 5. udev rules — Linux only
     emit.stage("udev");
     if (process.platform === "linux") {
-        setupRP2040Udev(emit);
+        await setupRP2040Udev(emit);
     } else {
         log("Skipping udev (not Linux)");
     }
@@ -330,10 +391,10 @@ async function ensureRP2040(legacy) {
     return true;
 }
 
-function installPicotool(emit) {
+async function installPicotool(emit) {
     const log = emit && emit.log ? emit.log : (emit || (() => {}));
     // Need libusb
-    run("sudo apt-get install -y libusb-1.0-0-dev 2>&1", log);
+    await run("sudo apt-get install -y libusb-1.0-0-dev 2>&1", log);
 
     const picotoolDir = path.join(TOOLCHAINS_DIR, "picotool-build");
     ensureDir(picotoolDir);
@@ -341,7 +402,7 @@ function installPicotool(emit) {
     const srcDir = path.join(picotoolDir, "src");
     if (!fs.existsSync(path.join(srcDir, "CMakeLists.txt"))) {
         log("Downloading picotool source...");
-        const r = run(`git clone --depth=1 https://github.com/raspberrypi/picotool.git "${srcDir}" 2>&1`, log);
+        const r = await run(`git clone --depth=1 https://github.com/raspberrypi/picotool.git "${srcDir}" 2>&1`, log);
         if (!r.ok) return false;
     }
 
@@ -350,15 +411,15 @@ function installPicotool(emit) {
     const sdk = picoSdkPath();
 
     log("Configuring picotool...");
-    let r = run(`cmake -S "${srcDir}" -B "${buildDir}" -DPICO_SDK_PATH="${sdk}" -DCMAKE_BUILD_TYPE=Release 2>&1`, log);
+    let r = await run(`cmake -S "${srcDir}" -B "${buildDir}" -DPICO_SDK_PATH="${sdk}" -DCMAKE_BUILD_TYPE=Release 2>&1`, log);
     if (!r.ok) return false;
 
     log("Building picotool (takes ~30s)...");
-    r = run(`cmake --build "${buildDir}" --parallel 2>&1`, log);
+    r = await run(`cmake --build "${buildDir}" --parallel 2>&1`, log);
     if (!r.ok) return false;
 
     // Install
-    r = run(`sudo cp "${buildDir}/picotool" /usr/local/bin/picotool 2>&1`);
+    r = await run(`sudo cp "${buildDir}/picotool" /usr/local/bin/picotool 2>&1`);
     if (!r.ok) {
         // Try ~/.local/bin
         const localBin = path.join(os.homedir(), ".local", "bin");
@@ -368,11 +429,11 @@ function installPicotool(emit) {
     }
 
     log("picotool installed");
-    setupRP2040Udev(log);
+    await setupRP2040Udev(log);
     return true;
 }
 
-function setupRP2040Udev(emit) {
+async function setupRP2040Udev(emit) {
     const log = emit && emit.log ? emit.log : (emit || (() => {}));
     const rulesPath = "/etc/udev/rules.d/99-pico.rules";
     if (fs.existsSync(rulesPath)) return;
@@ -382,7 +443,7 @@ function setupRP2040Udev(emit) {
     const tmp = path.join(os.tmpdir(), "99-pico.rules");
     fs.writeFileSync(tmp, rules);
 
-    const r = run(`sudo cp "${tmp}" "${rulesPath}" && sudo udevadm control --reload-rules && sudo udevadm trigger 2>&1`);
+    const r = await run(`sudo cp "${tmp}" "${rulesPath}" && sudo udevadm control --reload-rules && sudo udevadm trigger 2>&1`);
     if (r.ok) {
         log("USB permissions configured. Unplug and replug Pico to apply.");
     } else {
@@ -433,7 +494,7 @@ async function ensureEspIdf(chip, legacy) {
         const missingLinuxDep = linuxDeps.find(c => !hasCommand(c));
         if (missingLinuxDep) {
             log(`Installing system dependencies via apt (missing: ${missingLinuxDep})...`);
-            run("sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 2>&1", log);
+            await run("sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 2>&1", log);
         } else {
             log("Linux system dependencies already present — skipping apt");
         }
@@ -472,11 +533,11 @@ async function ensureEspIdf(chip, legacy) {
         }
         if (chip.includes("8266")) {
             log("Downloading ESP8266 RTOS SDK...");
-            const r = run(`git clone --depth=1 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/ESP8266_RTOS_SDK.git "${idf}" 2>&1`, log);
+            const r = await run(`git clone --depth=1 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/ESP8266_RTOS_SDK.git "${idf}" 2>&1`, log);
             if (!r.ok) { emit.stageError("clone-idf", "git clone failed"); return false; }
         } else {
             log("Downloading ESP-IDF v5.4 (this may take several minutes)...");
-            const r = run(`git clone --depth=1 -b v5.4 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/esp-idf.git "${idf}" 2>&1`, log);
+            const r = await run(`git clone --depth=1 -b v5.4 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/esp-idf.git "${idf}" 2>&1`, log);
             if (!r.ok) { emit.stageError("clone-idf", "git clone failed"); return false; }
         }
     }
@@ -509,7 +570,7 @@ async function ensureEspIdf(chip, legacy) {
         ? `export PATH="${pathPrefix}$PATH" && cd "${idf}" && ./install.sh 2>&1`
         : `export PATH="${pathPrefix}$PATH" && cd "${idf}" && ./install.sh esp32 2>&1`;
     log("Installing ESP-IDF toolchain (this may take several minutes)...");
-    const installResult = run(installCmd, log);
+    const installResult = await run(installCmd, log);
     if (!installResult.ok) { emit.stageError("install-idf", "install.sh failed"); return false; }
     emit.stageDone("install-idf");
 
@@ -543,7 +604,7 @@ async function ensureToolchain(chip, legacy) {
         if (process.platform === "linux") {
             if (!hasCommand("arm-none-eabi-gcc")) {
                 log("Installing ARM GCC for STM32 via apt...");
-                const r = run("sudo apt-get install -y gcc-arm-none-eabi 2>&1", log);
+                const r = await run("sudo apt-get install -y gcc-arm-none-eabi 2>&1", log);
                 if (!r.ok) { emit.stageError("arm-gcc", "apt install failed"); return false; }
             } else {
                 log("ARM GCC already installed");
@@ -567,7 +628,7 @@ async function ensureToolchain(chip, legacy) {
         if (process.platform === "linux") {
             if (!hasCommand("openocd")) {
                 log("Installing OpenOCD via apt...");
-                const r = run("sudo apt-get install -y openocd 2>&1", log);
+                const r = await run("sudo apt-get install -y openocd 2>&1", log);
                 if (!r.ok) { emit.stageError("openocd", "apt install failed"); return false; }
             } else {
                 log("OpenOCD already installed");
