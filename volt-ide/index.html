@@ -123,6 +123,7 @@
             <div class="side-panel-body" id="panelTasks" style="display:none"></div>
             <div class="side-panel-body" id="panelOutline" style="display:none"></div>
             <div class="side-panel-body" id="panelLibrary" style="display:none"></div>
+            <div class="side-panel-body" id="panelPinout"  style="display:none"></div>
         </div>
 
         <!-- Activity bar (VS Code style — icon strip on far right) -->
@@ -142,6 +143,10 @@
             <button class="activity-btn" id="toggleLibrary" title="Device library (Ctrl+4)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11l9-4M12 11l-9-4M12 11v10"/></svg>
                 <span class="activity-label">Library</span>
+            </button>
+            <button class="activity-btn" id="togglePinout" title="Pinout (Ctrl+5)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="1.5"/><line x1="9" y1="3" x2="9" y2="2"/><line x1="15" y1="3" x2="15" y2="2"/><line x1="9" y1="22" x2="9" y2="21"/><line x1="15" y1="22" x2="15" y2="21"/><circle cx="9" cy="9" r="0.9"/><circle cx="15" cy="9" r="0.9"/><circle cx="9" cy="15" r="0.9"/><circle cx="15" cy="15" r="0.9"/></svg>
+                <span class="activity-label">Pinout</span>
             </button>
         </div>
     </div>

@@ -1,0 +1,384 @@
+{
+  "chip": "esp32",
+  "board": "ESP32 DevKitC v4",
+  "svg": "esp32-devkitc.svg",
+  "viewBox": "0 0 786.8269 387.66232",
+  "pins": [
+    {
+      "id": "pin-1",
+      "label": "EN",
+      "gpio": null,
+      "type": "control",
+      "alt": [],
+      "note": "Reset / chip enable"
+    },
+    {
+      "id": "pin-2",
+      "label": "3V3",
+      "gpio": null,
+      "type": "power",
+      "alt": [],
+      "note": "3.3V regulator output"
+    },
+    {
+      "id": "pin-3",
+      "label": "EN",
+      "gpio": null,
+      "type": "control",
+      "alt": [],
+      "note": "Reset / chip enable"
+    },
+    {
+      "id": "pin-4",
+      "label": "VP",
+      "gpio": "36",
+      "type": "input",
+      "alt": [
+        "ADC1_0",
+        "Sensor VP"
+      ],
+      "note": "Input-only"
+    },
+    {
+      "id": "pin-5",
+      "label": "VN",
+      "gpio": "39",
+      "type": "input",
+      "alt": [
+        "ADC1_3",
+        "Sensor VN"
+      ],
+      "note": "Input-only"
+    },
+    {
+      "id": "pin-6",
+      "label": "34",
+      "gpio": "34",
+      "type": "input",
+      "alt": [
+        "ADC1_6"
+      ],
+      "note": "Input-only"
+    },
+    {
+      "id": "pin-7",
+      "label": "35",
+      "gpio": "35",
+      "type": "input",
+      "alt": [
+        "ADC1_7"
+      ],
+      "note": "Input-only"
+    },
+    {
+      "id": "pin-8",
+      "label": "32",
+      "gpio": "32",
+      "type": "io",
+      "alt": [
+        "ADC1_4",
+        "Touch9",
+        "XTAL_32K_P"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-9",
+      "label": "33",
+      "gpio": "33",
+      "type": "io",
+      "alt": [
+        "ADC1_5",
+        "Touch8",
+        "XTAL_32K_N"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-10",
+      "label": "25",
+      "gpio": "25",
+      "type": "io",
+      "alt": [
+        "ADC2_8",
+        "DAC1"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-11",
+      "label": "26",
+      "gpio": "26",
+      "type": "io",
+      "alt": [
+        "ADC2_9",
+        "DAC2"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-12",
+      "label": "27",
+      "gpio": "27",
+      "type": "io",
+      "alt": [
+        "ADC2_7",
+        "Touch7"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-13",
+      "label": "14",
+      "gpio": "14",
+      "type": "io",
+      "alt": [
+        "ADC2_6",
+        "Touch6",
+        "HSPI_CLK"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-14",
+      "label": "12",
+      "gpio": "12",
+      "type": "io",
+      "alt": [
+        "ADC2_5",
+        "Touch5",
+        "HSPI_MISO"
+      ],
+      "note": "Strapping pin \u2014 affects boot"
+    },
+    {
+      "id": "pin-15",
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "note": ""
+    },
+    {
+      "id": "pin-16",
+      "label": "13",
+      "gpio": "13",
+      "type": "io",
+      "alt": [
+        "ADC2_4",
+        "Touch4",
+        "HSPI_MOSI"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-17",
+      "label": "D2",
+      "gpio": "9",
+      "type": "reserved",
+      "alt": [],
+      "note": "Flash D2 \u2014 do not use"
+    },
+    {
+      "id": "pin-18",
+      "label": "D3",
+      "gpio": "10",
+      "type": "reserved",
+      "alt": [],
+      "note": "Flash D3 \u2014 do not use"
+    },
+    {
+      "id": "pin-19",
+      "label": "CMD",
+      "gpio": "11",
+      "type": "reserved",
+      "alt": [],
+      "note": "Flash CMD \u2014 do not use"
+    },
+    {
+      "id": "pin-20",
+      "label": "5V",
+      "gpio": null,
+      "type": "power",
+      "alt": [],
+      "note": "5V from USB"
+    },
+    {
+      "id": "pin-21",
+      "label": "CLK",
+      "gpio": "6",
+      "type": "reserved",
+      "alt": [],
+      "note": "Flash CLK \u2014 do not use"
+    },
+    {
+      "id": "pin-22",
+      "label": "D0",
+      "gpio": "7",
+      "type": "reserved",
+      "alt": [],
+      "note": "Flash D0 \u2014 do not use"
+    },
+    {
+      "id": "pin-23",
+      "label": "D1",
+      "gpio": "8",
+      "type": "reserved",
+      "alt": [],
+      "note": "Flash D1 \u2014 do not use"
+    },
+    {
+      "id": "pin-24",
+      "label": "15",
+      "gpio": "15",
+      "type": "io",
+      "alt": [
+        "ADC2_3",
+        "Touch3",
+        "HSPI_CS"
+      ],
+      "note": "Strapping pin \u2014 affects boot"
+    },
+    {
+      "id": "pin-25",
+      "label": "2",
+      "gpio": "2",
+      "type": "io",
+      "alt": [
+        "ADC2_2",
+        "Touch2"
+      ],
+      "note": "Strapping pin; on-board LED"
+    },
+    {
+      "id": "pin-26",
+      "label": "0",
+      "gpio": "0",
+      "type": "io",
+      "alt": [
+        "ADC2_1",
+        "Touch1"
+      ],
+      "note": "Boot button \u2014 strapping pin"
+    },
+    {
+      "id": "pin-27",
+      "label": "4",
+      "gpio": "4",
+      "type": "io",
+      "alt": [
+        "ADC2_0",
+        "Touch0"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-28",
+      "label": "16",
+      "gpio": "16",
+      "type": "io",
+      "alt": [
+        "UART2 RX"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-29",
+      "label": "17",
+      "gpio": "17",
+      "type": "io",
+      "alt": [
+        "UART2 TX"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-30",
+      "label": "5",
+      "gpio": "5",
+      "type": "io",
+      "alt": [
+        "VSPI_CS"
+      ],
+      "note": "Strapping pin"
+    },
+    {
+      "id": "pin-31",
+      "label": "18",
+      "gpio": "18",
+      "type": "io",
+      "alt": [
+        "VSPI_CLK"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-32",
+      "label": "19",
+      "gpio": "19",
+      "type": "io",
+      "alt": [
+        "VSPI_MISO"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-33",
+      "label": "21",
+      "gpio": "21",
+      "type": "io",
+      "alt": [
+        "I\u00b2C SDA (default)"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-34",
+      "label": "RX",
+      "gpio": "3",
+      "type": "io",
+      "alt": [
+        "UART0 RX"
+      ],
+      "note": "Programming UART"
+    },
+    {
+      "id": "pin-35",
+      "label": "TX",
+      "gpio": "1",
+      "type": "io",
+      "alt": [
+        "UART0 TX"
+      ],
+      "note": "Programming UART"
+    },
+    {
+      "id": "pin-36",
+      "label": "22",
+      "gpio": "22",
+      "type": "io",
+      "alt": [
+        "I\u00b2C SCL (default)"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-37",
+      "label": "23",
+      "gpio": "23",
+      "type": "io",
+      "alt": [
+        "VSPI_MOSI"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pin-38",
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "note": ""
+    }
+  ]
+}

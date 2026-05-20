@@ -2595,6 +2595,146 @@ kbd {
     margin-bottom: var(--s-1);
 }
 
+/* ===========================================================
+   Pinout panel — live board diagram with assigned pin labels
+   =========================================================== */
+.pinout-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.pinout-stage {
+    padding: var(--s-3);
+    overflow: auto;
+    flex: 1;
+}
+.pinout-svg-wrap {
+    position: relative;
+    display: block;
+}
+.pinout-svg-wrap svg { display: block; width: 100%; height: auto; }
+.pinout-empty, .pinout-legend-empty {
+    color: var(--t3);
+    font-size: var(--fs-12);
+    padding: var(--s-3);
+    line-height: var(--lh-base);
+}
+.pinout-legend-empty code {
+    font-family: var(--mono);
+    background: var(--bg-2);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--t2);
+}
+
+/* HTML overlay layer for boards that use a decorative SVG (Pico).
+   Pins are absolute-positioned percentages of the SVG viewBox. */
+.pinout-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+.pinout-pin {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 18px;
+    height: 18px;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    pointer-events: auto;
+}
+.pinout-pin-dot {
+    display: block;
+    width: 10px; height: 10px;
+    margin: 4px auto;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.0);
+    border: 2px solid transparent;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.pinout-pin:hover .pinout-pin-dot {
+    background: rgba(43,124,179,0.25);
+    border-color: var(--volt);
+}
+.pinout-pin.is-assigned .pinout-pin-dot {
+    background: var(--volt);
+    border-color: var(--volt);
+    box-shadow: 0 0 8px rgba(43,124,179,0.6);
+}
+.pinout-pin-label {
+    position: absolute;
+    top: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--volt);
+    background: var(--bg-1);
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--volt);
+    white-space: nowrap;
+}
+/* Pin type tint on the dot border at rest */
+.pinout-pin-power  .pinout-pin-dot { border-color: rgba(239,68,68,0.5); }
+.pinout-pin-ground .pinout-pin-dot { border-color: rgba(120,120,120,0.4); }
+.pinout-pin-input  .pinout-pin-dot { border-color: rgba(43,124,179,0.35); }
+
+/* SVG-embedded markers (ESP32 path) — applied via .pin-hit class */
+.pinout-stage svg .pin-hit {
+    cursor: pointer;
+    pointer-events: all;
+    transition: fill var(--dur-fast) var(--ease-out), stroke var(--dur-fast) var(--ease-out);
+}
+.pinout-stage svg .pin-hit:hover {
+    fill: rgba(43,124,179,0.25);
+    stroke: var(--volt);
+}
+.pinout-stage svg .pin-hit.is-assigned {
+    fill: var(--volt);
+    stroke: var(--volt);
+}
+.pinout-stage svg .pin-assigned-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    fill: var(--volt);
+    text-anchor: middle;
+}
+
+/* Legend below the board */
+.pinout-legend {
+    border-top: 1px solid var(--border);
+    padding: var(--s-3);
+    flex-shrink: 0;
+    max-height: 40%;
+    overflow-y: auto;
+}
+.pinout-legend-title {
+    font-size: var(--fs-10);
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: var(--s-2);
+}
+.pinout-legend-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.pinout-legend-list li {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: var(--s-2);
+    align-items: center;
+    padding: 2px 0;
+    font-size: var(--fs-12);
+}
+.pinout-legend-name { color: var(--t1); font-family: var(--mono); }
+.pinout-legend-pin  { color: var(--volt); font-family: var(--mono); font-size: var(--fs-11); }
+.pinout-legend-type { color: var(--t3); font-size: var(--fs-10); }
+
 .device-detail-body {
     padding: var(--s-4) var(--s-5);
     overflow-y: auto;

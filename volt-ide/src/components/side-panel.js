@@ -6,8 +6,8 @@ let activePanel = null;
 let lastAST = null;
 
 export function init() {
-    const ids = ["toggleHardware", "toggleTasks", "toggleOutline", "toggleLibrary"];
-    const panels = ["hardware", "tasks", "outline", "library"];
+    const ids = ["toggleHardware", "toggleTasks", "toggleOutline", "toggleLibrary", "togglePinout"];
+    const panels = ["hardware", "tasks", "outline", "library", "pinout"];
 
     ids.forEach((id, i) => {
         const btn = document.getElementById(id);
@@ -48,12 +48,12 @@ export function open(panel) {
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    const btnMap = { hardware: "toggleHardware", tasks: "toggleTasks", outline: "toggleOutline", library: "toggleLibrary" };
+    const btnMap = { hardware: "toggleHardware", tasks: "toggleTasks", outline: "toggleOutline", library: "toggleLibrary", pinout: "togglePinout" };
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
     // Swap visible body — fade-in via .is-active class (CSS keyframe)
-    ["panelHardware", "panelTasks", "panelOutline", "panelLibrary"].forEach(id => {
+    ["panelHardware", "panelTasks", "panelOutline", "panelLibrary", "panelPinout"].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
@@ -62,6 +62,7 @@ export function open(panel) {
         tasks:    "panelTasks",
         outline:  "panelOutline",
         library:  "panelLibrary",
+        pinout:   "panelPinout",
     };
     const body = document.getElementById(bodyMap[panel]);
     if (body) {
@@ -71,13 +72,21 @@ export function open(panel) {
     }
 
     // Title
-    const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline", library: "Library" };
+    const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline", library: "Library", pinout: "Pinout" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
     if (panel === "library") {
         // Library is data-driven by the device catalog, not the editor AST
         import("./library.js").then(m => m.renderInto(body));
+    } else if (panel === "pinout") {
+        // Pinout uses the current chip + the latest parsed hardware pins
+        import("./pinout-panel.js").then(m => {
+            m.init(body);
+            const chip = (window.chipSelector && window.chipSelector.getChip()) ||
+                         (document.getElementById("chipLabel") || {}).textContent || "esp32";
+            m.render(chip.toLowerCase(), (lastAST && lastAST.pins) || []);
+        });
     } else if (lastAST) {
         render(lastAST);
     }
@@ -127,6 +136,14 @@ function render(ast) {
     if (activePanel === "hardware") renderHardware(ast);
     else if (activePanel === "tasks") renderTasks(ast);
     else if (activePanel === "outline") renderOutline(ast);
+    else if (activePanel === "pinout") {
+        // Re-import (cached) and push the latest pin list.
+        import("./pinout-panel.js").then(m => {
+            const chip = (window.chipSelector && window.chipSelector.getChip()) ||
+                         (document.getElementById("chipLabel") || {}).textContent || "esp32";
+            m.render(chip.toLowerCase(), ast.pins || []);
+        });
+    }
 }
 
 // ============================================================

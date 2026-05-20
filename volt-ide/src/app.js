@@ -480,6 +480,7 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "2") { e.preventDefault(); sidePanel.toggle("tasks"); }
     if (e.ctrlKey && e.key === "3") { e.preventDefault(); sidePanel.toggle("outline"); }
     if (e.ctrlKey && e.key === "4") { e.preventDefault(); sidePanel.toggle("library"); }
+    if (e.ctrlKey && e.key === "5") { e.preventDefault(); sidePanel.toggle("pinout"); }
 });
 
 // Init panels

@@ -1,0 +1,450 @@
+{
+  "chip": "rp2040",
+  "board": "Raspberry Pi Pico",
+  "svg": "pico.svg",
+  "viewBox": "0 0 1200 900",
+  "pins": [
+    {
+      "pin_num": 1,
+      "label": "GP0",
+      "gpio": "0",
+      "type": "io",
+      "alt": [
+        "UART0 TX",
+        "I2C0 SDA",
+        "SPI0 RX"
+      ],
+      "x": 327,
+      "y": 138.0
+    },
+    {
+      "pin_num": 2,
+      "label": "GP1",
+      "gpio": "1",
+      "type": "io",
+      "alt": [
+        "UART0 RX",
+        "I2C0 SCL",
+        "SPI0 CSn"
+      ],
+      "x": 327,
+      "y": 172.6
+    },
+    {
+      "pin_num": 3,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 327,
+      "y": 207.2
+    },
+    {
+      "pin_num": 4,
+      "label": "GP2",
+      "gpio": "2",
+      "type": "io",
+      "alt": [
+        "I2C1 SDA",
+        "SPI0 SCK"
+      ],
+      "x": 327,
+      "y": 241.8
+    },
+    {
+      "pin_num": 5,
+      "label": "GP3",
+      "gpio": "3",
+      "type": "io",
+      "alt": [
+        "I2C1 SCL",
+        "SPI0 TX"
+      ],
+      "x": 327,
+      "y": 276.4
+    },
+    {
+      "pin_num": 6,
+      "label": "GP4",
+      "gpio": "4",
+      "type": "io",
+      "alt": [
+        "UART1 TX",
+        "I2C0 SDA",
+        "SPI0 RX"
+      ],
+      "x": 327,
+      "y": 311.0
+    },
+    {
+      "pin_num": 7,
+      "label": "GP5",
+      "gpio": "5",
+      "type": "io",
+      "alt": [
+        "UART1 RX",
+        "I2C0 SCL",
+        "SPI0 CSn"
+      ],
+      "x": 327,
+      "y": 345.6
+    },
+    {
+      "pin_num": 8,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 327,
+      "y": 380.20000000000005
+    },
+    {
+      "pin_num": 9,
+      "label": "GP6",
+      "gpio": "6",
+      "type": "io",
+      "alt": [
+        "I2C1 SDA",
+        "SPI0 SCK"
+      ],
+      "x": 327,
+      "y": 414.8
+    },
+    {
+      "pin_num": 10,
+      "label": "GP7",
+      "gpio": "7",
+      "type": "io",
+      "alt": [
+        "I2C1 SCL",
+        "SPI0 TX"
+      ],
+      "x": 327,
+      "y": 449.40000000000003
+    },
+    {
+      "pin_num": 11,
+      "label": "GP8",
+      "gpio": "8",
+      "type": "io",
+      "alt": [
+        "UART1 TX",
+        "I2C0 SDA",
+        "SPI1 RX"
+      ],
+      "x": 327,
+      "y": 484.0
+    },
+    {
+      "pin_num": 12,
+      "label": "GP9",
+      "gpio": "9",
+      "type": "io",
+      "alt": [
+        "UART1 RX",
+        "I2C0 SCL",
+        "SPI1 CSn"
+      ],
+      "x": 327,
+      "y": 518.6
+    },
+    {
+      "pin_num": 13,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 327,
+      "y": 553.2
+    },
+    {
+      "pin_num": 14,
+      "label": "GP10",
+      "gpio": "10",
+      "type": "io",
+      "alt": [
+        "I2C1 SDA",
+        "SPI1 SCK"
+      ],
+      "x": 327,
+      "y": 587.8
+    },
+    {
+      "pin_num": 15,
+      "label": "GP11",
+      "gpio": "11",
+      "type": "io",
+      "alt": [
+        "I2C1 SCL",
+        "SPI1 TX"
+      ],
+      "x": 327,
+      "y": 622.4000000000001
+    },
+    {
+      "pin_num": 16,
+      "label": "GP12",
+      "gpio": "12",
+      "type": "io",
+      "alt": [
+        "UART0 TX",
+        "I2C0 SDA",
+        "SPI1 RX"
+      ],
+      "x": 327,
+      "y": 657.0
+    },
+    {
+      "pin_num": 17,
+      "label": "GP13",
+      "gpio": "13",
+      "type": "io",
+      "alt": [
+        "UART0 RX",
+        "I2C0 SCL",
+        "SPI1 CSn"
+      ],
+      "x": 327,
+      "y": 691.6
+    },
+    {
+      "pin_num": 18,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 327,
+      "y": 726.2
+    },
+    {
+      "pin_num": 19,
+      "label": "GP14",
+      "gpio": "14",
+      "type": "io",
+      "alt": [
+        "I2C1 SDA",
+        "SPI1 SCK"
+      ],
+      "x": 327,
+      "y": 760.8000000000001
+    },
+    {
+      "pin_num": 20,
+      "label": "GP15",
+      "gpio": "15",
+      "type": "io",
+      "alt": [
+        "I2C1 SCL",
+        "SPI1 TX"
+      ],
+      "x": 327,
+      "y": 795.4
+    },
+    {
+      "pin_num": 21,
+      "label": "GP16",
+      "gpio": "16",
+      "type": "io",
+      "alt": [
+        "UART0 TX",
+        "I2C0 SDA",
+        "SPI0 RX"
+      ],
+      "x": 873,
+      "y": 795.4
+    },
+    {
+      "pin_num": 22,
+      "label": "GP17",
+      "gpio": "17",
+      "type": "io",
+      "alt": [
+        "UART0 RX",
+        "I2C0 SCL",
+        "SPI0 CSn"
+      ],
+      "x": 873,
+      "y": 760.8
+    },
+    {
+      "pin_num": 23,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 873,
+      "y": 726.1999999999999
+    },
+    {
+      "pin_num": 24,
+      "label": "GP18",
+      "gpio": "18",
+      "type": "io",
+      "alt": [
+        "I2C1 SDA",
+        "SPI0 SCK"
+      ],
+      "x": 873,
+      "y": 691.5999999999999
+    },
+    {
+      "pin_num": 25,
+      "label": "GP19",
+      "gpio": "19",
+      "type": "io",
+      "alt": [
+        "I2C1 SCL",
+        "SPI0 TX"
+      ],
+      "x": 873,
+      "y": 657.0
+    },
+    {
+      "pin_num": 26,
+      "label": "GP20",
+      "gpio": "20",
+      "type": "io",
+      "alt": [
+        "I2C0 SDA"
+      ],
+      "x": 873,
+      "y": 622.4
+    },
+    {
+      "pin_num": 27,
+      "label": "GP21",
+      "gpio": "21",
+      "type": "io",
+      "alt": [
+        "I2C0 SCL"
+      ],
+      "x": 873,
+      "y": 587.8
+    },
+    {
+      "pin_num": 28,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 873,
+      "y": 553.1999999999999
+    },
+    {
+      "pin_num": 29,
+      "label": "GP22",
+      "gpio": "22",
+      "type": "io",
+      "alt": [],
+      "x": 873,
+      "y": 518.5999999999999
+    },
+    {
+      "pin_num": 30,
+      "label": "RUN",
+      "gpio": null,
+      "type": "control",
+      "alt": [],
+      "x": 873,
+      "y": 483.99999999999994
+    },
+    {
+      "pin_num": 31,
+      "label": "GP26",
+      "gpio": "26",
+      "type": "io",
+      "alt": [
+        "ADC0",
+        "I2C1 SDA"
+      ],
+      "x": 873,
+      "y": 449.4
+    },
+    {
+      "pin_num": 32,
+      "label": "GP27",
+      "gpio": "27",
+      "type": "io",
+      "alt": [
+        "ADC1",
+        "I2C1 SCL"
+      ],
+      "x": 873,
+      "y": 414.79999999999995
+    },
+    {
+      "pin_num": 33,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 873,
+      "y": 380.19999999999993
+    },
+    {
+      "pin_num": 34,
+      "label": "GP28",
+      "gpio": "28",
+      "type": "io",
+      "alt": [
+        "ADC2"
+      ],
+      "x": 873,
+      "y": 345.59999999999997
+    },
+    {
+      "pin_num": 35,
+      "label": "ADC_VREF",
+      "gpio": null,
+      "type": "power",
+      "alt": [],
+      "x": 873,
+      "y": 310.99999999999994
+    },
+    {
+      "pin_num": 36,
+      "label": "3V3",
+      "gpio": null,
+      "type": "power",
+      "alt": [],
+      "x": 873,
+      "y": 276.4
+    },
+    {
+      "pin_num": 37,
+      "label": "3V3_EN",
+      "gpio": null,
+      "type": "control",
+      "alt": [],
+      "x": 873,
+      "y": 241.79999999999995
+    },
+    {
+      "pin_num": 38,
+      "label": "GND",
+      "gpio": null,
+      "type": "ground",
+      "alt": [],
+      "x": 873,
+      "y": 207.19999999999993
+    },
+    {
+      "pin_num": 39,
+      "label": "VSYS",
+      "gpio": null,
+      "type": "power",
+      "alt": [],
+      "x": 873,
+      "y": 172.5999999999999
+    },
+    {
+      "pin_num": 40,
+      "label": "VBUS",
+      "gpio": null,
+      "type": "power",
+      "alt": [],
+      "x": 873,
+      "y": 138.0
+    }
+  ]
+}
