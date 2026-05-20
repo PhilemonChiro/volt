@@ -68,6 +68,11 @@ contextBridge.exposeInMainWorld("volt", {
     // Device library
     devicesList:   () => ipcRenderer.invoke("devices_list"),
     openExternal:  (url) => ipcRenderer.invoke("open_external", url),
+    // Logging — fire-and-forget from the renderer; main writes to the
+    // rotating log file. The reveal helper opens Finder/Explorer on it.
+    log:           (level, message) => ipcRenderer.send("log_write", level, "renderer", message),
+    logPath:       () => ipcRenderer.invoke("log_path"),
+    logReveal:     () => ipcRenderer.invoke("log_reveal"),
     deviceSource:  (chip, sourceFile) => ipcRenderer.invoke("device_source", chip, sourceFile),
 
     // Events from main process

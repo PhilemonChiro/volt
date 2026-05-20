@@ -24,6 +24,28 @@ settings.init().then(() => {
 // Show app version in the status bar (status-bar right side).
 window.volt.getVersion().then((v) => statusBar.setVersion(v)).catch(() => {});
 
+// Tee renderer console output into the main process's rotating log file
+// so we can debug user-reported issues from a saved log.
+(function patchConsole() {
+    if (!window.volt || !window.volt.log) return;
+    for (const lvl of ["log", "info", "warn", "error"]) {
+        const orig = console[lvl].bind(console);
+        console[lvl] = (...args) => {
+            try {
+                const msg = args.map(a =>
+                    typeof a === "string" ? a :
+                    a instanceof Error    ? `${a.name}: ${a.message}\n${a.stack || ""}` :
+                    JSON.stringify(a)
+                ).join(" ");
+                window.volt.log(lvl === "log" ? "info" : lvl, msg);
+            } catch (_) {}
+            orig(...args);
+        };
+    }
+    window.addEventListener("error",              (e) => window.volt.log("error", `window.onerror: ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`));
+    window.addEventListener("unhandledrejection", (e) => window.volt.log("error", `unhandledrejection: ${e.reason && (e.reason.stack || e.reason.message || e.reason)}`));
+})();
+
 // Settings that map to body-level classes (motion, density, etc.)
 function applyBodyClassSettings() {
     document.body.classList.toggle(

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, screen } = require("electron");
+const logger = require("./src/main/logger");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -71,6 +72,7 @@ function clearMacOSQuarantine() {
 }
 
 app.whenReady().then(() => {
+    logger.init();
     clearMacOSQuarantine();
 
     // Open at ~85% of the primary display's work area (excludes dock /
@@ -264,6 +266,15 @@ ipcMain.handle("settings_open_file", () => {
     return file;
 });
 
+// Logging — let the renderer write into the rotating main.log AND
+// reveal/copy the log path.
+ipcMain.handle("log_path", () => logger.getPath());
+ipcMain.handle("log_reveal", () => {
+    const { shell } = require("electron");
+    shell.showItemInFolder(logger.getPath());
+    return true;
+});
+
 // Open arbitrary URL in the user's external default browser. Used by the
 // device-library detail dialog for datasheet links.
 ipcMain.handle("open_external", (_, url) => {
@@ -376,6 +387,9 @@ function startWorker() {
             worker = spawn(pythonBin, [script, VOLT_SRC], {
                 stdio: ["pipe", "pipe", "pipe"],
             });
+            logger.log("info", "worker", `spawned ${pythonBin} pid=${worker.pid}`);
+            // Stderr only — stdout is the JSON-RPC channel we own.
+            if (worker.stderr) worker.stderr.on("data", b => logger.log("error", "worker", b.toString().trimEnd()));
         } catch (e) {
             reject(new Error(`Failed to spawn ${pythonBin}: ${e.message}`));
             return;

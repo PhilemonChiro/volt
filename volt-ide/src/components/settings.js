@@ -232,6 +232,15 @@ export async function show() {
                 </div>
                 <div class="settings-row">
                     <div class="settings-row-label">
+                        <div class="settings-row-title">Log file</div>
+                        <div class="settings-row-hint" id="logPathHint">Rotating ~2 MB · 3 generations · all sources (main + renderer + worker).</div>
+                    </div>
+                    <div class="settings-row-control">
+                        <button class="settings-action-btn" id="settingsRevealLogBtn">Reveal in Finder</button>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row-label">
                         <div class="settings-row-title">Reset all settings</div>
                         <div class="settings-row-hint">Restore every setting to its default. This cannot be undone.</div>
                     </div>
@@ -246,6 +255,15 @@ export async function show() {
     function bindAdvanced(pane) {
         const openBtn = pane.querySelector("#settingsOpenFileBtn");
         if (openBtn) openBtn.onclick = () => settings.openFile();
+
+        const revealBtn = pane.querySelector("#settingsRevealLogBtn");
+        const logHint   = pane.querySelector("#logPathHint");
+        if (revealBtn) revealBtn.onclick = () => api.logReveal && api.logReveal();
+        if (logHint && api.logPath) {
+            api.logPath().then(p => {
+                if (p) logHint.textContent = p;
+            }).catch(() => {});
+        }
 
         const resetBtn = pane.querySelector("#settingsResetBtn");
         if (resetBtn) resetBtn.onclick = async () => {
