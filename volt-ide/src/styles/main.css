@@ -1552,16 +1552,39 @@ kbd {
 /* Side panel — slides between editor and activity bar */
 .workspace-side {
     width: 280px;
+    min-width: 200px;
+    max-width: 800px;
     background: var(--bg-1);
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
     overflow: hidden;
+    position: relative;          /* anchor for the resize handle */
     transition: width var(--dur-slow) var(--ease-out),
                 opacity var(--dur-base) var(--ease-out),
                 border-left-color var(--dur-slow) var(--ease-out);
     will-change: width;
+}
+/* Disabled while the user drags the resize handle so the panel
+   tracks the cursor instantly without easing. */
+.workspace-side.is-resizing { transition: none !important; }
+
+.side-panel-resize {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+    background: transparent;
+    transition: background var(--dur-fast) var(--ease-out);
+}
+.side-panel-resize:hover,
+.workspace-side.is-resizing .side-panel-resize {
+    background: var(--volt);
+    opacity: 0.6;
 }
 .workspace-side.is-closed {
     width: 0;
@@ -2603,7 +2626,7 @@ kbd {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #0a1f36;            /* slightly darker than the blueprint paper */
+    background: var(--bg-1);
     cursor: grab;
     touch-action: none;
     user-select: none;
@@ -2634,40 +2657,24 @@ kbd {
     line-height: var(--lh-base);
 }
 
-/* ── Enterprise blueprint palette ──────────────────────────
-   Deep neutral paper, restrained pale-blue lines, focused accent.
-   Premium feel comes from restraint: thin lines, generous space,
-   precise geometry, no decoration without purpose. */
+/* ── Pinout palette ─────────────────────────────────────────
+   Inherits the IDE theme — same bg as the editor, lines in the
+   existing t1/t2 text tones, accent volt for assigned state.
+   Bare essentials only: board outline, pins, labels. */
 :root {
-    --bp-paper:        #0c1424;
-    --bp-grid-minor:   rgba(180,210,240,0.025);
-    --bp-grid-major:   rgba(180,210,240,0.06);
-    --bp-line:         #d7e3f0;
-    --bp-line-soft:    rgba(215,227,240,0.42);
-    --bp-line-dim:     rgba(215,227,240,0.18);
-    --bp-accent:       #4dc5f0;        /* refined ice cyan */
-    --bp-accent-dim:   rgba(77,197,240,0.18);
+    --bp-line:         var(--t1);
+    --bp-line-soft:    var(--t3);
+    --bp-line-dim:     var(--bg-3);
+    --bp-accent:       var(--volt);
 }
 
-.bp-paper { fill: var(--bp-paper); }
-.bp-grid-minor { stroke: var(--bp-grid-minor); stroke-width: 0.5; }
-.bp-grid-major { stroke: var(--bp-grid-major); stroke-width: 0.7; }
-.bp-line       { stroke: var(--bp-line); stroke-width: 0.9; vector-effect: non-scaling-stroke; }
-.bp-line-thin  { stroke: var(--bp-line-soft); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
-.bp-corner path { stroke: var(--bp-line); stroke-width: 0.7; fill: none; }
+.bp-line       { stroke: var(--bp-line);      stroke-width: 0.9; fill: none; vector-effect: non-scaling-stroke; }
+.bp-line-thin  { stroke: var(--bp-line-soft); stroke-width: 0.5; fill: none; vector-effect: non-scaling-stroke; }
 
-/* Refined type system — drafting mono with tight scale */
-.bp-label-title { fill: var(--bp-line);      font-family: var(--mono); font-size: 9px;  letter-spacing: 0.22em; text-transform: uppercase; }
-.bp-label-ic    { fill: var(--bp-line);      font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; }
-.bp-label-small { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 8px;  letter-spacing: 0.16em; text-transform: uppercase; }
+/* Labels — mono, plain */
+.bp-label-ic    { fill: var(--bp-line);      font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; }
+.bp-label-small { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 8px;  letter-spacing: 0.14em; text-transform: uppercase; }
 .bp-pin-label   { fill: var(--bp-line);      font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em; }
-
-/* Title block — engineering-drawing convention at the bottom */
-.bp-title-block-line { stroke: var(--bp-line); stroke-width: 0.7; fill: none; }
-.bp-title-block-bg   { fill: rgba(0,0,0,0.18); }
-.bp-tb-heading       { fill: var(--bp-line);      font-family: var(--mono); font-size: 9px;  letter-spacing: 0.18em; text-transform: uppercase; }
-.bp-tb-value         { fill: var(--bp-line);      font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; }
-.bp-tb-label         { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.18em; text-transform: uppercase; }
 
 /* Pins — precision drafting marks */
 .pinout-pin { cursor: pointer; }
@@ -2724,25 +2731,6 @@ kbd {
 }
 .pinout-button { cursor: help; }
 
-/* Physical pin number (inside the board, between pad and IC) */
-.bp-phy-num {
-    fill: var(--bp-line-dim);
-    font-family: var(--mono);
-    font-size: 7.5px;
-    letter-spacing: 0.04em;
-}
-/* Strapping-pin warning triangle above the pin */
-.bp-strap-mark {
-    fill: #d2a567;
-    stroke: var(--bp-paper);
-    stroke-width: 0.4;
-}
-.pinout-pin.is-strapping .bp-pin-label::after {
-    content: "*";
-}
-/* Dimension call-outs (PCB width / 2.54mm pitch) */
-.bp-dim text { fill: var(--bp-line-soft); }
-.bp-orient text { fill: var(--bp-line-soft); }
 
 /* Zoom controls — floating bottom-right corner of the canvas */
 .pinout-controls {

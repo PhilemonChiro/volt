@@ -18,6 +18,52 @@ export function init() {
             });
         }
     });
+
+    // Draggable resize handle on the side panel's left edge.
+    // Width = (editorArea's right edge − pointer x) − activity-bar width.
+    const handle = document.getElementById("sideResize");
+    const side   = document.getElementById("sidePanel");
+    if (handle && side) {
+        handle.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            handle.setPointerCapture(e.pointerId);
+            side.classList.add("is-resizing");
+            const startX = e.clientX;
+            const startW = side.getBoundingClientRect().width;
+            const onMove = (mv) => {
+                // Side panel sits to the LEFT of the activity bar; widening
+                // means the cursor moves further LEFT (smaller clientX).
+                const newW = Math.max(200, Math.min(800, startW + (startX - mv.clientX)));
+                side.style.width = newW + "px";
+                // Monaco needs a layout poke as the editor reflows
+                if (typeof monaco !== "undefined") {
+                    const eds = monaco.editor.getEditors();
+                    if (eds.length) eds[0].layout();
+                }
+            };
+            const onUp = () => {
+                side.classList.remove("is-resizing");
+                handle.releasePointerCapture(e.pointerId);
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup",   onUp);
+                window.removeEventListener("pointercancel", onUp);
+                // Persist preferred width across sessions
+                try {
+                    localStorage.setItem("volt.sidePanelWidth", side.style.width);
+                } catch (_) {}
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup",   onUp);
+            window.addEventListener("pointercancel", onUp);
+        });
+
+        // Restore saved width on init
+        try {
+            const saved = localStorage.getItem("volt.sidePanelWidth");
+            if (saved) side.style.width = saved;
+        } catch (_) {}
+    }
 }
 
 export function toggle(panel) {
