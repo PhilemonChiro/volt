@@ -5,8 +5,118 @@ const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const https = require("https");
 
 const TOOLCHAINS_DIR = path.join(os.homedir(), ".volt", "toolchains");
+
+// Where the bundled Python lives inside the packaged .app/.AppImage/.exe.
+// In dev mode this just falls back to system "python3".
+function bundledPythonBin() {
+    const platKey = `${process.platform}-${process.arch}`;
+    const ext = process.platform === "win32" ? "python.exe" : "bin/python3";
+    if (process.resourcesPath) {
+        const p = path.join(process.resourcesPath, "sdk", "python", platKey, ext);
+        if (fs.existsSync(p)) return p;
+    }
+    const devP = path.join(__dirname, "..", "..", "sdk", "python", platKey, ext);
+    if (fs.existsSync(devP)) return devP;
+    return null;
+}
+
+// Portable cmake + ninja paths (macOS only — Linux uses apt, Windows uses Espressif's installer)
+function cmakeBin() {
+    if (process.platform !== "darwin") return null;
+    const p = path.join(TOOLCHAINS_DIR, "cmake", "CMake.app", "Contents", "bin", "cmake");
+    return fs.existsSync(p) ? p : null;
+}
+function ninjaBin() {
+    if (process.platform !== "darwin") return null;
+    const p = path.join(TOOLCHAINS_DIR, "ninja", "ninja");
+    return fs.existsSync(p) ? p : null;
+}
+
+// Build the PATH prefix needed to compile ESP-IDF projects: bundled Python
+// first (so install.sh / activate_venv pick 3.12+), then cmake, then ninja.
+// Caller prepends to their own PATH.
+function buildPathPrefix() {
+    const parts = [];
+    const py = bundledPythonBin();
+    if (py) parts.push(path.dirname(py));
+    const cm = cmakeBin();
+    if (cm) parts.push(path.dirname(cm));
+    const nj = ninjaBin();
+    if (nj) parts.push(path.dirname(nj));
+    return parts.join(path.delimiter);
+}
+
+// Download a URL to dest with redirect-following. Promise-based.
+function downloadFile(url, dest) {
+    return new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(dest);
+        function get(u, hops) {
+            if (hops > 5) return reject(new Error("too many redirects"));
+            https.get(u, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    res.resume();
+                    return get(new URL(res.headers.location, u).href, hops + 1);
+                }
+                if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode} for ${u}`));
+                res.pipe(out);
+                out.on("finish", () => out.close(() => resolve()));
+                out.on("error", reject);
+            }).on("error", reject);
+        }
+        get(url, 0);
+    });
+}
+
+// Ensure portable cmake + ninja are installed under TOOLCHAINS_DIR.
+// macOS only — Linux uses apt (handled separately), Windows uses Espressif's
+// installer that bundles its own.
+async function ensureCmakeNinja(emit) {
+    if (process.platform !== "darwin") return true;
+    ensureDir(TOOLCHAINS_DIR);
+    const arch = process.arch === "arm64" ? "arm64" : "x86_64";
+
+    if (!cmakeBin()) {
+        emit.log("Downloading cmake (≈70 MB) ...");
+        const url = `https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5-macos-universal.tar.gz`;
+        const tmp = path.join(TOOLCHAINS_DIR, "_cmake.tar.gz");
+        try {
+            await downloadFile(url, tmp);
+            const out = path.join(TOOLCHAINS_DIR, "cmake");
+            fs.mkdirSync(out, { recursive: true });
+            execSync(`tar -xzf "${tmp}" -C "${out}" --strip-components=1`, { stdio: "pipe" });
+            fs.unlinkSync(tmp);
+            emit.log("cmake installed");
+        } catch (e) {
+            emit.log(`ERROR: cmake download failed: ${e.message}`);
+            return false;
+        }
+    } else {
+        emit.log("cmake already present");
+    }
+
+    if (!ninjaBin()) {
+        emit.log("Downloading ninja ...");
+        const url = `https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip`;
+        const tmp = path.join(TOOLCHAINS_DIR, "_ninja.zip");
+        try {
+            await downloadFile(url, tmp);
+            const out = path.join(TOOLCHAINS_DIR, "ninja");
+            fs.mkdirSync(out, { recursive: true });
+            execSync(`unzip -o "${tmp}" -d "${out}" >/dev/null && chmod +x "${out}/ninja"`, { stdio: "pipe" });
+            fs.unlinkSync(tmp);
+            emit.log("ninja installed");
+        } catch (e) {
+            emit.log(`ERROR: ninja download failed: ${e.message}`);
+            return false;
+        }
+    } else {
+        emit.log("ninja already present");
+    }
+    return true;
+}
 
 function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
 
@@ -259,21 +369,40 @@ function ensureEspIdf(chip, legacy) {
 
     emit.stage("check");
     log(`Checking ${chip} prerequisites...`);
+    const py = bundledPythonBin();
+    if (py) log(`Using bundled Python: ${py}`);
     emit.stageDone("check");
+
+    // Install deps: on macOS we download portable cmake + ninja; on Linux apt
+    // handles them as part of the system packages.
+    emit.stage("deps");
+    if (process.platform === "linux") {
+        run("sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 2>&1", log);
+    } else if (process.platform === "darwin") {
+        // ensureCmakeNinja is async but our runner is sync. Use a tiny event
+        // loop drain to wait for it before continuing.
+        let cnDone = false, cnOk = false;
+        ensureCmakeNinja(emit).then(ok => { cnOk = ok; cnDone = true; });
+        const start = Date.now();
+        // Synchronously wait for cmake+ninja download (timeout 5 min)
+        const deasync = (ms) => {
+            const end = Date.now() + ms;
+            while (!cnDone && Date.now() < end) {
+                try { execSync("sleep 0.1", { stdio: "ignore" }); } catch (_) {}
+            }
+        };
+        deasync(300000);
+        if (!cnDone || !cnOk) {
+            emit.stageError("deps", "cmake/ninja install failed or timed out");
+            return false;
+        }
+    }
+    emit.stageDone("deps");
 
     const idf = espIdfPath(chip);
     if (fs.existsSync(path.join(idf, "export.sh")) && fs.existsSync(path.join(idf, "install.sh"))) {
-        // Already cloned — skip clone but still go through install
-        emit.stage("deps"); emit.stageDone("deps");
         emit.stage("clone-idf"); log("ESP-IDF already cloned"); emit.stageDone("clone-idf");
     } else {
-        // System deps (apt/brew prerequisites). Best-effort on Linux.
-        emit.stage("deps");
-        if (process.platform === "linux") {
-            run("sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 2>&1", log);
-        }
-        emit.stageDone("deps");
-
         emit.stage("clone-idf");
         if (chip.includes("8266")) {
             log("Downloading ESP8266 RTOS SDK...");
@@ -288,15 +417,34 @@ function ensureEspIdf(chip, legacy) {
     }
 
     emit.stage("install-idf");
-    if (chip.includes("8266")) {
-        log("Installing ESP8266 SDK dependencies...");
-        const r = run(`cd "${idf}" && ./install.sh 2>&1`, log);
-        if (!r.ok) { emit.stageError("install-idf", "install.sh failed"); return false; }
-    } else {
-        log("Installing ESP-IDF toolchain (this may take several minutes)...");
-        const r = run(`cd "${idf}" && ./install.sh esp32 2>&1`, log);
-        if (!r.ok) { emit.stageError("install-idf", "install.sh failed"); return false; }
+    // Prepend bundled Python to PATH so install.sh creates the venv with 3.12+.
+    // Apple's stock Python is 3.9 which has importlib.metadata bugs with
+    // dotted package names (e.g. "ruamel.yaml") that break ESP-IDF's
+    // dependency checker — using 3.12 avoids the whole class of issues.
+    // On macOS, also wipe any pre-existing python_env that was built against
+    // the wrong Python — install.sh will re-create it under bundled Python.
+    if (process.platform === "darwin") {
+        const venvRoot = path.join(os.homedir(), ".espressif", "python_env");
+        if (fs.existsSync(venvRoot)) {
+            for (const sub of fs.readdirSync(venvRoot)) {
+                const m = sub.match(/_py(\d+)\.(\d+)_env$/);
+                if (m) {
+                    const major = +m[1], minor = +m[2];
+                    if (major < 3 || (major === 3 && minor < 10)) {
+                        log(`Removing stale ESP-IDF venv (py${major}.${minor}): ${sub}`);
+                        try { fs.rmSync(path.join(venvRoot, sub), { recursive: true, force: true }); } catch (_) {}
+                    }
+                }
+            }
+        }
     }
+    const pathPrefix = py ? `${path.dirname(py)}${path.delimiter}` : "";
+    const installCmd = chip.includes("8266")
+        ? `export PATH="${pathPrefix}$PATH" && cd "${idf}" && ./install.sh 2>&1`
+        : `export PATH="${pathPrefix}$PATH" && cd "${idf}" && ./install.sh esp32 2>&1`;
+    log("Installing ESP-IDF toolchain (this may take several minutes)...");
+    const installResult = run(installCmd, log);
+    if (!installResult.ok) { emit.stageError("install-idf", "install.sh failed"); return false; }
     emit.stageDone("install-idf");
 
     emit.stage("env");
@@ -340,11 +488,32 @@ function ensureToolchain(chip, legacy) {
 function isToolchainReady(chip) {
     const c = chip.toLowerCase();
     if (c.includes("rp2040") || c.includes("pico")) {
-        return hasCommand("arm-none-eabi-gcc") && hasCommand("cmake") &&
+        return hasCommand("arm-none-eabi-gcc") &&
+            (hasCommand("cmake") || (process.platform === "darwin" && cmakeBin())) &&
             fs.existsSync(path.join(picoSdkPath(), "pico_sdk_init.cmake"));
     }
     if (c.includes("esp32") || c.includes("esp")) {
-        return fs.existsSync(path.join(espIdfPath(c), "export.sh"));
+        const idf = espIdfPath(c);
+        if (!fs.existsSync(path.join(idf, "export.sh"))) return false;
+        // On macOS we need cmake+ninja portable downloads + the venv Python
+        // must be 3.10+ (Apple's stock 3.9 has the importlib.metadata bug).
+        if (process.platform === "darwin") {
+            if (!cmakeBin() || !ninjaBin()) return false;
+            // Detect venv Python version — older than 3.10 means the venv
+            // is broken (built against Apple's system 3.9), force reinstall.
+            const venvPy = path.join(os.homedir(), ".espressif", "python_env");
+            if (fs.existsSync(venvPy)) {
+                for (const sub of fs.readdirSync(venvPy)) {
+                    // Folder name is like "idf5.4_py3.9_env" — extract the py version
+                    const m = sub.match(/_py(\d+)\.(\d+)_env$/);
+                    if (m) {
+                        const major = +m[1], minor = +m[2];
+                        if (major < 3 || (major === 3 && minor < 10)) return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
     if (c.includes("stm32")) {
         return hasCommand("arm-none-eabi-gcc");
@@ -352,4 +521,8 @@ function isToolchainReady(chip) {
     return false;
 }
 
-module.exports = { ensureToolchain, isToolchainReady, picoSdkPath, espIdfPath, TOOLCHAINS_DIR };
+module.exports = {
+    ensureToolchain, isToolchainReady,
+    picoSdkPath, espIdfPath, TOOLCHAINS_DIR,
+    bundledPythonBin, cmakeBin, ninjaBin, buildPathPrefix,
+};
