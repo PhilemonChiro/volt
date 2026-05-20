@@ -11,9 +11,34 @@ const settings = require("./settings");
 function frameworkDir(chip) {
     const c = chip.toLowerCase();
     const platform = c.includes("rp2040") || c.includes("pico") ? "rp2040" : "esp32";
+
+    // (1) Dev mode — repo layout (volt-ide/src/main/../../../framework/<chip>/)
     const dev = path.join(__dirname, "..", "..", "..", "framework", platform);
     if (fs.existsSync(dev)) return dev;
-    return path.join(os.homedir(), ".volt", "sdk", "framework", platform);
+
+    // (2) Packaged app: bundled framework lives in process.resourcesPath, but
+    // .app contents are read-only (macOS, signed bundles). The build process
+    // writes main.c, mkdir build/, etc. into the framework — so we copy the
+    // bundled tree to ~/.volt/sdk/framework/<chip>/ on first use, then use that.
+    const userFw = path.join(os.homedir(), ".volt", "sdk", "framework", platform);
+    if (process.resourcesPath) {
+        const bundled = path.join(process.resourcesPath, "sdk", "framework", platform);
+        if (fs.existsSync(bundled)) {
+            if (!fs.existsSync(userFw)) {
+                console.log(`[framework] copying bundled ${platform} → ${userFw}`);
+                fs.mkdirSync(path.dirname(userFw), { recursive: true });
+                fs.cpSync(bundled, userFw, { recursive: true });
+            }
+            // Also copy framework/include/ (shared between chips). Same lazy rule.
+            const bundledInclude = path.join(process.resourcesPath, "sdk", "framework", "include");
+            const userInclude = path.join(os.homedir(), ".volt", "sdk", "framework", "include");
+            if (fs.existsSync(bundledInclude) && !fs.existsSync(userInclude)) {
+                fs.cpSync(bundledInclude, userInclude, { recursive: true });
+            }
+        }
+    }
+
+    return userFw;
 }
 
 // ============================================================
