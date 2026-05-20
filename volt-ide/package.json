@@ -36,6 +36,7 @@
     "appId": "dev.volt.ide",
     "productName": "Volt IDE",
     "copyright": "Copyright © 2026 Philemon Chiro",
+    "afterPack": "scripts/afterPack.js",
     "directories": {
       "output": "dist"
     },

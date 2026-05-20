@@ -62,8 +62,12 @@ function dirSize(dir) {
     return total;
 }
 
-console.log("[stage-sdk] cleaning sdk/");
-rmTree(OUT);
+console.log("[stage-sdk] cleaning sdk/ (preserving any python/ bundles)");
+// Defensive: if bundle:python ran first, don't wipe its output. Only clean
+// the dirs stage-sdk owns: src/, devices/, framework/.
+for (const sub of ["src", "devices", "framework"]) {
+    rmTree(path.join(OUT, sub));
+}
 fs.mkdirSync(OUT, { recursive: true });
 
 const targets = [

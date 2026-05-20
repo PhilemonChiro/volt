@@ -59,11 +59,14 @@ jobs:
       - name: Install
         working-directory: volt-ide
         run: npm install --no-audit --no-fund
-      - name: Bundle Python (win32-x64) + stage SDK + icons
+      - name: Stage SDK + icons
         working-directory: volt-ide
-        run: |
-          npm run bundle:python
-          npm run prepack
+        # prepack wipes sdk/ and re-populates it from repo — must run BEFORE
+        # bundle:python so it doesn't clobber the downloaded Python interpreter.
+        run: npm run prepack
+      - name: Bundle Python (win32-x64)
+        working-directory: volt-ide
+        run: npm run bundle:python
       - name: Build (native Windows — produces NSIS + portable)
         working-directory: volt-ide
         # Use full Windows targets here (NSIS) since Wine is not in the picture.
@@ -91,19 +94,20 @@ jobs:
       - name: Install
         working-directory: volt-ide
         run: npm install --no-audit --no-fund
-      - name: Bundle Python (both arm64 + x64)
+      - name: Stage SDK + icons
         working-directory: volt-ide
+        # MUST run before bundle:python — prepack wipes sdk/ via stage-sdk.js
+        run: npm run prepack
+      - name: Bundle Python (arm64 + x64) + cross-install lark
+        working-directory: volt-ide
+        # arm64 = host, gets lark installed natively. lark is pure-Python so we
+        # cross-install it into the x64 bundle's site-packages too using arm64's pip.
         run: |
           npm run bundle:python -- --platform=darwin-arm64
           npm run bundle:python -- --platform=darwin-x64
-          # lark is pure-Python — works across archs. Force install into x64 bundle
-          # using the arm64 bundle's pip (running under Rosetta would also work).
           ./sdk/python/darwin-arm64/bin/python3 -m pip install \
             --target sdk/python/darwin-x64/lib/python3.12/site-packages \
-            --no-warn-script-location --no-cache-dir --upgrade lark
-      - name: Stage SDK + icons
-        working-directory: volt-ide
-        run: npm run prepack
+            --no-warn-script-location --no-cache-dir --upgrade --force-reinstall lark
       - name: Build (arm64 + x64 DMGs)
         working-directory: volt-ide
         run: npx electron-builder --mac
