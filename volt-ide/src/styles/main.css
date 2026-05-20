@@ -1512,16 +1512,38 @@ kbd {
     color: var(--volt);
     background: var(--bg-2);
 }
+.activity-btn.active .activity-label {
+    color: var(--volt);
+    opacity: 1;
+    font-weight: 600;
+}
+/* Vertical accent on the LEFT edge — points toward the side panel that
+   this button controls, so the visual flow reads
+   "button → panel → editor". */
 .activity-btn.active::before {
     content: "";
     position: absolute;
-    right: -3px; top: 8px; bottom: 8px;
+    left: -1px; top: 8px; bottom: 8px;
     width: 3px;
     background: var(--volt);
     border-radius: var(--r-pill);
-    box-shadow: 0 0 10px rgba(43,124,179,0.65);
+    box-shadow: 0 0 12px rgba(43,124,179,0.55);
     animation: indicator-in var(--dur-base) var(--ease-spring) both;
 }
+/* Soft halo behind the icon so the active item reads at a glance even
+   on small screens. Sits behind the SVG, doesn't compete with the label. */
+.activity-btn.active::after {
+    content: "";
+    position: absolute;
+    top: 8px; left: 50%;
+    width: 32px; height: 32px;
+    margin-left: -16px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(43,124,179,0.18) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+}
+.activity-btn svg, .activity-label { position: relative; z-index: 1; }
 @keyframes indicator-in {
     from { transform: scaleY(0.4); opacity: 0; }
     to   { transform: scaleY(1); opacity: 1; }
