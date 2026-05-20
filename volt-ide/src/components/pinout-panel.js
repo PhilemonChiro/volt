@@ -166,11 +166,13 @@ function drawBoard(board, assigned) {
         ...board.columns[1].map((p, i) => drawPin(p, "right", boardR, topPad + i * PITCH, assignedByGpio)),
     ].join("");
 
+    const cy = (boardT + boardB) / 2;
     return `
         <svg class="pinout-svg" viewBox="0 0 ${totalW} ${innerH}" preserveAspectRatio="xMidYMid meet">
-            <!-- Board outline -->
             <rect x="${boardL}" y="${boardT}" width="${boardR - boardL}" height="${boardB - boardT}"
                   rx="10" ry="10" class="bp-board" fill="none"/>
+            <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle"
+                  class="bp-board-label">${escapeHtml(board.name)}</text>
             ${pinsSvg}
         </svg>
     `;
