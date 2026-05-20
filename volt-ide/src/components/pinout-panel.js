@@ -266,17 +266,26 @@ function applyAssignments() {
             refs.varLabel.setAttribute("data-line", a && a.line ? a.line : 0);
         }
 
-        // Device list (only on the primary lane of a bus). One row per
-        // device, stacked vertically below the role label, showing name +
-        // type. Clear and easy to scan when multiple devices share a bus.
+        // Device list — attach to the pin on the board.
+        //   bus pins  → on the primary lane only, list everything that
+        //               targets that bus.
+        //   regular pin → list any device whose 'on <name>' references
+        //               this pin's variable name (e.g. DHT22 on gpio_pin
+        //               where `pin gpio_pin = 4`).
         let devices = [];
-        if (a && kind === "bus" && _state.hardware && _state.hardware.devices) {
-            const bus = (_state.hardware.buses || []).find(b => b.name === a.name);
-            if (bus) {
-                const firstRole = Object.keys(bus.roles || {})[0];
-                if (firstRole === a.role) {
-                    devices = _state.hardware.devices.filter(d => d.bus === a.name);
+        if (a && _state.hardware && _state.hardware.devices) {
+            if (kind === "bus") {
+                const bus = (_state.hardware.buses || []).find(b => b.name === a.name);
+                if (bus) {
+                    const firstRole = Object.keys(bus.roles || {})[0];
+                    if (firstRole === a.role) {
+                        devices = _state.hardware.devices.filter(d => d.bus === a.name);
+                    }
                 }
+            } else if (kind === "pin") {
+                // GPIO-bound devices (DHT22, HC-SR04, NEOPIXEL, etc.):
+                // the device's 'on <X>' references the pin's variable name
+                devices = _state.hardware.devices.filter(d => d.bus === a.name);
             }
         }
         if (refs.devList) updateDevList(refs, devices);
@@ -630,13 +639,27 @@ function renderPopoverHTML(pin, assigned) {
             </div>
         `;
     } else if (assigned) {
+        // For regular pin assignments, also surface any GPIO-bound devices
+        // ('device dht1: DHT11 on <thisPin> at 4') so the popover reads
+        // 'led' or 'dht_pin → DHT11 attached' instead of just the pin.
+        const devices = (_state.hardware && _state.hardware.devices) || [];
+        const onThisPin = devices.filter(d => d.bus === assigned.name);
+        const devicesHtml = onThisPin.length
+            ? `<div class="pp-section">
+                 <div class="pp-section-title">Devices attached</div>
+                 <ul class="pp-alts">
+                    ${onThisPin.map(d => `<li>${escapeHtml(d.name)} <span style="color:var(--t3)">${escapeHtml(d.type)} @ ${escapeHtml(d.address)}</span></li>`).join("")}
+                 </ul>
+               </div>`
+            : "";
         assignedBlock = `
             <div class="pp-assigned">
                 <span class="pp-assigned-label">Assigned to</span>
                 <span class="pp-assigned-name">${escapeHtml(assigned.name)}</span>
                 ${assigned.mode ? `<span class="pp-assigned-mode">${escapeHtml(assigned.mode)}</span>` : ""}
                 <button class="pp-btn pp-btn-primary" data-action="jump">Jump to declaration</button>
-            </div>`;
+            </div>
+            ${devicesHtml}`;
     } else {
         assignedBlock = `<div class="pp-unassigned">Not assigned. Use <code>pin name = ${escapeHtml(pin.gpio || pin.label)}</code> in your hardware block.</div>`;
     }
