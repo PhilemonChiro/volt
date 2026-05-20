@@ -152,6 +152,23 @@ async function main() {
         console.warn(`               skipping lark install (must run on a ${target} machine).`);
     }
 
+    // Strip pip's bundled Windows-PE launcher shims (t32/t64/w32/w64*.exe).
+    // They're useless on Mac/Linux and trip electron-builder's codesign step
+    // on macOS (errSecInternalComponent — codesign can't sign PE binaries).
+    if (!target.startsWith("win32-")) {
+        const distlib = path.join(OUT, "lib", "python3.12", "site-packages", "pip", "_vendor", "distlib");
+        if (fs.existsSync(distlib)) {
+            let removed = 0;
+            for (const f of fs.readdirSync(distlib)) {
+                if (f.endsWith(".exe")) {
+                    fs.unlinkSync(path.join(distlib, f));
+                    removed++;
+                }
+            }
+            if (removed) console.log(`[bundle-python] stripped ${removed} Windows .exe shims from pip/distlib`);
+        }
+    }
+
     const total = execFileSync("du", ["-sh", OUT], { encoding: "utf-8" }).trim().split(/\s+/)[0];
     console.log(`[bundle-python] done — ${target} bundle is ${total}`);
 }

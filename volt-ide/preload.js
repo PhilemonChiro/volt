@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld("volt", {
 
     // Toolchain
     checkToolchain:   (chip) => ipcRenderer.invoke("check_toolchain", chip),
+    diagnoseToolchain:(chip) => ipcRenderer.invoke("diagnose_toolchain", chip),
+    repairToolchain:  (chip) => ipcRenderer.invoke("repair_toolchain", chip),
+    toolchainFreeDisk:(chip) => ipcRenderer.invoke("toolchain_free_disk", chip),
     setupToolchain:   (chip) => ipcRenderer.invoke("setup_toolchain", chip),
     cancelToolchain:  () => ipcRenderer.invoke("cancel_toolchain"),
     onToolchainLog:   (callback) => ipcRenderer.on("toolchain:log",   (_, msg) => callback(msg)),

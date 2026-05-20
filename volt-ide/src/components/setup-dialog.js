@@ -1,16 +1,21 @@
 // Toolchain setup dialog — modal with stage list, progress, log drawer,
-// background mode, and soft-cancel.
+// background mode, soft-cancel.
 //
 // API:
 //   show({ chip, onComplete, onCancel })
 //     → renders modal, calls setupToolchain, updates UI from toolchain:event
 //        events emitted by main.js. Resolves onComplete on success.
+//
+// Rendering strategy:
+//   - DOM skeleton + stage rows built ONCE.
+//   - Per-event updates mutate only the affected elements via cached refs.
+//   - Elapsed/ETA tick on an independent 1s setInterval so the timer keeps
+//     moving even when the toolchain has long quiet stretches.
+//   - Log is append-only into a <pre>, flushed via rAF; when the log is
+//     hidden we keep lines in state.log but skip DOM work entirely.
 
 const api = window.volt;
 
-// Per-chip stage definitions. Each stage has a stable id (used by toolchain.js
-// to mark transitions), a human label, and an expected weight for the overall
-// progress calculation (sum of all weights = 100%).
 const STAGES = {
     esp32: [
         { id: "check",       label: "Check system requirements",         weight: 2  },
@@ -42,7 +47,6 @@ const STAGES = {
     ],
 };
 
-// Friendly chip names for the title
 const CHIP_LABELS = {
     esp32:     "ESP32",
     esp8266:   "ESP8266",
@@ -54,18 +58,18 @@ let activeDialog = null;
 
 export function show({ chip, onComplete, onCancel }) {
     if (activeDialog) {
-        // Already running — bring it back from background or just no-op
         if (activeDialog.minimized) toggleMinimize();
         return;
     }
 
-    const stages = STAGES[chip] || STAGES.esp32;
+    const stageDefs = STAGES[chip] || STAGES.esp32;
     const state = {
         chip,
-        stages: stages.map(s => ({ ...s, status: "pending", detail: "", subPct: 0, durationMs: 0 })),
+        stages: stageDefs.map(s => ({ ...s, status: "pending", detail: "", subPct: 0, durationMs: 0 })),
         currentId: null,
         startedAt: Date.now(),
         log: [],
+        logRendered: 0,    // index of next line to append into the DOM
         showLog: false,
         cancelling: false,
         finished: false,
@@ -84,27 +88,32 @@ export function show({ chip, onComplete, onCancel }) {
         onComplete, onCancel,
         minimized: false,
         finished: false,
+        refs: null,           // cached DOM refs (built in buildSkeleton)
+        ticker: null,         // 1s elapsed-timer interval
+        dirty: {              // pending updates queued for next rAF
+            stages: new Set(),
+            overall: false,
+            log: false,
+        },
+        rafQueued: false,
     };
 
-    render(overlay, state);
+    buildSkeleton(overlay, state);
+    startTicker();
     startInstall(state);
 }
 
+// ============================================================
+// Install lifecycle
+// ============================================================
 function startInstall(state) {
     api.setupToolchain(state.chip).then((result) => {
-        // setupToolchain returns { ok, logs } when done. Use ok as a fallback
-        // signal in case stage events were lost.
         if (!state.finished) {
-            if (result && result.ok) {
-                completeInstall(state, true);
-            } else {
-                completeInstall(state, false, "Setup script returned non-OK status.");
-            }
+            if (result && result.ok) completeInstall(state, true);
+            else completeInstall(state, false, "Setup script returned non-OK status.");
         }
     }).catch((e) => {
-        if (!state.finished) {
-            completeInstall(state, false, e.message || "Setup failed");
-        }
+        if (!state.finished) completeInstall(state, false, e.message || "Setup failed");
     });
 }
 
@@ -115,27 +124,48 @@ function handleEvent(state, event, overlay) {
             const s = state.stages.find(x => x.id === event.id);
             if (s) { s.status = "running"; s.detail = ""; s.subPct = 0; s.startedAt = Date.now(); }
             state.currentId = event.id;
+            markStageDirty(event.id);
+            markOverallDirty();
             break;
         }
         case "stage_progress": {
             const s = state.stages.find(x => x.id === event.id);
-            if (s) { s.subPct = Math.max(0, Math.min(100, Number(event.percent) || 0)); s.detail = event.detail || s.detail; }
+            if (s) {
+                s.subPct = Math.max(0, Math.min(100, Number(event.percent) || 0));
+                if (event.detail) s.detail = event.detail;
+            }
+            markStageDirty(event.id);
+            markOverallDirty();
             break;
         }
         case "stage_done": {
             const s = state.stages.find(x => x.id === event.id);
-            if (s) { s.status = "done"; s.subPct = 100; s.durationMs = Date.now() - (s.startedAt || Date.now()); }
+            if (s) {
+                s.status = "done";
+                s.subPct = 100;
+                s.durationMs = Date.now() - (s.startedAt || Date.now());
+            }
             if (state.currentId === event.id) state.currentId = null;
+            markStageDirty(event.id);
+            markOverallDirty();
             break;
         }
         case "stage_error": {
             const s = state.stages.find(x => x.id === event.id);
             if (s) { s.status = "failed"; s.detail = event.message || "failed"; }
+            markStageDirty(event.id);
+            markOverallDirty();
             break;
         }
         case "log": {
             state.log.push(event.message || "");
-            if (state.log.length > 1000) state.log.splice(0, state.log.length - 1000);
+            // Cap memory — keep last 2000 lines max, drop oldest in chunks
+            if (state.log.length > 2000) {
+                const drop = state.log.length - 1500;
+                state.log.splice(0, drop);
+                state.logRendered = Math.max(0, state.logRendered - drop);
+            }
+            if (state.showLog) markLogDirty();
             break;
         }
         case "complete": {
@@ -143,21 +173,7 @@ function handleEvent(state, event, overlay) {
             break;
         }
     }
-    if (!state.finished) scheduleRender(state, overlay);
-}
-
-// Coalesce DOM updates to once per animation frame. install.sh can emit
-// hundreds of log lines per second; rebuilding the stage list innerHTML on
-// every one of them locks up the renderer. Batch into rAF so we paint
-// at most 60 fps regardless of event volume.
-let _rafQueued = false;
-function scheduleRender(state, overlay) {
-    if (_rafQueued) return;
-    _rafQueued = true;
-    requestAnimationFrame(() => {
-        _rafQueued = false;
-        if (state && overlay) renderUpdate(overlay, state);
-    });
+    if (!state.finished) scheduleFlush(state, overlay);
 }
 
 function completeInstall(state, success, errorMessage) {
@@ -165,7 +181,6 @@ function completeInstall(state, success, errorMessage) {
     state.success = success;
     if (!success && errorMessage) state.errorMessage = errorMessage;
 
-    // Mark any remaining stages — running ones become failed, pending ones stay
     for (const s of state.stages) {
         if (success) {
             if (s.status === "pending") s.status = "done";
@@ -173,20 +188,78 @@ function completeInstall(state, success, errorMessage) {
         } else {
             if (s.status === "running") s.status = "failed";
         }
+        markStageDirty(s.id);
     }
-
-    if (activeDialog) renderUpdate(activeDialog.overlay, state);
+    markOverallDirty();
+    stopTicker();
+    if (activeDialog) {
+        flushAll(activeDialog.overlay, state);
+        renderFooter(activeDialog.overlay, state);
+        renderErrorBanner(activeDialog.overlay, state);
+    }
 }
 
 // ============================================================
-// Rendering
+// Dirty marking + scheduling
 // ============================================================
-function render(overlay, state) {
+function markStageDirty(id)  { if (activeDialog) activeDialog.dirty.stages.add(id); }
+function markOverallDirty()  { if (activeDialog) activeDialog.dirty.overall = true; }
+function markLogDirty()      { if (activeDialog) activeDialog.dirty.log = true; }
+
+function scheduleFlush(state, overlay) {
+    if (!activeDialog || activeDialog.rafQueued) return;
+    activeDialog.rafQueued = true;
+    requestAnimationFrame(() => {
+        if (!activeDialog) return;
+        activeDialog.rafQueued = false;
+        flushAll(overlay, state);
+    });
+}
+
+function flushAll(overlay, state) {
+    if (!activeDialog) return;
+    const dirty = activeDialog.dirty;
+    if (dirty.overall) { updateOverall(overlay, state); dirty.overall = false; }
+    if (dirty.stages.size) {
+        for (const id of dirty.stages) {
+            const s = state.stages.find(x => x.id === id);
+            if (s) updateStage(overlay, s);
+        }
+        dirty.stages.clear();
+    }
+    if (dirty.log && state.showLog) { appendNewLog(overlay, state); dirty.log = false; }
+}
+
+// ============================================================
+// Independent ticker — keeps elapsed/ETA moving between events
+// ============================================================
+function startTicker() {
+    if (!activeDialog) return;
+    if (activeDialog.ticker) clearInterval(activeDialog.ticker);
+    activeDialog.ticker = setInterval(() => {
+        if (!activeDialog || activeDialog.state.finished) return;
+        // Only the stats line — no stage rebuilds — keeps tick cheap.
+        updateStats(activeDialog.overlay, activeDialog.state);
+    }, 1000);
+}
+
+function stopTicker() {
+    if (activeDialog && activeDialog.ticker) {
+        clearInterval(activeDialog.ticker);
+        activeDialog.ticker = null;
+    }
+}
+
+// ============================================================
+// Skeleton (built ONCE)
+// ============================================================
+function buildSkeleton(overlay, state) {
+    const chipLabel = esc(CHIP_LABELS[state.chip] || state.chip);
     overlay.innerHTML = `
         <div class="setup-dialog">
             <div class="setup-header">
                 <div class="setup-title-wrap">
-                    <div class="setup-title">Installing ${esc(CHIP_LABELS[state.chip] || state.chip)} toolchain</div>
+                    <div class="setup-title">Installing ${chipLabel} toolchain</div>
                     <div class="setup-subtitle">First-time setup for your chip. This won't happen again on this device.</div>
                 </div>
                 <div class="setup-header-actions">
@@ -216,9 +289,24 @@ function render(overlay, state) {
         </div>
     `;
 
+    // Build stage rows once
+    const stagesEl = overlay.querySelector("#setupStages");
+    stagesEl.innerHTML = state.stages.map(buildStageMarkup).join("");
+
+    // Cache refs (avoids querySelector storm in updates)
+    activeDialog.refs = {
+        stats:    overlay.querySelector("#setupStats"),
+        fill:     overlay.querySelector("#setupOverallFill"),
+        stagesEl: stagesEl,
+        logEl:    overlay.querySelector("#setupLog"),
+        logToggle:overlay.querySelector("#setupLogToggle"),
+        cancelBtn:    overlay.querySelector("#setupCancel"),
+        backgroundBtn:overlay.querySelector("#setupBackground"),
+        continueBtn:  overlay.querySelector("#setupContinue"),
+    };
+
     overlay.querySelector("#setupMinimize").onclick = () => toggleMinimize();
     overlay.querySelector("#setupClose").onclick = () => {
-        // X button — if install still running, ask first; if done, just close
         if (state.finished) closeDialog(state);
         else confirmCancel(state);
     };
@@ -227,108 +315,138 @@ function render(overlay, state) {
     overlay.querySelector("#setupCancel").onclick = () => confirmCancel(state);
     overlay.querySelector("#setupContinue").onclick = () => closeDialog(state);
 
-    renderUpdate(overlay, state);
+    // Initial paint
+    updateStats(overlay, state);
+    updateOverall(overlay, state);
+    for (const s of state.stages) updateStage(overlay, s);
 }
 
-function renderUpdate(overlay, state) {
-    // Stats
+function buildStageMarkup(s) {
+    const id = `stage-${s.id}`;
+    return `
+        <div class="setup-stage is-${s.status}" id="${id}">
+            <div class="setup-stage-row">
+                <span class="setup-stage-icon-slot"></span>
+                <span class="setup-stage-label">${esc(s.label)}</span>
+                <span class="setup-stage-meta"></span>
+            </div>
+            <div class="setup-stage-subbar"><div class="setup-stage-subfill" style="width:0%"></div></div>
+            <div class="setup-stage-detail"></div>
+        </div>
+    `;
+}
+
+// ============================================================
+// Targeted DOM updates (no innerHTML rebuilds on hot paths)
+// ============================================================
+function updateStats(overlay, state) {
+    const refs = activeDialog?.refs; if (!refs?.stats) return;
     const elapsedMs = Date.now() - state.startedAt;
+    const overallPct = computeOverallPct(state);
+    const etaMs = overallPct > 5 ? (elapsedMs * (100 - overallPct) / overallPct) : null;
+
+    if (state.finished) {
+        refs.stats.textContent = (state.success ? "Done in " : "Stopped after ") + humanDuration(elapsedMs);
+    } else {
+        refs.stats.textContent = humanDuration(elapsedMs) + " elapsed" +
+            (etaMs ? "  ·  ~" + humanDuration(etaMs) + " remaining" : "");
+    }
+}
+
+function updateOverall(overlay, state) {
+    const refs = activeDialog?.refs; if (!refs?.fill) return;
+    const pct = Math.min(100, Math.round(computeOverallPct(state)));
+    refs.fill.style.width = pct + "%";
+    refs.fill.className = "setup-progress-fill" +
+        (state.finished ? (state.success ? " is-done" : " is-error") : "");
+    updateStats(overlay, state);
+}
+
+function updateStage(overlay, s) {
+    const row = overlay.querySelector(`#stage-${s.id}`);
+    if (!row) return;
+    if (row.className !== `setup-stage is-${s.status}`) {
+        row.className = `setup-stage is-${s.status}`;
+    }
+    const iconSlot = row.querySelector(".setup-stage-icon-slot");
+    const wantIcon = stageIcon(s.status);
+    if (iconSlot && iconSlot.getAttribute("data-status") !== s.status) {
+        iconSlot.innerHTML = wantIcon;
+        iconSlot.setAttribute("data-status", s.status);
+    }
+    const metaEl = row.querySelector(".setup-stage-meta");
+    const metaText = s.status === "done"    ? humanDuration(s.durationMs)
+                   : s.status === "running" ? Math.round(s.subPct) + "%"
+                   : s.status === "failed"  ? "failed"
+                   : "";
+    if (metaEl && metaEl.textContent !== metaText) metaEl.textContent = metaText;
+    if (metaEl) {
+        metaEl.classList.toggle("setup-stage-meta-err", s.status === "failed");
+    }
+    const sub = row.querySelector(".setup-stage-subfill");
+    if (sub) sub.style.width = (s.status === "running" ? Math.round(s.subPct) : (s.status === "done" ? 100 : 0)) + "%";
+    const detail = row.querySelector(".setup-stage-detail");
+    const detailText = (s.status === "running" && s.detail) ? s.detail : "";
+    if (detail && detail.textContent !== detailText) detail.textContent = detailText;
+}
+
+function appendNewLog(overlay, state) {
+    const refs = activeDialog?.refs; if (!refs?.logEl) return;
+    if (state.logRendered >= state.log.length) return;
+    const newLines = state.log.slice(state.logRendered);
+    state.logRendered = state.log.length;
+    const chunk = (refs.logEl.textContent ? "\n" : "") + newLines.join("\n");
+    refs.logEl.appendChild(document.createTextNode(chunk));
+    // Trim DOM text if it grows too large
+    if (refs.logEl.textContent.length > 100000) {
+        refs.logEl.textContent = refs.logEl.textContent.slice(-80000);
+    }
+    refs.logEl.scrollTop = refs.logEl.scrollHeight;
+}
+
+function renderFooter(overlay, state) {
+    const refs = activeDialog?.refs; if (!refs) return;
+    if (state.finished) {
+        if (refs.cancelBtn)     refs.cancelBtn.style.display = "none";
+        if (refs.backgroundBtn) refs.backgroundBtn.style.display = "none";
+        if (refs.continueBtn)   {
+            refs.continueBtn.style.display = "";
+            refs.continueBtn.textContent = state.success ? "Continue" : "Close";
+        }
+    } else if (state.cancelling) {
+        if (refs.cancelBtn) { refs.cancelBtn.disabled = true; refs.cancelBtn.textContent = "Cancelling…"; }
+    }
+}
+
+function renderErrorBanner(overlay, state) {
+    if (!(state.finished && !state.success && state.errorMessage)) return;
+    if (overlay.querySelector(".setup-error-banner")) return;
+    const banner = document.createElement("div");
+    banner.className = "setup-error-banner";
+    banner.textContent = state.errorMessage;
+    overlay.querySelector(".setup-body").prepend(banner);
+}
+
+// ============================================================
+// SVG icons (computed strings — assigned via innerHTML only on transitions)
+// ============================================================
+function stageIcon(status) {
+    if (status === "done")    return `<svg class="setup-stage-icon setup-stage-done" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 8 7 12 13 4"/></svg>`;
+    if (status === "running") return `<svg class="setup-stage-icon setup-stage-running" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/></svg>`;
+    if (status === "failed")  return `<svg class="setup-stage-icon setup-stage-failed" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>`;
+    return `<svg class="setup-stage-icon setup-stage-pending" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/></svg>`;
+}
+
+// ============================================================
+// Math helpers
+// ============================================================
+function computeOverallPct(state) {
     const totalWeight = state.stages.reduce((a, s) => a + s.weight, 0) || 100;
-    const overallPct = state.stages.reduce((a, s) => {
-        if (s.status === "done") return a + s.weight;
+    return state.stages.reduce((a, s) => {
+        if (s.status === "done")    return a + s.weight;
         if (s.status === "running") return a + (s.weight * (s.subPct || 0) / 100);
         return a;
     }, 0) / totalWeight * 100;
-
-    const etaMs = overallPct > 5 ? (elapsedMs * (100 - overallPct) / overallPct) : null;
-    const statsEl = overlay.querySelector("#setupStats");
-    if (statsEl) {
-        statsEl.innerHTML = state.finished
-            ? `<span class="setup-stat">${state.success ? "Done in " : "Stopped after "}${humanDuration(elapsedMs)}</span>`
-            : `<span class="setup-stat">${humanDuration(elapsedMs)} elapsed</span>` +
-              (etaMs ? ` <span class="setup-stat-sep">·</span> <span class="setup-stat">~${humanDuration(etaMs)} remaining</span>` : "");
-    }
-
-    // Overall bar
-    const fill = overlay.querySelector("#setupOverallFill");
-    if (fill) {
-        fill.style.width = Math.min(100, Math.round(overallPct)) + "%";
-        fill.className = "setup-progress-fill" +
-            (state.finished
-                ? (state.success ? " is-done" : " is-error")
-                : "");
-    }
-
-    // Stages list
-    const stagesEl = overlay.querySelector("#setupStages");
-    if (stagesEl) {
-        stagesEl.innerHTML = state.stages.map(s => renderStage(s)).join("");
-    }
-
-    // Log content
-    const logEl = overlay.querySelector("#setupLog");
-    if (logEl && state.showLog) {
-        logEl.textContent = state.log.slice(-300).join("\n");
-        logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    // Footer button states
-    const cancelBtn = overlay.querySelector("#setupCancel");
-    const backgroundBtn = overlay.querySelector("#setupBackground");
-    const continueBtn = overlay.querySelector("#setupContinue");
-    if (state.finished) {
-        if (cancelBtn) cancelBtn.style.display = "none";
-        if (backgroundBtn) backgroundBtn.style.display = "none";
-        if (continueBtn) {
-            continueBtn.style.display = "";
-            continueBtn.textContent = state.success ? "Continue" : "Close";
-        }
-    } else if (state.cancelling) {
-        if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.textContent = "Cancelling…"; }
-    }
-
-    // Error banner
-    if (state.finished && !state.success && state.errorMessage) {
-        const existing = overlay.querySelector(".setup-error-banner");
-        if (!existing) {
-            const banner = document.createElement("div");
-            banner.className = "setup-error-banner";
-            banner.textContent = state.errorMessage;
-            overlay.querySelector(".setup-body").prepend(banner);
-        }
-    }
-}
-
-function renderStage(s) {
-    const icon = s.status === "done"    ? `<svg class="setup-stage-icon setup-stage-done" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 8 7 12 13 4"/></svg>`
-              : s.status === "running" ? `<svg class="setup-stage-icon setup-stage-running" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/></svg>`
-              : s.status === "failed"  ? `<svg class="setup-stage-icon setup-stage-failed" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>`
-              :                          `<svg class="setup-stage-icon setup-stage-pending" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/></svg>`;
-
-    const meta = s.status === "done"     ? `<span class="setup-stage-meta">${humanDuration(s.durationMs)}</span>`
-              : s.status === "running"  ? `<span class="setup-stage-meta">${Math.round(s.subPct)}%</span>`
-              : s.status === "failed"   ? `<span class="setup-stage-meta setup-stage-meta-err">failed</span>`
-              : "";
-
-    const detail = s.status === "running" && s.detail
-        ? `<div class="setup-stage-detail">${esc(s.detail)}</div>`
-        : "";
-
-    const subBar = s.status === "running"
-        ? `<div class="setup-stage-subbar"><div class="setup-stage-subfill" style="width:${Math.round(s.subPct)}%"></div></div>`
-        : "";
-
-    return `
-        <div class="setup-stage is-${s.status}">
-            <div class="setup-stage-row">
-                ${icon}
-                <span class="setup-stage-label">${esc(s.label)}</span>
-                ${meta}
-            </div>
-            ${subBar}
-            ${detail}
-        </div>
-    `;
 }
 
 // ============================================================
@@ -336,14 +454,14 @@ function renderStage(s) {
 // ============================================================
 function toggleLog(state) {
     state.showLog = !state.showLog;
-    const overlay = activeDialog.overlay;
-    const logEl = overlay.querySelector("#setupLog");
-    const toggle = overlay.querySelector("#setupLogToggle");
-    if (logEl) logEl.style.display = state.showLog ? "" : "none";
-    if (toggle) toggle.textContent = (state.showLog ? "▾" : "▸") + " " + (state.showLog ? "Hide" : "Show") + " install log";
+    const refs = activeDialog?.refs; if (!refs) return;
+    if (refs.logEl)     refs.logEl.style.display = state.showLog ? "" : "none";
+    if (refs.logToggle) refs.logToggle.textContent = (state.showLog ? "▾" : "▸") + " " + (state.showLog ? "Hide" : "Show") + " install log";
     if (state.showLog) {
-        logEl.textContent = state.log.slice(-300).join("\n");
-        logEl.scrollTop = logEl.scrollHeight;
+        // Render full log (caught up to current state) on first reveal
+        state.logRendered = 0;
+        refs.logEl.textContent = "";
+        appendNewLog(activeDialog.overlay, state);
     }
 }
 
@@ -352,7 +470,6 @@ function toggleMinimize() {
     activeDialog.minimized = !activeDialog.minimized;
     activeDialog.overlay.classList.toggle("is-minimized", activeDialog.minimized);
     if (activeDialog.minimized) {
-        // Make sure the minimized chip is clickable to restore
         const chip = document.createElement("button");
         chip.className = "setup-mini-chip";
         chip.id = "setupMiniChip";
@@ -372,9 +489,7 @@ function confirmCancel(state) {
     if (state.cancelling || state.finished) return;
     if (!confirm("Cancel the install? Any partial download will need to start over.")) return;
     state.cancelling = true;
-    renderUpdate(activeDialog.overlay, state);
-    // We don't have process-level kill yet — set the flag, let toolchain.js
-    // honor it at the next stage boundary, and visually treat it as cancelled.
+    renderFooter(activeDialog.overlay, state);
     api.cancelToolchain?.();
     setTimeout(() => {
         if (!state.finished) completeInstall(state, false, "Cancelled by user.");
@@ -384,6 +499,7 @@ function confirmCancel(state) {
 function closeDialog(state) {
     if (!activeDialog) return;
     const { overlay, cleanup, onComplete, onCancel, state: s } = activeDialog;
+    stopTicker();
     overlay.classList.add("is-closing");
     setTimeout(() => {
         if (cleanup) try { cleanup(); } catch (_) {}

@@ -683,6 +683,15 @@ ipcMain.handle("is_monitoring", () => monitoring);
 const toolchain = require("./src/main/toolchain");
 
 ipcMain.handle("check_toolchain", (_, chip) => toolchain.isToolchainReady(chip));
+ipcMain.handle("diagnose_toolchain", (_, chip) => toolchain.diagnoseToolchain(chip));
+ipcMain.handle("repair_toolchain", (_, chip) => {
+    const removed = toolchain.repairToolchain(chip);
+    return { ok: true, removed };
+});
+ipcMain.handle("toolchain_free_disk", (_, chip) => {
+    const dir = require("os").homedir();
+    return toolchain.freeDiskBytes(dir);
+});
 
 ipcMain.handle("setup_toolchain", async (_, chip) => {
     const logs = [];

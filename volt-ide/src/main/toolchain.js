@@ -374,10 +374,19 @@ async function ensureEspIdf(chip, legacy) {
     emit.stageDone("check");
 
     // Install deps: on macOS we download portable cmake + ninja; on Linux apt
-    // handles them as part of the system packages.
+    // handles them as part of the system packages. Both are no-ops on resume
+    // (skip the apt prompt if everything's already on PATH; ensureCmakeNinja
+    // checks for existing binaries before downloading).
     emit.stage("deps");
     if (process.platform === "linux") {
-        run("sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 2>&1", log);
+        const linuxDeps = ["git", "wget", "flex", "bison", "gperf", "python3", "cmake", "ninja"];
+        const missingLinuxDep = linuxDeps.find(c => !hasCommand(c));
+        if (missingLinuxDep) {
+            log(`Installing system dependencies via apt (missing: ${missingLinuxDep})...`);
+            run("sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 2>&1", log);
+        } else {
+            log("Linux system dependencies already present — skipping apt");
+        }
     } else if (process.platform === "darwin") {
         const ok = await ensureCmakeNinja(emit);
         if (!ok) {
@@ -388,10 +397,29 @@ async function ensureEspIdf(chip, legacy) {
     emit.stageDone("deps");
 
     const idf = espIdfPath(chip);
-    if (fs.existsSync(path.join(idf, "export.sh")) && fs.existsSync(path.join(idf, "install.sh"))) {
-        emit.stage("clone-idf"); log("ESP-IDF already cloned"); emit.stageDone("clone-idf");
+    emit.stage("clone-idf");
+    // Decide: skip / resume-submodules / wipe-and-reclone.
+    // Clone is "complete" if export.sh + install.sh + components/ (≥20 entries)
+    // + tools/idf.py are all present. Anything less means partial — wipe and
+    // restart clone (safer than trying to repair an interrupted git state).
+    const cloneLooksComplete = (
+        fs.existsSync(path.join(idf, "export.sh")) &&
+        fs.existsSync(path.join(idf, "install.sh")) &&
+        fs.existsSync(path.join(idf, "tools", "idf.py")) &&
+        (() => {
+            try {
+                const comp = path.join(idf, "components");
+                return fs.existsSync(comp) && fs.readdirSync(comp).length >= 20;
+            } catch (_) { return false; }
+        })()
+    );
+    if (cloneLooksComplete) {
+        log("ESP-IDF already cloned (verified)");
     } else {
-        emit.stage("clone-idf");
+        if (fs.existsSync(idf)) {
+            log("Partial / corrupted ESP-IDF clone detected — wiping and starting fresh");
+            try { fs.rmSync(idf, { recursive: true, force: true }); } catch (_) {}
+        }
         if (chip.includes("8266")) {
             log("Downloading ESP8266 RTOS SDK...");
             const r = run(`git clone --depth=1 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/ESP8266_RTOS_SDK.git "${idf}" 2>&1`, log);
@@ -401,8 +429,8 @@ async function ensureEspIdf(chip, legacy) {
             const r = run(`git clone --depth=1 -b v5.4 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/esp-idf.git "${idf}" 2>&1`, log);
             if (!r.ok) { emit.stageError("clone-idf", "git clone failed"); return false; }
         }
-        emit.stageDone("clone-idf");
     }
+    emit.stageDone("clone-idf");
 
     emit.stage("install-idf");
     // Prepend bundled Python to PATH so install.sh creates the venv with 3.12+.
@@ -473,44 +501,163 @@ async function ensureToolchain(chip, legacy) {
     return false;
 }
 
-function isToolchainReady(chip) {
+// Deep readiness check. Returns { ready: bool, reason: string|null, missing: [] }.
+// Verifies actual binaries exist — not just marker files — so partial,
+// interrupted, or corrupted installs are detected as not-ready.
+function diagnoseToolchain(chip) {
     const c = chip.toLowerCase();
+    const missing = [];
+
     if (c.includes("rp2040") || c.includes("pico")) {
-        return hasCommand("arm-none-eabi-gcc") &&
-            (hasCommand("cmake") || (process.platform === "darwin" && cmakeBin())) &&
-            fs.existsSync(path.join(picoSdkPath(), "pico_sdk_init.cmake"));
+        if (!hasCommand("arm-none-eabi-gcc"))
+            missing.push("arm-none-eabi-gcc (ARM GCC compiler)");
+        if (!hasCommand("cmake") && !(process.platform === "darwin" && cmakeBin()))
+            missing.push("cmake");
+        const sdk = picoSdkPath();
+        if (!fs.existsSync(path.join(sdk, "pico_sdk_init.cmake")))
+            missing.push("pico-sdk (clone incomplete or absent)");
+        // Verify clone actually finished — top-level src/ should have a CMakeLists.txt
+        if (fs.existsSync(sdk) && !fs.existsSync(path.join(sdk, "src", "CMakeLists.txt")))
+            missing.push("pico-sdk/src (partial clone)");
     }
-    if (c.includes("esp32") || c.includes("esp")) {
+    else if (c.includes("esp32") || c.includes("esp")) {
         const idf = espIdfPath(c);
-        if (!fs.existsSync(path.join(idf, "export.sh"))) return false;
-        // On macOS we need cmake+ninja portable downloads + the venv Python
-        // must be 3.10+ (Apple's stock 3.9 has the importlib.metadata bug).
+
+        if (!fs.existsSync(path.join(idf, "export.sh")))
+            missing.push("ESP-IDF (clone incomplete or absent)");
+        // Verify clone actually finished — components/ should be populated
+        if (fs.existsSync(idf)) {
+            const comp = path.join(idf, "components");
+            if (!fs.existsSync(comp) || fs.readdirSync(comp).length < 20)
+                missing.push("ESP-IDF components/ (partial clone)");
+            // tools/idf.py is the entry point we shell into; if missing, idf is broken
+            if (!fs.existsSync(path.join(idf, "tools", "idf.py")))
+                missing.push("tools/idf.py (ESP-IDF clone broken)");
+        }
+
         if (process.platform === "darwin") {
-            if (!cmakeBin() || !ninjaBin()) return false;
-            // Detect venv Python version — older than 3.10 means the venv
-            // is broken (built against Apple's system 3.9), force reinstall.
-            const venvPy = path.join(os.homedir(), ".espressif", "python_env");
-            if (fs.existsSync(venvPy)) {
-                for (const sub of fs.readdirSync(venvPy)) {
-                    // Folder name is like "idf5.4_py3.9_env" — extract the py version
+            if (!cmakeBin()) missing.push("cmake (portable, ~/.volt/toolchains/cmake)");
+            if (!ninjaBin()) missing.push("ninja (portable, ~/.volt/toolchains/ninja)");
+        }
+
+        // venv must exist AND be on python>=3.10
+        const venvBase = path.join(os.homedir(), ".espressif", "python_env");
+        if (!fs.existsSync(venvBase)) {
+            missing.push("~/.espressif/python_env (Python venv not created)");
+        } else {
+            let foundGoodVenv = false;
+            try {
+                for (const sub of fs.readdirSync(venvBase)) {
                     const m = sub.match(/_py(\d+)\.(\d+)_env$/);
-                    if (m) {
-                        const major = +m[1], minor = +m[2];
-                        if (major < 3 || (major === 3 && minor < 10)) return false;
+                    if (!m) continue;
+                    const major = +m[1], minor = +m[2];
+                    if (major > 3 || (major === 3 && minor >= 10)) {
+                        // Verify the python binary actually exists in the venv
+                        if (fs.existsSync(path.join(venvBase, sub, "bin", "python"))) {
+                            foundGoodVenv = true;
+                            break;
+                        }
                     }
+                }
+            } catch (_) {}
+            if (!foundGoodVenv) missing.push("ESP-IDF Python venv (need py>=3.10)");
+        }
+
+        // Verify the cross-compiler is actually installed.
+        // Modern ESP-IDF uses a unified xtensa-esp-elf-gcc + chip-specific symlinks.
+        const toolsDir = path.join(os.homedir(), ".espressif", "tools");
+        if (!hasEspCompiler(toolsDir, c)) {
+            missing.push("xtensa cross-compiler (~/.espressif/tools — install incomplete)");
+        }
+    }
+    else if (c.includes("stm32")) {
+        if (!hasCommand("arm-none-eabi-gcc"))
+            missing.push("arm-none-eabi-gcc");
+        if (!hasCommand("openocd"))
+            missing.push("openocd");
+    }
+    else {
+        return { ready: false, reason: `Unknown chip: ${chip}`, missing: [] };
+    }
+
+    return {
+        ready: missing.length === 0,
+        reason: missing.length ? missing[0] : null,
+        missing,
+    };
+}
+
+// Walk ~/.espressif/tools looking for a working xtensa- or riscv- gcc binary.
+// We don't pin a version — ESP-IDF v5.x ships different toolchain folder names.
+function hasEspCompiler(toolsDir, chip) {
+    if (!fs.existsSync(toolsDir)) return false;
+    const wantPrefix = chip.includes("c3") || chip.includes("c6") || chip.includes("h2")
+        ? "riscv32-esp-elf"   // RISC-V chips
+        : "xtensa-esp";        // ESP32 / S2 / S3 — xtensa
+    try {
+        for (const folder of fs.readdirSync(toolsDir)) {
+            if (!folder.startsWith(wantPrefix)) continue;
+            const base = path.join(toolsDir, folder);
+            // Structure is tools/<name>/<version>/<name>/bin/<binary>
+            for (const ver of fs.readdirSync(base)) {
+                const bin = path.join(base, ver, folder, "bin");
+                if (!fs.existsSync(bin)) continue;
+                for (const f of fs.readdirSync(bin)) {
+                    if (f.endsWith("-gcc") || f.endsWith("-gcc.exe")) return true;
                 }
             }
         }
-        return true;
-    }
-    if (c.includes("stm32")) {
-        return hasCommand("arm-none-eabi-gcc");
-    }
+    } catch (_) {}
     return false;
 }
 
+// Back-compat boolean wrapper.
+function isToolchainReady(chip) {
+    return diagnoseToolchain(chip).ready;
+}
+
+// Repair: wipe just enough state that ensureToolchain will recreate it.
+// Returns the list of dirs that were removed.
+function repairToolchain(chip) {
+    const c = chip.toLowerCase();
+    const removed = [];
+    const rm = (p) => {
+        if (p && fs.existsSync(p)) {
+            try { fs.rmSync(p, { recursive: true, force: true }); removed.push(p); } catch (_) {}
+        }
+    };
+    if (c.includes("rp2040") || c.includes("pico")) {
+        rm(picoSdkPath());
+        rm(path.join(TOOLCHAINS_DIR, "picotool"));
+    } else if (c.includes("esp32") || c.includes("esp")) {
+        rm(espIdfPath(c));
+        rm(path.join(os.homedir(), ".espressif"));
+        if (process.platform === "darwin") {
+            // Only wipe cmake/ninja if THIS chip is the only consumer — for
+            // simplicity we always wipe; ensureCmakeNinja is fast to redo.
+            rm(path.join(TOOLCHAINS_DIR, "cmake"));
+            rm(path.join(TOOLCHAINS_DIR, "ninja"));
+        }
+    }
+    return removed;
+}
+
+// Free-disk check before kicking off a large install. Returns bytes free in
+// the target directory's filesystem, or null if not detectable.
+function freeDiskBytes(dir) {
+    try {
+        const out = execSync(`df -k "${dir.replace(/"/g, '\\"')}" | tail -1`, { encoding: "utf-8" });
+        // POSIX df -k columns: filesystem 1K-blocks used avail capacity ...
+        const cols = out.trim().split(/\s+/);
+        // avail is col 3 (Linux) or col 3 (macOS); be defensive
+        const availKB = Number(cols[3]);
+        return isFinite(availKB) ? availKB * 1024 : null;
+    } catch (_) { return null; }
+}
+
 module.exports = {
-    ensureToolchain, isToolchainReady,
+    ensureToolchain, isToolchainReady, diagnoseToolchain, repairToolchain,
+    freeDiskBytes,
     picoSdkPath, espIdfPath, TOOLCHAINS_DIR,
     bundledPythonBin, cmakeBin, ninjaBin, buildPathPrefix,
 };

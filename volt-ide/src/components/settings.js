@@ -193,7 +193,33 @@ export async function show() {
 
     function renderAdvanced() {
         return `
-            <div class="settings-section-title">Advanced</div>
+            <div class="settings-section-title">Toolchains</div>
+            <div class="settings-rows">
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <div class="settings-row-title">Toolchain health</div>
+                        <div class="settings-row-hint" id="toolchainHealthHint">Checking…</div>
+                    </div>
+                    <div class="settings-row-control">
+                        <select class="settings-select" id="toolchainHealthChip" style="max-width:140px">
+                            <option value="esp32">ESP32</option>
+                            <option value="esp8266">ESP8266</option>
+                            <option value="rp2040">RP2040 / Pico</option>
+                            <option value="stm32f103">STM32 Blue Pill</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <div class="settings-row-title">Repair toolchain</div>
+                        <div class="settings-row-hint">Wipes the selected chip's toolchain so the install dialog starts fresh next build. Use this after a failed or corrupted install.</div>
+                    </div>
+                    <div class="settings-row-control">
+                        <button class="settings-action-btn settings-action-danger" id="toolchainRepairBtn">Repair</button>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-section-title" style="margin-top:24px">Advanced</div>
             <div class="settings-rows">
                 <div class="settings-row">
                     <div class="settings-row-label">
@@ -227,6 +253,50 @@ export async function show() {
             await settings.reset();
             render();
         };
+
+        // Toolchain health + repair
+        const chipSel  = pane.querySelector("#toolchainHealthChip");
+        const hintEl   = pane.querySelector("#toolchainHealthHint");
+        const repairBtn= pane.querySelector("#toolchainRepairBtn");
+
+        async function refreshHealth() {
+            if (!chipSel || !hintEl) return;
+            hintEl.textContent = "Checking…";
+            try {
+                const diag = await api.diagnoseToolchain(chipSel.value);
+                if (diag.ready) {
+                    hintEl.textContent = "Ready — verified compiler + SDK installed.";
+                    hintEl.classList.remove("settings-row-hint-err");
+                } else {
+                    hintEl.textContent = "Not ready: " + (diag.missing || []).slice(0, 3).join("; ");
+                    hintEl.classList.add("settings-row-hint-err");
+                }
+            } catch (e) {
+                hintEl.textContent = "Could not check: " + (e?.message || e);
+            }
+        }
+
+        if (chipSel) chipSel.onchange = refreshHealth;
+        if (repairBtn) repairBtn.onclick = async () => {
+            if (!chipSel) return;
+            const chip = chipSel.value;
+            if (!confirm(`Wipe ${chip} toolchain? The install dialog will reinstall it next time you build.`)) return;
+            repairBtn.disabled = true;
+            repairBtn.textContent = "Repairing…";
+            try {
+                const r = await api.repairToolchain(chip);
+                hintEl.textContent = `Wiped ${(r.removed || []).length} folders. Ready for fresh install.`;
+                hintEl.classList.remove("settings-row-hint-err");
+            } catch (e) {
+                hintEl.textContent = "Repair failed: " + (e?.message || e);
+                hintEl.classList.add("settings-row-hint-err");
+            } finally {
+                repairBtn.disabled = false;
+                repairBtn.textContent = "Repair";
+            }
+        };
+
+        refreshHealth();
     }
 
     function esc(s) {
