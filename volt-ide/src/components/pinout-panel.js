@@ -172,25 +172,115 @@ export function setHighlight(gpio) {
     if (target) target.classList.add("is-cursor");
 }
 
+// Cache of the static SVG built per chip. Subsequent renders mutate
+// classes / textContent only — no innerHTML rebuilds, no element
+// recreation, no event re-attachment. This is what makes the realtime
+// update smooth across keystrokes.
+let _skeleton = { chip: null, refs: null, board: null };
+
 export async function render(chip, assignedPins, hardware) {
     if (!_root) return;
-    _state.chip = (chip || "").toLowerCase();
+    const newChip = (chip || "").toLowerCase();
+    _state.chip = newChip;
     _state.assigned = assignedPins || [];
     _state.conflicts = findConflicts(_state.assigned);
-    // Optional full hardware extract → enables the bus popover details
     _state.hardware = hardware || null;
+
+    // Same chip → mutate the existing DOM. Different chip → rebuild.
+    if (_skeleton.chip === newChip && _skeleton.refs) {
+        applyAssignments();
+        return;
+    }
 
     const board = await loadBoard(_state.chip);
     const host  = document.getElementById("pinoutSvgHost");
     if (!board) {
         host.innerHTML = `<div class="pinout-empty">No board diagram for ${escapeHtml(chip)} yet.</div>`;
+        _skeleton = { chip: null, refs: null, board: null };
         return;
     }
+    // Build the skeleton — board + every pin's full element set (outer
+    // ring, hit ring, pin label, dormant var label, dormant dev label).
+    // Pin coordinates are baked in; we never move elements after this.
     host.innerHTML = drawBoard(board, _state.assigned);
     const svg = host.querySelector("svg");
-    if (svg) {
-        bindPinClicks(svg, board, _state.assigned);
-        attachZoomPan(svg);
+    if (!svg) return;
+    bindPinClicks(svg, board, _state.assigned);
+    attachZoomPan(svg);
+
+    // Cache element refs by GPIO so subsequent renders mutate in place.
+    _skeleton.chip  = _state.chip;
+    _skeleton.board = board;
+    _skeleton.refs  = {};
+    svg.querySelectorAll(".pinout-pin").forEach(g => {
+        const gpio = g.getAttribute("data-gpio");
+        if (!gpio) return;
+        _skeleton.refs[gpio] = {
+            g,
+            varLabel: g.querySelector(".bp-var-label"),
+            devLabel: g.querySelector(".bp-dev-label"),
+        };
+    });
+
+    applyAssignments();
+}
+
+// Surgically mutate the cached DOM to reflect _state.assigned.
+// No element creation/removal — every pin's var-label and dev-label
+// already exist in the skeleton with display:none; we toggle classes
+// + update textContent + data-line attributes only.
+function applyAssignments() {
+    if (!_skeleton.refs) return;
+    const assignedByGpio = {};
+    for (const a of _state.assigned) {
+        const gpio = String(a.gpio ?? a.pin_number ?? a.pin ?? "").trim();
+        if (gpio) assignedByGpio[gpio] = a;
+    }
+
+    for (const [gpio, refs] of Object.entries(_skeleton.refs)) {
+        const a = assignedByGpio[gpio];
+        const conflict = _state.conflicts && _state.conflicts.has(gpio);
+        const kind = a ? (a.kind || "pin") : null;
+
+        // Toggle pin-state classes in one pass
+        refs.g.classList.toggle("is-assigned", !!a);
+        refs.g.classList.toggle("is-conflict", !!conflict);
+        refs.g.classList.toggle("is-bus", kind === "bus");
+        refs.g.classList.toggle("is-pin", kind === "pin");
+
+        // data-* used by click-to-jump + hover events
+        refs.g.setAttribute("data-name", a ? a.name : "");
+        refs.g.setAttribute("data-kind", kind || "");
+        refs.g.setAttribute("data-line", a && a.line ? a.line : 0);
+
+        // Var label text
+        const labelText = a
+            ? (kind === "bus" ? (a.role || "?") : a.name)
+            : "";
+        if (refs.varLabel) {
+            refs.varLabel.style.display = a ? "" : "none";
+            if (refs.varLabel.textContent !== labelText) refs.varLabel.textContent = labelText;
+            refs.varLabel.setAttribute("data-line", a && a.line ? a.line : 0);
+        }
+
+        // Devices label (only on the primary lane of a bus)
+        let devicesText = "";
+        if (a && kind === "bus" && _state.hardware && _state.hardware.devices) {
+            const bus = (_state.hardware.buses || []).find(b => b.name === a.name);
+            if (bus) {
+                const firstRole = Object.keys(bus.roles || {})[0];
+                if (firstRole === a.role) {
+                    devicesText = _state.hardware.devices
+                        .filter(d => d.bus === a.name)
+                        .map(d => d.name)
+                        .join(" · ");
+                }
+            }
+        }
+        if (refs.devLabel) {
+            refs.devLabel.style.display = devicesText ? "" : "none";
+            if (refs.devLabel.textContent !== devicesText) refs.devLabel.textContent = devicesText;
+        }
     }
 }
 
@@ -309,7 +399,8 @@ function drawBoard(board, assigned) {
     const titleY = boardT - 10;
     const totalH = innerH + 18;   // room for title above
     return `
-        <svg class="pinout-svg" viewBox="0 0 ${totalW} ${totalH}" preserveAspectRatio="xMidYMid meet">
+        <svg class="pinout-svg" viewBox="0 0 ${totalW} ${totalH}" preserveAspectRatio="xMidYMid meet"
+             overflow="visible" style="overflow:visible">
             <text x="${cx}" y="${titleY + 18}" text-anchor="middle" class="bp-board-label">${escapeHtml(board.name)}</text>
             <g transform="translate(0 22)">
                 <rect x="${boardL}" y="${boardT}" width="${boardR - boardL}" height="${boardB - boardT}"
@@ -321,58 +412,27 @@ function drawBoard(board, assigned) {
 }
 
 
-function drawPin(p, side, edgeX, y, assignedByGpio) {
+// Static skeleton emitter. Always renders ALL elements (including
+// dormant var-label + dev-label hidden via style="display:none") so
+// later mutation only needs to flip styles + textContent.
+function drawPin(p, side, edgeX, y, _ignored) {
     const gpio = String(p.gpio ?? "").trim();
-    const assigned = gpio ? assignedByGpio[gpio] : null;
-    const conflict = gpio && _state.conflicts && _state.conflicts.has(gpio);
     const type = p.type || "io";
     const labelX = side === "left" ? edgeX - 10 : edgeX + 10;
     const labelAnchor = side === "left" ? "end" : "start";
     const varX = side === "left" ? labelX - 56 : labelX + 56;
 
-    // Pin kind drives the visual: 'pin' = volt accent, 'bus' = bus accent
-    const kindCls = assigned ? `is-${assigned.kind || "pin"}` : "";
-    const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}${conflict ? " is-conflict" : ""} ${kindCls}`;
-    // Variable label text — for bus pins show just the role (sda / scl /
-    // mosi …). The bus name lives in the popover. For regular pins show
-    // the variable name as before.
-    const labelText = assigned
-        ? (assigned.kind === "bus" ? (assigned.role || "?") : assigned.name)
-        : "";
-    // For bus pins, also list device names attached to that bus on the
-    // FIRST role-pin only (so the list doesn't repeat on every lane).
-    let devicesText = "";
-    if (assigned && assigned.kind === "bus" && _state.hardware && _state.hardware.devices) {
-        const bus = (_state.hardware.buses || []).find(b => b.name === assigned.name);
-        if (bus) {
-            // Decide which role is the "primary" — first key in the roles object
-            const firstRole = Object.keys(bus.roles || {})[0];
-            if (firstRole === assigned.role) {
-                const devs = _state.hardware.devices
-                    .filter(d => d.bus === assigned.name)
-                    .map(d => d.name);
-                if (devs.length) devicesText = devs.join(" · ");
-            }
-        }
-    }
-    let varLabelSvg = "";
-    if (assigned) {
-        varLabelSvg += `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}"
-                 data-line="${assigned.line || 0}">${escapeHtml(labelText)}</text>`;
-        if (devicesText) {
-            varLabelSvg += `<text x="${varX}" y="${y + 16}" class="bp-dev-label" text-anchor="${labelAnchor}">${escapeHtml(devicesText)}</text>`;
-        }
-    }
-
     return `
-        <g class="${cls}" data-gpio="${escapeHtml(gpio)}" data-name="${escapeHtml(assigned ? assigned.name : "")}"
-           data-kind="${assigned ? assigned.kind : ""}"
-           data-line="${assigned && assigned.line ? assigned.line : 0}">
+        <g class="pinout-pin pin-type-${type}" data-gpio="${escapeHtml(gpio)}"
+           data-name="" data-kind="" data-line="0">
             <title>${escapeHtml(pinTooltip(p))}</title>
             <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
             <circle cx="${edgeX}" cy="${y}" r="8" class="bp-pin-ring"/>
             <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(p.label)}</text>
-            ${varLabelSvg}
+            <text x="${varX}" y="${y + 4}" class="bp-var-label"
+                  text-anchor="${labelAnchor}" data-line="0" style="display:none"></text>
+            <text x="${varX}" y="${y + 16}" class="bp-dev-label"
+                  text-anchor="${labelAnchor}" style="display:none"></text>
         </g>
     `;
 }

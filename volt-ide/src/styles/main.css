@@ -2648,7 +2648,10 @@ kbd {
     height: auto;
     display: block;
     pointer-events: all;
+    overflow: visible;          /* labels can extend arbitrarily far past
+                                    the board's viewBox edge */
 }
+.pinout-svg-host svg * { overflow: visible; }
 
 .pinout-empty {
     color: var(--t3);
