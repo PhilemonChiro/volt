@@ -34,6 +34,12 @@ function ninjaBin() {
     const p = path.join(TOOLCHAINS_DIR, "ninja", "ninja");
     return fs.existsSync(p) ? p : null;
 }
+// Portable ARM GCC (arm-none-eabi-gcc) for macOS — Linux uses apt.
+function armGccBin() {
+    if (process.platform !== "darwin") return null;
+    const p = path.join(TOOLCHAINS_DIR, "arm-gnu-toolchain", "bin", "arm-none-eabi-gcc");
+    return fs.existsSync(p) ? p : null;
+}
 
 // Build the PATH prefix needed to compile ESP-IDF projects: bundled Python
 // first (so install.sh / activate_venv pick 3.12+), then cmake, then ninja.
@@ -46,6 +52,8 @@ function buildPathPrefix() {
     if (cm) parts.push(path.dirname(cm));
     const nj = ninjaBin();
     if (nj) parts.push(path.dirname(nj));
+    const arm = armGccBin();
+    if (arm) parts.push(path.dirname(arm));
     return parts.join(path.delimiter);
 }
 
@@ -73,6 +81,31 @@ function downloadFile(url, dest) {
 // Ensure portable cmake + ninja are installed under TOOLCHAINS_DIR.
 // macOS only — Linux uses apt (handled separately), Windows uses Espressif's
 // installer that bundles its own.
+// Portable ARM GNU toolchain (arm-none-eabi-gcc) for macOS.
+// Arm publishes prebuilt darwin-arm64 + darwin-x86_64 tarballs. We pin 13.2
+// for stability (same compiler family the Pico SDK is tested against).
+async function ensureArmGcc(emit) {
+    if (process.platform !== "darwin") return true;
+    if (armGccBin()) { emit.log("ARM GCC already present"); return true; }
+    ensureDir(TOOLCHAINS_DIR);
+    const arch = process.arch === "arm64" ? "darwin-arm64" : "darwin-x86_64";
+    const url = `https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-${arch}-arm-none-eabi.tar.xz`;
+    const tmp = path.join(TOOLCHAINS_DIR, "_arm-gnu.tar.xz");
+    emit.log(`Downloading ARM GCC 13.2 (≈280 MB) for ${arch} ...`);
+    try {
+        await downloadFile(url, tmp);
+        const out = path.join(TOOLCHAINS_DIR, "arm-gnu-toolchain");
+        fs.mkdirSync(out, { recursive: true });
+        execSync(`tar -xJf "${tmp}" -C "${out}" --strip-components=1`, { stdio: "pipe" });
+        fs.unlinkSync(tmp);
+        emit.log("ARM GCC installed");
+        return true;
+    } catch (e) {
+        emit.log(`ERROR: ARM GCC download failed: ${e.message}`);
+        return false;
+    }
+}
+
 async function ensureCmakeNinja(emit) {
     if (process.platform !== "darwin") return true;
     ensureDir(TOOLCHAINS_DIR);
@@ -202,7 +235,7 @@ function picoSdkPath() {
     return path.join(TOOLCHAINS_DIR, "pico-sdk");
 }
 
-function ensureRP2040(legacy) {
+async function ensureRP2040(legacy) {
     const emit = makeEmit(legacy);
     const log = emit.log;
     ensureDir(TOOLCHAINS_DIR);
@@ -211,40 +244,60 @@ function ensureRP2040(legacy) {
     log("Checking RP2040 prerequisites...");
     emit.stageDone("check");
 
-    // 1. ARM GCC
+    // 1. ARM GCC — Linux: apt; macOS: portable Arm tarball; Windows: TODO
     emit.stage("arm-gcc");
-    if (!hasCommand("arm-none-eabi-gcc")) {
-        log("Installing ARM GCC toolchain...");
-        const r = run("sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi 2>&1", log);
-        if (!r.ok) {
-            log("ERROR: Failed to install ARM GCC. Run manually: sudo apt install gcc-arm-none-eabi");
-            emit.stageError("arm-gcc", "apt install failed");
+    if (process.platform === "linux") {
+        if (!hasCommand("arm-none-eabi-gcc")) {
+            log("Installing ARM GCC toolchain via apt...");
+            const r = run("sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi 2>&1", log);
+            if (!r.ok) {
+                log("ERROR: Failed to install ARM GCC. Run manually: sudo apt install gcc-arm-none-eabi");
+                emit.stageError("arm-gcc", "apt install failed");
+                return false;
+            }
+        } else {
+            log("ARM GCC already installed");
+        }
+    } else if (process.platform === "darwin") {
+        const ok = await ensureArmGcc(emit);
+        if (!ok) { emit.stageError("arm-gcc", "download failed"); return false; }
+    } else {
+        log("ARM GCC auto-install on this platform is not implemented yet.");
+        log("Install arm-none-eabi-gcc manually and re-run.");
+        if (!hasCommand("arm-none-eabi-gcc")) {
+            emit.stageError("arm-gcc", "not installed");
             return false;
         }
-        log("ARM GCC installed");
-    } else {
-        log("ARM GCC already installed");
     }
     emit.stageDone("arm-gcc");
 
-    // 2. cmake
+    // 2. cmake — Linux apt; macOS portable
     emit.stage("cmake");
-    if (!hasCommand("cmake")) {
-        log("Installing cmake...");
-        const r = run("sudo apt-get install -y cmake 2>&1", log);
-        if (!r.ok) {
-            emit.stageError("cmake", "apt install failed");
-            return false;
+    if (process.platform === "linux") {
+        if (!hasCommand("cmake")) {
+            log("Installing cmake via apt...");
+            const r = run("sudo apt-get install -y cmake 2>&1", log);
+            if (!r.ok) { emit.stageError("cmake", "apt install failed"); return false; }
+        } else {
+            log("cmake already installed");
         }
-    } else {
-        log("cmake already installed");
+    } else if (process.platform === "darwin") {
+        // ensureCmakeNinja handles cmake AND ninja (Pico SDK CMakeLists wants ninja too)
+        const ok = await ensureCmakeNinja(emit);
+        if (!ok) { emit.stageError("cmake", "download failed"); return false; }
     }
     emit.stageDone("cmake");
 
-    // 3. Pico SDK
+    // 3. Pico SDK — git clone, same on every platform
     emit.stage("clone-sdk");
     const sdk = picoSdkPath();
-    if (!fs.existsSync(path.join(sdk, "pico_sdk_init.cmake"))) {
+    const sdkLooksComplete = fs.existsSync(path.join(sdk, "pico_sdk_init.cmake")) &&
+                             fs.existsSync(path.join(sdk, "src", "CMakeLists.txt"));
+    if (!sdkLooksComplete) {
+        if (fs.existsSync(sdk)) {
+            log("Partial Pico SDK clone detected — wiping and starting fresh");
+            try { fs.rmSync(sdk, { recursive: true, force: true }); } catch (_) {}
+        }
         log("Downloading Raspberry Pi Pico SDK...");
         const r = run(`git clone --depth=1 --recurse-submodules --shallow-submodules https://github.com/raspberrypi/pico-sdk.git "${sdk}" 2>&1`, log);
         if (!r.ok) {
@@ -257,24 +310,34 @@ function ensureRP2040(legacy) {
     }
     emit.stageDone("clone-sdk");
 
-    // 4. picotool
+    // 4. picotool — Linux builds from source; macOS: skip (BOOTSEL drag-drop works)
     emit.stage("picotool");
-    if (!hasCommand("picotool")) {
-        log("Installing picotool for direct flashing...");
-        if (!installPicotool(emit)) {
-            log("picotool install failed — you can still flash via BOOTSEL mode");
-            emit.stageError("picotool", "build failed (BOOTSEL still works)");
+    if (process.platform === "linux") {
+        if (!hasCommand("picotool")) {
+            log("Installing picotool for direct flashing...");
+            if (!installPicotool(emit)) {
+                log("picotool install failed — you can still flash via BOOTSEL mode");
+                emit.stageError("picotool", "build failed (BOOTSEL still works)");
+            } else {
+                emit.stageDone("picotool");
+            }
         } else {
+            log("picotool already installed");
             emit.stageDone("picotool");
         }
     } else {
-        log("picotool already installed");
+        // macOS / Windows: skip — BOOTSEL drag-and-drop .uf2 works natively
+        log("Skipping picotool on this platform — use BOOTSEL mode (hold BOOTSEL, plug Pico, drag .uf2 to RPI-RP2 drive).");
         emit.stageDone("picotool");
     }
 
-    // 5. udev rules
+    // 5. udev rules — Linux only
     emit.stage("udev");
-    setupRP2040Udev(emit);
+    if (process.platform === "linux") {
+        setupRP2040Udev(emit);
+    } else {
+        log("Skipping udev (not Linux)");
+    }
     emit.stageDone("udev");
 
     return true;
@@ -479,7 +542,7 @@ async function ensureToolchain(chip, legacy) {
     const log = emit.log;
     const c = chip.toLowerCase();
     if (c.includes("rp2040") || c.includes("pico")) {
-        return ensureRP2040(emit);
+        return await ensureRP2040(emit);
     }
     if (c.includes("8266") || c.includes("esp32") || c.includes("esp")) {
         return await ensureEspIdf(c, emit);
@@ -509,14 +572,20 @@ function diagnoseToolchain(chip) {
     const missing = [];
 
     if (c.includes("rp2040") || c.includes("pico")) {
-        if (!hasCommand("arm-none-eabi-gcc"))
-            missing.push("arm-none-eabi-gcc (ARM GCC compiler)");
-        if (!hasCommand("cmake") && !(process.platform === "darwin" && cmakeBin()))
-            missing.push("cmake");
+        // ARM GCC: PATH on Linux/Windows; portable on macOS
+        const hasArm = hasCommand("arm-none-eabi-gcc") ||
+                       (process.platform === "darwin" && !!armGccBin());
+        if (!hasArm) missing.push("arm-none-eabi-gcc (ARM GCC compiler)");
+        // cmake: PATH on Linux/Windows; portable on macOS
+        const hasCmake = hasCommand("cmake") ||
+                         (process.platform === "darwin" && !!cmakeBin());
+        if (!hasCmake) missing.push("cmake");
+        // ninja is required for Pico SDK builds with Ninja generator
+        if (process.platform === "darwin" && !ninjaBin())
+            missing.push("ninja (portable, ~/.volt/toolchains/ninja)");
         const sdk = picoSdkPath();
         if (!fs.existsSync(path.join(sdk, "pico_sdk_init.cmake")))
             missing.push("pico-sdk (clone incomplete or absent)");
-        // Verify clone actually finished — top-level src/ should have a CMakeLists.txt
         if (fs.existsSync(sdk) && !fs.existsSync(path.join(sdk, "src", "CMakeLists.txt")))
             missing.push("pico-sdk/src (partial clone)");
     }
@@ -629,6 +698,11 @@ function repairToolchain(chip) {
     if (c.includes("rp2040") || c.includes("pico")) {
         rm(picoSdkPath());
         rm(path.join(TOOLCHAINS_DIR, "picotool"));
+        if (process.platform === "darwin") {
+            rm(path.join(TOOLCHAINS_DIR, "arm-gnu-toolchain"));
+            rm(path.join(TOOLCHAINS_DIR, "cmake"));
+            rm(path.join(TOOLCHAINS_DIR, "ninja"));
+        }
     } else if (c.includes("esp32") || c.includes("esp")) {
         rm(espIdfPath(c));
         rm(path.join(os.homedir(), ".espressif"));

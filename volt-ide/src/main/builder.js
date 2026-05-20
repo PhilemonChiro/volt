@@ -230,14 +230,26 @@ async function buildRP2040(projectPath, emit) {
     const buildDir = path.join(fw, "build");
     fs.mkdirSync(buildDir, { recursive: true });
     const sdk = toolchain.picoSdkPath();
-    const env = { PICO_SDK_PATH: sdk };
+
+    // Prepend portable toolchains (ARM GCC + cmake + ninja on macOS) so the
+    // Pico SDK's CMakeLists can find arm-none-eabi-gcc / ninja without the
+    // user installing them globally.
+    const pathPrefix = toolchain.buildPathPrefix();
+    const env = {
+        PICO_SDK_PATH: sdk,
+        PATH: pathPrefix
+            ? `${pathPrefix}${path.delimiter}${process.env.PATH || ""}`
+            : (process.env.PATH || ""),
+    };
+    // Resolve the cmake to call: portable on macOS, system on Linux.
+    const cmakeCmd = toolchain.cmakeBin() ? `"${toolchain.cmakeBin()}"` : "cmake";
 
     // CMake configure
     if (!fs.existsSync(path.join(buildDir, "Makefile")) &&
         !fs.existsSync(path.join(buildDir, "build.ninja"))) {
         emit("build", "Configuring CMake...", 28);
         const ok = await streamCommand(
-            `cmake -S "${fw}" -B "${buildDir}" -DPICO_SDK_PATH="${sdk}"`,
+            `${cmakeCmd} -S "${fw}" -B "${buildDir}" -DPICO_SDK_PATH="${sdk}"`,
             "build", emit, env
         );
         if (!ok) { emit("error", "CMake configure failed"); return false; }
@@ -246,7 +258,7 @@ async function buildRP2040(projectPath, emit) {
     // Build
     emit("build", "Building firmware...", 30);
     const ok = await streamCommand(
-        `cmake --build "${buildDir}" --parallel`,
+        `${cmakeCmd} --build "${buildDir}" --parallel`,
         "build", emit, env
     );
 
