@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld("volt", {
 
     // App metadata
     getVersion: () => ipcRenderer.invoke("app_version"),
+    platform: process.platform,   // "darwin" | "linux" | "win32"
+    arch:     process.arch,
 
     // Window controls
     minimize: () => ipcRenderer.invoke("win_minimize"),

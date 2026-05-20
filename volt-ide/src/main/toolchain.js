@@ -536,14 +536,63 @@ async function ensureToolchain(chip, legacy) {
     }
     if (c.includes("stm32")) {
         emit.stage("check"); emit.stageDone("check");
+
+        // ARM GCC: Linux uses apt; macOS uses the portable Arm tarball
+        // (same as RP2040 path).
         emit.stage("arm-gcc");
-        if (!hasCommand("arm-none-eabi-gcc")) {
-            log("Installing ARM GCC for STM32...");
-            const r = run("sudo apt-get install -y gcc-arm-none-eabi 2>&1", log);
-            if (!r.ok) { emit.stageError("arm-gcc", "apt install failed"); return false; }
+        if (process.platform === "linux") {
+            if (!hasCommand("arm-none-eabi-gcc")) {
+                log("Installing ARM GCC for STM32 via apt...");
+                const r = run("sudo apt-get install -y gcc-arm-none-eabi 2>&1", log);
+                if (!r.ok) { emit.stageError("arm-gcc", "apt install failed"); return false; }
+            } else {
+                log("ARM GCC already installed");
+            }
+        } else if (process.platform === "darwin") {
+            const ok = await ensureArmGcc(emit);
+            if (!ok) { emit.stageError("arm-gcc", "download failed"); return false; }
+        } else {
+            log("ARM GCC auto-install not implemented on this platform.");
+            if (!hasCommand("arm-none-eabi-gcc")) {
+                emit.stageError("arm-gcc", "not installed");
+                return false;
+            }
         }
         emit.stageDone("arm-gcc");
-        emit.stage("openocd"); log("OpenOCD setup pending"); emit.stageDone("openocd");
+
+        // OpenOCD: Linux via apt. macOS has no portable binary in the
+        // mirror yet — fail honestly with a manual-install hint instead
+        // of silently lying that we installed it.
+        emit.stage("openocd");
+        if (process.platform === "linux") {
+            if (!hasCommand("openocd")) {
+                log("Installing OpenOCD via apt...");
+                const r = run("sudo apt-get install -y openocd 2>&1", log);
+                if (!r.ok) { emit.stageError("openocd", "apt install failed"); return false; }
+            } else {
+                log("OpenOCD already installed");
+            }
+            emit.stageDone("openocd");
+        } else if (process.platform === "darwin") {
+            if (hasCommand("openocd")) {
+                log("OpenOCD already installed (probably via Homebrew)");
+                emit.stageDone("openocd");
+            } else {
+                log("OpenOCD must be installed manually on macOS.");
+                log("Recommended: brew install open-ocd");
+                log("Then re-run Check.");
+                emit.stageError("openocd", "manual install required (brew install open-ocd)");
+                return false;
+            }
+        } else {
+            log("OpenOCD auto-install not implemented on this platform.");
+            if (!hasCommand("openocd")) {
+                emit.stageError("openocd", "not installed");
+                return false;
+            }
+            emit.stageDone("openocd");
+        }
+
         emit.stage("env"); emit.stageDone("env");
         return true;
     }

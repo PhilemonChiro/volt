@@ -16,36 +16,71 @@
 
 const api = window.volt;
 
-const STAGES = {
-    esp32: [
-        { id: "check",       label: "Check system requirements",         weight: 2  },
-        { id: "deps",        label: "Install system dependencies",        weight: 8  },
-        { id: "clone-idf",   label: "Clone ESP-IDF from GitHub",          weight: 35 },
-        { id: "install-idf", label: "Install ESP-IDF toolchain",          weight: 50 },
-        { id: "env",         label: "Configure environment",              weight: 5  },
-    ],
-    esp8266: [
-        { id: "check",       label: "Check system requirements",         weight: 2  },
-        { id: "deps",        label: "Install system dependencies",        weight: 8  },
-        { id: "clone-idf",   label: "Clone ESP8266 RTOS SDK",             weight: 40 },
-        { id: "install-idf", label: "Install toolchain",                  weight: 45 },
-        { id: "env",         label: "Configure environment",              weight: 5  },
-    ],
-    rp2040: [
-        { id: "check",       label: "Check system requirements",         weight: 2  },
-        { id: "arm-gcc",     label: "Install ARM GCC compiler",           weight: 30 },
-        { id: "cmake",       label: "Install CMake",                      weight: 5  },
-        { id: "clone-sdk",   label: "Clone Pico SDK",                     weight: 25 },
-        { id: "picotool",    label: "Install picotool",                   weight: 30 },
-        { id: "udev",        label: "Configure USB permissions",          weight: 8  },
-    ],
-    stm32f103: [
-        { id: "check",       label: "Check system requirements",         weight: 2  },
-        { id: "arm-gcc",     label: "Install ARM GCC compiler",           weight: 50 },
-        { id: "openocd",     label: "Install OpenOCD",                    weight: 30 },
-        { id: "env",         label: "Configure environment",              weight: 18 },
-    ],
-};
+// Stages are platform-dependent — macOS uses portable tarballs (no apt),
+// skips Linux-only steps (udev), and skips macOS-skipped steps (picotool).
+// stagesFor(chip, platform) returns the list the dialog should render.
+function stagesFor(chip, platform) {
+    const c = chip.toLowerCase();
+    const isMac   = platform === "darwin";
+    const isLinux = platform === "linux";
+
+    if (c.includes("rp2040") || c.includes("pico")) {
+        if (isMac) {
+            return [
+                { id: "check",     label: "Check system",                weight: 2  },
+                { id: "arm-gcc",   label: "Install ARM GCC compiler",     weight: 65 },
+                { id: "cmake",     label: "Install CMake + Ninja",         weight: 12 },
+                { id: "clone-sdk", label: "Download Pico SDK",             weight: 21 },
+            ];
+        }
+        // Linux full path
+        return [
+            { id: "check",     label: "Check system",                     weight: 2  },
+            { id: "arm-gcc",   label: "Install ARM GCC compiler (apt)",    weight: 30 },
+            { id: "cmake",     label: "Install CMake (apt)",               weight: 5  },
+            { id: "clone-sdk", label: "Download Pico SDK",                 weight: 25 },
+            { id: "picotool",  label: "Build & install picotool",          weight: 30 },
+            { id: "udev",      label: "Configure USB permissions (udev)",  weight: 8  },
+        ];
+    }
+    if (c.includes("8266")) {
+        return [
+            { id: "check",       label: "Check system",                       weight: 2  },
+            { id: "deps",        label: isMac ? "Install CMake + Ninja" : "Install system deps (apt)", weight: 8 },
+            { id: "clone-idf",   label: "Download ESP8266 RTOS SDK",          weight: 40 },
+            { id: "install-idf", label: "Install xtensa-lx compiler + tools", weight: 45 },
+            { id: "env",         label: "Wrap up",                            weight: 5  },
+        ];
+    }
+    if (c.includes("esp32") || c.includes("esp")) {
+        return [
+            { id: "check",       label: "Check system",                                weight: 2  },
+            { id: "deps",        label: isMac ? "Install CMake + Ninja" : "Install system deps (apt)", weight: 8 },
+            { id: "clone-idf",   label: "Download ESP-IDF from GitHub",                weight: 35 },
+            { id: "install-idf", label: "Install xtensa compiler + Python tools",      weight: 50 },
+            { id: "env",         label: "Wrap up",                                     weight: 5  },
+        ];
+    }
+    if (c.includes("stm32")) {
+        if (isMac) {
+            return [
+                { id: "check",   label: "Check system",                weight: 2  },
+                { id: "arm-gcc", label: "Install ARM GCC compiler",     weight: 80 },
+                { id: "openocd", label: "OpenOCD (manual install)",     weight: 13 },
+                { id: "env",     label: "Wrap up",                      weight: 5  },
+            ];
+        }
+        return [
+            { id: "check",   label: "Check system",                  weight: 2  },
+            { id: "arm-gcc", label: "Install ARM GCC compiler (apt)", weight: 50 },
+            { id: "openocd", label: "Install OpenOCD (apt)",          weight: 30 },
+            { id: "env",     label: "Wrap up",                        weight: 18 },
+        ];
+    }
+    return [
+        { id: "check", label: "Check system", weight: 100 },
+    ];
+}
 
 const CHIP_LABELS = {
     esp32:     "ESP32",
@@ -62,7 +97,8 @@ export function show({ chip, onComplete, onCancel }) {
         return;
     }
 
-    const stageDefs = STAGES[chip] || STAGES.esp32;
+    const platform = api.platform || "linux";
+    const stageDefs = stagesFor(chip, platform);
     const state = {
         chip,
         stages: stageDefs.map(s => ({ ...s, status: "pending", detail: "", subPct: 0, durationMs: 0 })),
