@@ -2603,7 +2603,7 @@ kbd {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: var(--bg-0);
+    background: #0a1f36;            /* slightly darker than the blueprint paper */
     cursor: grab;
     touch-action: none;
     user-select: none;
@@ -2634,75 +2634,81 @@ kbd {
     line-height: var(--lh-base);
 }
 
-/* Per-pin group — gold pad, hole, highlight ring, pin label, var label */
-.pinout-pin {
-    cursor: pointer;
+/* ── Blueprint palette ──────────────────────────────────────
+   Dark cyan-blue "paper", soft white drafting lines, accent volt
+   for hover / assigned states. Everything is stroked — no fills,
+   no shadows, no gradients. */
+:root {
+    --bp-paper:        #0d2643;
+    --bp-grid-minor:   rgba(255,255,255,0.04);
+    --bp-grid-major:   rgba(255,255,255,0.08);
+    --bp-line:         #c9def0;
+    --bp-line-soft:    rgba(201,222,240,0.55);
+    --bp-accent:       var(--volt);
 }
-.pinout-ring {
+
+.bp-paper {
+    fill: var(--bp-paper);
+}
+.bp-grid-minor { stroke: var(--bp-grid-minor); stroke-width: 0.5; }
+.bp-grid-major { stroke: var(--bp-grid-major); stroke-width: 0.8; }
+.bp-line       { stroke: var(--bp-line); stroke-width: 1.2; }
+.bp-line-thin  { stroke: var(--bp-line-soft); stroke-width: 0.7; }
+.bp-corner path { stroke: var(--bp-line); stroke-width: 1; fill: none; }
+
+/* Labels — all in the soft drafting white, mono */
+.bp-label-title { fill: var(--bp-line); font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; }
+.bp-label-ic    { fill: var(--bp-line); font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; }
+.bp-label-small { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; }
+.bp-pin-label   { fill: var(--bp-line); font-family: var(--mono); font-size: 11px; }
+
+/* Pins — outline circle, tiny center mark */
+.pinout-pin { cursor: pointer; }
+.bp-pin-outer {
+    fill: none;
+    stroke: var(--bp-line);
+    stroke-width: 1.2;
+}
+.bp-pin-inner {
+    fill: var(--bp-line);
+}
+.bp-pin-ring {
     fill: none;
     stroke: transparent;
     stroke-width: 2;
     transition: stroke var(--dur-fast) var(--ease-out);
 }
-.pinout-pin:hover .pinout-ring {
-    stroke: rgba(43,124,179,0.55);
+.pinout-pin:hover .bp-pin-ring { stroke: var(--bp-line-soft); }
+.pinout-pin.is-assigned .bp-pin-outer {
+    fill: var(--bp-accent);
+    stroke: var(--bp-accent);
 }
-.pinout-pin.is-assigned .pinout-ring {
-    stroke: var(--volt);
-    stroke-width: 2.5;
-    filter: drop-shadow(0 0 5px rgba(43,124,179,0.7));
-}
-.pinout-pin-label {
-    fill: var(--t2);
-    font-size: 11px;
-    font-family: var(--mono);
-}
-.pinout-pin.is-assigned .pinout-pin-label { fill: var(--volt); font-weight: 600; }
-.pinout-var-label {
-    fill: var(--volt);
-    font-size: 11px;
-    font-family: var(--mono);
-    font-weight: 600;
-    paint-order: stroke fill;
-    stroke: #0a0a0a;
-    stroke-width: 3;
-    stroke-linejoin: round;
-}
-/* Pin-type label tints (subtle, applied only at rest) */
-.pinout-pin.pin-type-power    .pinout-pin-label { fill: #ef6b6b; }
-.pinout-pin.pin-type-ground   .pinout-pin-label { fill: #8b9296; }
-.pinout-pin.pin-type-input    .pinout-pin-label { fill: #9bc5dc; }
-.pinout-pin.pin-type-control  .pinout-pin-label { fill: #f3b33e; }
-.pinout-pin.pin-type-reserved .pinout-pin-label { fill: #6b6e74; text-decoration: line-through; }
+.pinout-pin.is-assigned .bp-pin-inner { fill: var(--bp-paper); }
+.pinout-pin.is-assigned .bp-pin-ring  { stroke: var(--bp-accent); stroke-width: 2.5; }
+.pinout-pin.is-assigned .bp-pin-label { fill: var(--bp-accent); font-weight: 600; }
 
-/* USB connector + IC + buttons + LED + silkscreen */
-.pinout-usb-label, .pinout-silk-tiny {
-    fill: var(--t3);
-    font-size: 9px;
-    letter-spacing: 0.08em;
+.bp-var-label {
+    fill: var(--bp-accent);
     font-family: var(--mono);
-}
-.pinout-silk-title {
-    fill: rgba(255,255,255,0.4);
-    font-size: 10px;
-    letter-spacing: 0.16em;
-    font-family: var(--mono);
-}
-.pinout-ic-name {
-    fill: rgba(255,255,255,0.82);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    font-family: var(--mono);
 }
-.pinout-ic-sub {
-    fill: rgba(255,255,255,0.4);
-    font-size: 9px;
-    letter-spacing: 0.06em;
-    font-family: var(--mono);
+
+/* Pin-type tints — kept subtle, applied at rest only */
+.pinout-pin.pin-type-power    .bp-pin-outer { stroke: #f08c8c; }
+.pinout-pin.pin-type-ground   .bp-pin-outer { stroke: #8090a0; }
+.pinout-pin.pin-type-input    .bp-pin-outer { stroke: #9bbfd6; }
+.pinout-pin.pin-type-control  .bp-pin-outer { stroke: #e6b870; }
+.pinout-pin.pin-type-reserved .bp-pin-outer { stroke: #555a64; stroke-dasharray: 2 2; }
+.pinout-pin.pin-type-reserved .bp-pin-label { text-decoration: line-through; opacity: 0.7; }
+
+/* On-board LED — circle, filled-accent when its GPIO is assigned */
+.bp-led { fill: none; stroke: var(--bp-line); stroke-width: 1.2; }
+.pinout-led.is-on .bp-led {
+    fill: var(--bp-accent);
+    stroke: var(--bp-accent);
 }
 .pinout-button { cursor: help; }
-.pinout-led { transition: filter var(--dur-base) var(--ease-out); }
 
 /* Zoom controls — floating bottom-right corner of the canvas */
 .pinout-controls {
