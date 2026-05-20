@@ -2634,28 +2634,31 @@ kbd {
     line-height: var(--lh-base);
 }
 
-/* Baked pin markers — invisible at rest, hit-target for hover/click */
-.pin-marker {
+/* Per-pin group — gold pad, hole, highlight ring, pin label, var label */
+.pinout-pin {
     cursor: pointer;
 }
-.pin-marker:hover {
-    stroke: rgba(43,124,179,0.55) !important;
-    fill: rgba(43,124,179,0.18) !important;
-}
-.pin-marker.is-assigned {
-    stroke: transparent !important;
-    fill: transparent !important;
-}
-
-/* Overlay rings + variable labels added by JS for each assigned pin */
-.pinout-overlay-ring {
+.pinout-ring {
     fill: none;
+    stroke: transparent;
+    stroke-width: 2;
+    transition: stroke var(--dur-fast) var(--ease-out);
+}
+.pinout-pin:hover .pinout-ring {
+    stroke: rgba(43,124,179,0.55);
+}
+.pinout-pin.is-assigned .pinout-ring {
     stroke: var(--volt);
     stroke-width: 2.5;
-    filter: drop-shadow(0 0 6px rgba(43,124,179,0.7));
-    pointer-events: none;
+    filter: drop-shadow(0 0 5px rgba(43,124,179,0.7));
 }
-.pinout-overlay-name {
+.pinout-pin-label {
+    fill: var(--t2);
+    font-size: 11px;
+    font-family: var(--mono);
+}
+.pinout-pin.is-assigned .pinout-pin-label { fill: var(--volt); font-weight: 600; }
+.pinout-var-label {
     fill: var(--volt);
     font-size: 11px;
     font-family: var(--mono);
@@ -2664,8 +2667,42 @@ kbd {
     stroke: #0a0a0a;
     stroke-width: 3;
     stroke-linejoin: round;
-    pointer-events: none;
 }
+/* Pin-type label tints (subtle, applied only at rest) */
+.pinout-pin.pin-type-power    .pinout-pin-label { fill: #ef6b6b; }
+.pinout-pin.pin-type-ground   .pinout-pin-label { fill: #8b9296; }
+.pinout-pin.pin-type-input    .pinout-pin-label { fill: #9bc5dc; }
+.pinout-pin.pin-type-control  .pinout-pin-label { fill: #f3b33e; }
+.pinout-pin.pin-type-reserved .pinout-pin-label { fill: #6b6e74; text-decoration: line-through; }
+
+/* USB connector + IC + buttons + LED + silkscreen */
+.pinout-usb-label, .pinout-silk-tiny {
+    fill: var(--t3);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    font-family: var(--mono);
+}
+.pinout-silk-title {
+    fill: rgba(255,255,255,0.4);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    font-family: var(--mono);
+}
+.pinout-ic-name {
+    fill: rgba(255,255,255,0.82);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    font-family: var(--mono);
+}
+.pinout-ic-sub {
+    fill: rgba(255,255,255,0.4);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    font-family: var(--mono);
+}
+.pinout-button { cursor: help; }
+.pinout-led { transition: filter var(--dur-base) var(--ease-out); }
 
 /* Zoom controls — floating bottom-right corner of the canvas */
 .pinout-controls {
