@@ -7,7 +7,7 @@ export function init(container, { onNew, onOpen, onOpenRecent }) {
         <div class="welcome-stage">
             <img src="assets/volt-logo.svg" class="welcome-logo" alt="">
             <h1 class="welcome-title">Volt</h1>
-            <p class="welcome-subtitle">Embedded development that reads like English</p>
+            <p class="welcome-subtitle">Declare hardware. Write logic. Flash.</p>
 
             <div class="welcome-actions">
                 <button class="welcome-btn primary" id="welcomeNewBtn">

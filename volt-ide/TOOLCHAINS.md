@@ -1,116 +1,160 @@
 # Volt IDE Toolchain Mirror
 
 The IDE downloads chip toolchains (ARM GCC, cmake, ninja, ...) on first use
-rather than bundling them in the installer. This file explains how the mirror
-works and how to refresh pinned versions.
+rather than bundling them in the installer. Toolchain metadata lives in a
+remote `manifest.json` so you can update pinned versions without shipping
+a new IDE.
 
 ## Architecture
 
 ```
-                        ┌────────────────────────────────────────────┐
-                        │  Volt IDE                                  │
-                        │   ensureArmGcc / ensureCmakeNinja          │
-                        │      └─► mirror.downloadAsset(key, …)      │
-                        │            ┌─────────┐    ┌─────────────┐  │
-                        │            │ mirror  │ or │  upstream   │  │
-                        │            └────┬────┘    └──────┬──────┘  │
-                        └─────────────────┼────────────────┼─────────┘
-                                          │                │
-                ┌─────────────────────────▼─┐       ┌──────▼─────────────────┐
-                │ github.com/PhilemonChiro/ │       │ developer.arm.com,     │
-                │   volt/releases/download/ │       │ github.com/Kitware/…,  │
-                │   toolchains-YYYY.MM      │       │ ninja-build releases   │
-                └───────────────────────────┘       └────────────────────────┘
+              ┌──────────────────────────────────────────────────────────┐
+              │  Volt IDE                                                │
+              │                                                          │
+              │   ensureArmGcc / ensureCmakeNinja                        │
+              │      └─► mirror.downloadAsset(key, …)                    │
+              │            ├─► loadManifest()                            │
+              │            │     ├─► ~/.volt/cache/manifest.json (24h)   │
+              │            │     ├─► GET volt-toolchains/manifest.json   │
+              │            │     └─► FALLBACK_MANIFEST (baked-in)        │
+              │            │                                             │
+              │            ├─► mirror URL  ──►┐                          │
+              │            └─► upstream URL ──┴► SHA256 verify ──► OK    │
+              └─────────────────────────────────────────────────────────┘
+
+   The mirror lives at:
+   github.com/PhilemonChiro/volt-toolchains
+     └─ release: toolchains-2026.05
+          ├─ manifest.json                    ← metadata (URLs, hashes, schema)
+          ├─ arm-gnu-toolchain-13.2-darwin-arm64.tar.xz
+          ├─ arm-gnu-toolchain-13.2-darwin-x86_64.tar.xz
+          ├─ arm-gnu-toolchain-13.2-linux-x64.tar.xz
+          ├─ cmake-3.30.5-macos-universal.tar.gz
+          └─ ninja-1.12.1-mac.zip
 ```
 
-* **Single source of truth:** `src/main/toolchain-mirror.js` holds the
-  manifest — upstream URL, mirror URL, and SHA256 for each asset.
-* **Source preference:** `Settings → Build & Toolchain → Toolchain download
+- **`manifest.json`** is the source of truth for what versions, URLs, and
+  hashes the IDE uses. The IDE caches it locally (24h TTL) and only re-fetches
+  when stale.
+- **`FALLBACK_MANIFEST`** in `src/main/toolchain-mirror.js` is a baked-in
+  copy used when the live manifest can't be fetched (offline, GitHub down).
+- **Source preference**: `Settings → Build & Toolchain → Toolchain download
   source` (`auto` | `mirror` | `upstream`).
-* **Resilience:** `auto` tries mirror first, falls back to upstream on any
-  failure (404, hash mismatch, timeout).
 
-## Pinned versions (`toolchains-2026.05`)
+## Manifest schema (v1)
 
-| Asset | Version | Platforms |
-|---|---|---|
-| ARM GCC (`arm-none-eabi`) | 13.2 rel1 | darwin-arm64, darwin-x86_64, linux-x64 |
-| cmake | 3.30.5 | macOS universal |
-| ninja | 1.12.1 | macOS |
+```jsonc
+{
+  "schema_version": 1,
+  "tag": "toolchains-2026.05",
+  "min_ide_version": "2.0.10",            // IDE refuses manifests it's too old to understand
+  "assets": {
+    "<asset-key>": {
+      "filename":   "...",                // basename of the tarball/zip
+      "url":        "https://.../...",    // mirror URL on volt-toolchains
+      "upstream":   "https://.../...",    // official source (fallback)
+      "sha256":     "hex",                // verified after every download
+      "size_bytes": 0,                    // informational
+      "extract":    { "format": "tar.xz" | "tar.gz" | "zip", "strip_components": 1 },
+      "install_to": "subdir",             // relative to ~/.volt/toolchains
+      "exposes":    { "tool-name": "relative/path/inside/install_to" },
+      "kind":       "compiler" | "build-system" | "sdk" | ...,
+      "version":    "human-readable"
+    }
+  },
+  "chip_requirements": {
+    "<chip>": {
+      "<platform>": ["asset-key", ...]    // assets required to build this chip on this platform
+    }
+  },
+  "known_issues": [
+    { "platform": "darwin", "min_macos": "12", "asset": "...", "note": "..." }
+  ]
+}
+```
 
 ## Refresh workflow
 
-When you want to bump a toolchain version:
+To bump a toolchain version (or add a new asset):
 
-1. **Edit** `src/main/toolchain-mirror.js` — change the upstream URL and
-   mirror filename for the asset, set `sha256: null` (so the publish
-   script repopulates it).
-2. **Authenticate** the `gh` CLI to the volt repo:
+1. **Edit** `src/main/toolchain-mirror.js` — change `FALLBACK_MANIFEST.assets`
+   (update upstream URL, version string, `sha256: null`, `size_bytes: 0`).
+2. **Authenticate** `gh` to the volt-toolchains repo:
    ```bash
    gh auth login
    ```
-3. **Run** the publisher:
+3. **Publish:**
    ```bash
-   npm run publish:toolchains            # all assets
-   npm run publish:toolchains -- --only=cmake-3.30.5-macos-universal   # one asset
-   npm run publish:toolchains -- --dry-run    # see what would happen
+   npm run publish:toolchains                        # all assets + manifest
+   npm run publish:toolchains -- --only=cmake-...    # one asset + manifest
+   npm run publish:toolchains -- --manifest-only     # metadata-only change
+   npm run publish:toolchains -- --dry-run           # see what would happen
    ```
-   The script:
-     * Downloads each asset from upstream
-     * Computes its SHA256
-     * Creates the release tagged `MIRROR_TAG` if it doesn't exist
-     * Uploads the asset (replacing any existing one of the same name)
-     * Patches `toolchain-mirror.js` with the computed SHA256
-4. **Commit** the updated `toolchain-mirror.js` (now pinned with hashes).
-5. **Bump** the IDE version in `package.json` and tag a release.
+   The publisher:
+     - Downloads each asset from upstream into `/tmp/volt-mirror/`
+     - Computes SHA256 and size
+     - Uploads the asset to release `toolchains-2026.05` (replacing any
+       existing one with the same name)
+     - Builds a fresh `manifest.json` with the computed hashes
+     - Uploads `manifest.json` (always, even with `--only`)
+4. **Verify live:**
+   ```bash
+   curl -sL https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/manifest.json | jq .
+   ```
+5. **Optional:** commit the updated `toolchain-mirror.js` so the baked-in
+   fallback also reflects the new hashes. Not required for users — they'll
+   pick up the new manifest on next build via the remote fetch — but means
+   offline first-runs use the latest versions too.
+
+**No IDE release needed** for a toolchain version bump. Users get the new
+versions on next build via the remote manifest.
 
 ## Why mirror
 
-* **Reproducible installs.** v2.0.10 IDE always pulls the same compiler.
-  Upstream changes (a new `13.2 rel2`, an old version pulled, a CDN tweak)
-  can't break your users.
-* **Network reach.** Schools / corporate firewalls only need to whitelist
-  `github.com/PhilemonChiro/volt/*`, not five different vendor CDNs.
-* **Integrity.** SHA256 verification catches partial downloads + corrupted
+- **Reproducible installs.** v2.0.12 IDE always pulls the manifest that's
+  live at build time. Upstream changes can't break your users.
+- **Network reach.** Schools / corporate firewalls only need to whitelist
+  `github.com/PhilemonChiro/volt-toolchains/*`, not five different vendor
+  CDNs.
+- **Integrity.** SHA256 verification catches partial downloads + corrupted
   caches the moment they happen.
-* **Fast hosts.** GitHub's release CDN is generally faster than Arm.com.
-
-## Adding a new asset
-
-Add a new entry to `MANIFEST` in `toolchain-mirror.js`:
-
-```js
-"openocd-0.12-darwin-arm64": {
-    upstream:  "https://example.com/openocd-0.12-darwin-arm64.tar.gz",
-    mirror:    `${MIRROR_BASE}/openocd-0.12-darwin-arm64.tar.gz`,
-    sha256:    null,
-    sizeBytes: null,
-},
-```
-
-Then run `npm run publish:toolchains` to upload + populate the hash.
+- **Fast hosts.** GitHub's release CDN is generally faster than Arm.com.
+- **Decoupled updates.** Bump toolchain versions without forcing every
+  user to update the IDE.
 
 ## Settings deep dive
 
-The `build.toolchainSource` setting is read by `mirror.getPreference()`:
+The `build.toolchainSource` setting:
 
-* **auto** *(default)* — tries `mirror` first, falls back to `upstream`.
+- **auto** *(default)* — tries `mirror` first, falls back to `upstream`.
   Best for most users — pinned and resilient.
-* **mirror** — only the Volt mirror, fails if the mirror is down or the
+- **mirror** — only the Volt mirror, fails if the mirror is down or the
   asset isn't mirrored yet. Useful for offline labs that have whitelisted
   only github.com.
-* **upstream** — skips the mirror entirely, downloads from official
+- **upstream** — skips the mirror entirely, downloads from official
   vendor sites. Useful for development / testing new versions before
   they're mirrored.
 
+## Caching
+
+The remote manifest is cached at `~/.volt/cache/manifest.json` with a
+**24h TTL**. After that, the next build refreshes it. If the fetch fails,
+the IDE keeps using the stale cache (better than nothing). If there's no
+cache at all, the IDE uses the baked-in `FALLBACK_MANIFEST`.
+
+To force a re-fetch:
+```bash
+rm ~/.volt/cache/manifest.json
+```
+
 ## Limits
 
-GitHub release asset limits as of writing:
-* **2 GB per file** (hard limit, free + paid tiers)
-* **No documented total cap** on assets per release
-* **Free, uncapped bandwidth** for release downloads (not LFS)
+GitHub release asset limits:
+- **2 GB per file** (hard, free + paid tiers)
+- **No documented total cap** on assets per release
+- **Free, uncapped bandwidth** for release downloads (not LFS)
 
-Every asset we ship today is well under 2 GB (largest is ARM GCC at
-~280 MB). The 2 GB ceiling is the reason ESP-IDF is *not* yet bundled as
-a single tarball — that would be ~800 MB compressed and is on the
-roadmap for a future release.
+Largest asset today is ARM GCC at ~280 MB. We're well under the ceiling.
+ESP-IDF is *not* yet bundled as a single tarball (~800 MB compressed) —
+it's still cloned + installed by the IDE on first use. Pre-built ESP-IDF
+mirror is on the roadmap.

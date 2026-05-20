@@ -1,32 +1,41 @@
 #!/usr/bin/env node
-// Publish toolchain tarballs to the Volt mirror release.
+// Publish toolchain tarballs + manifest.json to the Volt mirror release.
 //
 // Usage:
-//   node scripts/publish-toolchains.js [--dry-run] [--only=key1,key2]
+//   node scripts/publish-toolchains.js [--dry-run] [--only=key1,key2] [--manifest-only]
 //
-// What it does, for each entry in MANIFEST:
-//   1. Downloads the upstream tarball into /tmp/volt-mirror/<key>.<ext>
-//   2. Computes SHA256
-//   3. Uploads to GitHub release <MIRROR_TAG> (creates the release if missing)
-//   4. Patches src/main/toolchain-mirror.js with the computed sha256 + size
+// For each asset in FALLBACK_MANIFEST.assets (filtered by --only):
+//   1. Download the upstream tarball into /tmp/volt-mirror/<filename>
+//   2. Compute SHA256 + size
+//   3. Patch the in-memory manifest with computed values
+//   4. Upload to GitHub release <MIRROR_TAG> on PhilemonChiro/volt-toolchains
 //
-// Requires: gh CLI authenticated to the volt repo, internet, ~3 GB free.
+// Then always (unless --dry-run):
+//   - Write the patched manifest to /tmp/volt-mirror/manifest.json
+//   - Upload it as a release asset (--clobber so users always get the latest)
+//
+// --manifest-only: skip the tarball download/upload, just regenerate +
+// republish manifest.json. Useful when you've only changed metadata
+// (extract format, install_to, chip_requirements, known_issues, etc.)
+//
+// Requires: gh CLI authenticated. Run from volt-ide/.
 
-const { execSync, spawnSync } = require("child_process");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const crypto = require("crypto");
 
 const mirror = require("../src/main/toolchain-mirror");
-const { MANIFEST, MIRROR_TAG } = mirror;
+const { FALLBACK_MANIFEST, MIRROR_TAG } = mirror;
 
 const args = process.argv.slice(2);
-const DRY_RUN = args.includes("--dry-run");
+const DRY_RUN       = args.includes("--dry-run");
+const MANIFEST_ONLY = args.includes("--manifest-only");
 const ONLY = (args.find(a => a.startsWith("--only=")) || "").slice(7).split(",").filter(Boolean);
 
 const STAGING = path.join("/tmp", "volt-mirror");
-const REPO    = "PhilemonChiro/volt";
+const REPO    = "PhilemonChiro/volt-toolchains";
 
 function log(...a) { console.log("[publish-toolchains]", ...a); }
 
@@ -99,7 +108,7 @@ function ensureRelease() {
     ghRun(["release", "create", MIRROR_TAG,
         "--repo", REPO,
         "--title", `Toolchains snapshot ${MIRROR_TAG}`,
-        "--notes", `Pinned toolchain tarballs for Volt IDE.\n\nMirrored from official Arm.com, Kitware, ninja-build sources.\nUsed by the IDE\\'s on-demand toolchain installer (build.toolchainSource=auto|mirror).\n\nSee TOOLCHAINS.md in the repo for refresh instructions.`,
+        "--notes", `Pinned toolchain tarballs + manifest.json for Volt IDE.\n\nThe IDE fetches manifest.json from this release at runtime, so toolchain\nversions can be updated without shipping a new IDE.\n\nSee TOOLCHAINS.md in the volt repo for refresh instructions.`,
         "--prerelease",
     ]);
 }
@@ -107,54 +116,20 @@ function ensureRelease() {
 function uploadAsset(tag, filePath) {
     const name = path.basename(filePath);
     if (ghReleaseAssetExists(tag, name)) {
-        log(`Asset ${name} already in release — overwriting`);
+        log(`Asset ${name} already in release — replacing`);
         if (!DRY_RUN) ghRun(["release", "delete-asset", tag, name, "--repo", REPO, "--yes"]);
     }
     if (DRY_RUN) { log(`[dry-run] would upload ${name}`); return; }
     ghRun(["release", "upload", tag, filePath, "--repo", REPO]);
 }
 
-function patchManifestSha(key, sha256, sizeBytes) {
-    const file = path.join(__dirname, "..", "src", "main", "toolchain-mirror.js");
-    const lines = fs.readFileSync(file, "utf-8").split("\n");
-    // Walk lines to find the entry that starts "<key>": {
-    const entryStart = lines.findIndex(l => l.match(new RegExp(`^\\s*"${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*:\\s*{`)));
-    if (entryStart < 0) {
-        log(`WARN: could not locate manifest entry for ${key} — skipping patch`);
-        return;
-    }
-    // Find the closing `},` for this entry — first line that's pure `    },`
-    let entryEnd = -1;
-    for (let i = entryStart + 1; i < lines.length; i++) {
-        if (/^\s*},\s*$/.test(lines[i])) { entryEnd = i; break; }
-    }
-    if (entryEnd < 0) {
-        log(`WARN: could not locate end of entry ${key} — skipping patch`);
-        return;
-    }
-    let patched = false;
-    for (let i = entryStart; i <= entryEnd; i++) {
-        if (/^\s*sha256:/.test(lines[i])) {
-            lines[i] = lines[i].replace(/sha256:\s*[^,]+,/, `sha256:   "${sha256}",`);
-            patched = true;
-        } else if (/^\s*sizeBytes:/.test(lines[i])) {
-            lines[i] = lines[i].replace(/sizeBytes:\s*[^,]+,/, `sizeBytes: ${sizeBytes},`);
-        }
-    }
-    if (!patched) { log(`WARN: no sha256 line found inside entry ${key}`); return; }
-    if (DRY_RUN) { log(`[dry-run] would patch ${key} sha256=${sha256.slice(0,12)}…`); return; }
-    fs.writeFileSync(file, lines.join("\n"));
-    log(`Patched manifest: ${key} -> sha256 ${sha256.slice(0,16)}…`);
-}
-
-async function publishOne(key, asset) {
+async function publishOne(key, asset, workingManifest) {
     fs.mkdirSync(STAGING, { recursive: true });
-    const filename = path.basename(asset.mirror);
+    const filename = asset.filename || path.basename(asset.url);
     const local = path.join(STAGING, filename);
 
     log(`\n=== ${key} ===`);
     log(`  upstream: ${asset.upstream}`);
-    log(`  mirror:   ${asset.mirror}`);
 
     if (!fs.existsSync(local)) {
         log(`  Downloading…`);
@@ -172,21 +147,54 @@ async function publishOne(key, asset) {
 
     ensureRelease();
     uploadAsset(MIRROR_TAG, local);
-    patchManifestSha(key, sha256, sizeBytes);
+
+    // Patch the working manifest in-memory so the regenerated manifest.json
+    // reflects the just-published artifact.
+    workingManifest.assets[key] = {
+        ...workingManifest.assets[key],
+        sha256,
+        size_bytes: sizeBytes,
+    };
+    log(`  Patched manifest entry for ${key}`);
+}
+
+function writeManifestJson(workingManifest) {
+    const out = path.join(STAGING, "manifest.json");
+    fs.mkdirSync(STAGING, { recursive: true });
+    fs.writeFileSync(out, JSON.stringify(workingManifest, null, 2));
+    log(`\nWrote manifest.json: ${out}`);
+    return out;
 }
 
 async function main() {
-    const keys = Object.keys(MANIFEST).filter(k => ONLY.length === 0 || ONLY.includes(k));
-    log(`Publishing ${keys.length} toolchains to ${MIRROR_TAG} (dry-run=${DRY_RUN})`);
-    for (const key of keys) {
-        try {
-            await publishOne(key, MANIFEST[key]);
-        } catch (e) {
-            console.error(`[publish-toolchains] FAILED ${key}: ${e.message}`);
-            process.exitCode = 1;
+    // Deep-clone the baked-in manifest so per-asset updates don't mutate
+    // the imported FALLBACK_MANIFEST (which would leak into manifestIsCompatible
+    // checks etc. while this script is running).
+    const workingManifest = JSON.parse(JSON.stringify(FALLBACK_MANIFEST));
+
+    if (!MANIFEST_ONLY) {
+        const keys = Object.keys(workingManifest.assets).filter(k => ONLY.length === 0 || ONLY.includes(k));
+        log(`Publishing ${keys.length} tarballs + manifest.json to ${MIRROR_TAG} (dry-run=${DRY_RUN})`);
+        for (const key of keys) {
+            try {
+                await publishOne(key, workingManifest.assets[key], workingManifest);
+            } catch (e) {
+                console.error(`[publish-toolchains] FAILED ${key}: ${e.message}`);
+                process.exitCode = 1;
+                // Continue with other assets so a single upstream outage
+                // doesn't block the rest of the publish.
+            }
         }
+    } else {
+        log(`--manifest-only: skipping tarball downloads, will publish manifest.json only`);
     }
-    log("Done.");
+
+    const manifestPath = writeManifestJson(workingManifest);
+    ensureRelease();
+    uploadAsset(MIRROR_TAG, manifestPath);
+
+    log("\nDone.");
+    log(`Live manifest URL: ${mirror.MANIFEST_URL}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
