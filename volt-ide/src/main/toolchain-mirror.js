@@ -23,7 +23,7 @@ const crypto = require("crypto");
 const https = require("https");
 
 const MIRROR_TAG = "toolchains-2026.05";
-const MIRROR_BASE = `https://github.com/PhilemonChiro/volt/releases/download/${MIRROR_TAG}`;
+const MIRROR_BASE = `https://github.com/PhilemonChiro/volt-toolchains/releases/download/${MIRROR_TAG}`;
 
 // Each asset has:
 //   upstream  — official source URL (Arm.com, Kitware, ninja-build, etc.)
