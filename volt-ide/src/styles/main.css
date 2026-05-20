@@ -2658,43 +2658,44 @@ kbd {
 }
 
 /* ── Pinout palette ─────────────────────────────────────────
-   Inherits the IDE theme — same bg as the editor, lines in the
-   existing t1/t2 text tones, accent volt for assigned state.
-   Bare essentials only: board outline, pins, labels. */
+   Bare essentials: board outline + pins + labels. Inherits IDE theme. */
 :root {
-    --bp-line:         var(--t1);
-    --bp-line-soft:    var(--t3);
-    --bp-line-dim:     var(--bg-3);
-    --bp-accent:       var(--volt);
+    --bp-line:      var(--t2);
+    --bp-line-soft: var(--t3);
+    --bp-accent:    var(--volt);
 }
 
-.bp-line       { stroke: var(--bp-line);      stroke-width: 0.9; fill: none; vector-effect: non-scaling-stroke; }
-.bp-line-thin  { stroke: var(--bp-line-soft); stroke-width: 0.5; fill: none; vector-effect: non-scaling-stroke; }
+/* Board outline — slightly thicker than pin strokes for visual hierarchy */
+.bp-board {
+    stroke: var(--bp-line);
+    stroke-width: 1.1;
+    fill: none;
+    vector-effect: non-scaling-stroke;
+}
 
-/* Labels — mono, plain */
-.bp-label-ic    { fill: var(--bp-line);      font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; }
-.bp-label-small { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 8px;  letter-spacing: 0.14em; text-transform: uppercase; }
-.bp-pin-label   { fill: var(--bp-line);      font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em; }
+.bp-pin-label {
+    fill: var(--bp-line);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+}
 
-/* Pins — precision drafting marks */
+/* Pins — single filled circle on the board edge, expressive on hover/assign */
 .pinout-pin { cursor: pointer; }
 .bp-pin-outer {
-    fill: var(--bp-paper);
+    fill: var(--bg-1);
     stroke: var(--bp-line);
-    stroke-width: 0.9;
+    stroke-width: 1;
     vector-effect: non-scaling-stroke;
-    transition: stroke var(--dur-fast) var(--ease-out), fill var(--dur-fast) var(--ease-out);
-}
-.bp-pin-inner {
-    fill: var(--bp-line);
-    transition: fill var(--dur-fast) var(--ease-out);
+    transition: stroke var(--dur-fast) var(--ease-out),
+                fill   var(--dur-fast) var(--ease-out);
 }
 .bp-pin-ring {
     fill: none;
     stroke: transparent;
     stroke-width: 1.5;
-    transition: stroke var(--dur-fast) var(--ease-out);
     vector-effect: non-scaling-stroke;
+    transition: stroke var(--dur-fast) var(--ease-out);
 }
 .pinout-pin:hover .bp-pin-ring  { stroke: var(--bp-line-soft); }
 .pinout-pin:hover .bp-pin-outer { stroke: var(--bp-line); }
@@ -2703,7 +2704,6 @@ kbd {
     fill: var(--bp-accent);
     stroke: var(--bp-accent);
 }
-.pinout-pin.is-assigned .bp-pin-inner { fill: var(--bp-paper); }
 .pinout-pin.is-assigned .bp-pin-ring  { stroke: var(--bp-accent); stroke-width: 1.8; }
 .pinout-pin.is-assigned .bp-pin-label { fill: var(--bp-accent); font-weight: 500; }
 
@@ -2715,21 +2715,14 @@ kbd {
     letter-spacing: 0.02em;
 }
 
-/* Pin-type tints — desaturated, applied as outline stroke at rest only */
+/* Pin-type tints — only on the outline stroke at rest. The assigned state
+   overrides these with the volt accent. */
 .pinout-pin.pin-type-power    .bp-pin-outer { stroke: #d27676; }
 .pinout-pin.pin-type-ground   .bp-pin-outer { stroke: #7a8595; }
 .pinout-pin.pin-type-input    .bp-pin-outer { stroke: #92b0c8; }
 .pinout-pin.pin-type-control  .bp-pin-outer { stroke: #c9a36a; }
 .pinout-pin.pin-type-reserved .bp-pin-outer { stroke: #4d5562; stroke-dasharray: 2 2; }
 .pinout-pin.pin-type-reserved .bp-pin-label { text-decoration: line-through; opacity: 0.55; }
-
-/* On-board LED — circle, filled-accent when its GPIO is assigned */
-.bp-led { fill: var(--bp-paper); stroke: var(--bp-line); stroke-width: 0.9; }
-.pinout-led.is-on .bp-led {
-    fill: var(--bp-accent);
-    stroke: var(--bp-accent);
-}
-.pinout-button { cursor: help; }
 
 
 /* Zoom controls — floating bottom-right corner of the canvas */

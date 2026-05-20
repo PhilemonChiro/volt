@@ -138,17 +138,22 @@ const HEADER_TOP  = 90;         // y-coord of first pin row (USB above)
 const HEADER_BOT  = 28;         // bottom margin
 
 function drawBoard(board, assigned) {
-    const rows  = Math.max(board.columns[0].length, board.columns[1].length);
-    const innerH = HEADER_TOP + (rows - 1) * PITCH + PAD_H + HEADER_BOT;
+    const rows = Math.max(board.columns[0].length, board.columns[1].length);
+    // Vertical sizing
+    const topPad    = 26;
+    const bottomPad = 26;
+    const innerH    = topPad + (rows - 1) * PITCH + bottomPad;
 
-    const LABEL_GUTTER = 78;
-    const boardW = COL_GAP + PAD_W * 2 + BOARD_PAD_X * 2;
-    const totalW = LABEL_GUTTER * 2 + boardW;
+    // Horizontal sizing
+    const labelGutter = 84;     // room outside the board for pin labels
+    const innerBoardW = COL_GAP + 24;
+    const boardW = innerBoardW;
+    const totalW = labelGutter * 2 + boardW;
     const cx     = totalW / 2;
     const boardL = cx - boardW / 2;
     const boardR = cx + boardW / 2;
-    const boardT = 22;
-    const boardB = innerH - 14;
+    const boardT = 14;
+    const boardB = innerH - 10;
 
     const assignedByGpio = {};
     for (const a of assigned) {
@@ -157,140 +162,30 @@ function drawBoard(board, assigned) {
     }
 
     const pinsSvg = [
-        ...board.columns[0].map((p, i) => drawPin(p, "left",  boardL + BOARD_PAD_X, HEADER_TOP + i * PITCH, cx, assignedByGpio)),
-        ...board.columns[1].map((p, i) => drawPin(p, "right", boardR - BOARD_PAD_X, HEADER_TOP + i * PITCH, cx, assignedByGpio)),
+        ...board.columns[0].map((p, i) => drawPin(p, "left",  boardL, topPad + i * PITCH, assignedByGpio)),
+        ...board.columns[1].map((p, i) => drawPin(p, "right", boardR, topPad + i * PITCH, assignedByGpio)),
     ].join("");
-
-    const artSvg = drawArt(board, boardL, boardT, boardR, boardB, cx, assignedByGpio);
-    const usbSvg = drawUsb(cx, boardT, board.art.usb);
 
     return `
         <svg class="pinout-svg" viewBox="0 0 ${totalW} ${innerH}" preserveAspectRatio="xMidYMid meet">
             <!-- Board outline -->
             <rect x="${boardL}" y="${boardT}" width="${boardR - boardL}" height="${boardB - boardT}"
-                  rx="6" ry="6" class="bp-line" fill="none"/>
-            ${usbSvg}
-            ${artSvg}
+                  rx="10" ry="10" class="bp-board" fill="none"/>
             ${pinsSvg}
         </svg>
     `;
 }
 
 
-function drawUsb(cx, boardT, label) {
-    const w = 70, h = 20;
-    const x = cx - w / 2;
-    const y = boardT - h + 6;
-    return `
-        <g>
-            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" ry="2"
-                  class="bp-line" fill="none"/>
-            <!-- Port slot inside the shell -->
-            <rect x="${x + 8}" y="${y + 4}" width="${w - 16}" height="${h - 8}" rx="1"
-                  class="bp-line-thin" fill="none"/>
-            <text x="${cx}" y="${y - 6}" text-anchor="middle" class="bp-label-small">${escapeHtml(label)}</text>
-        </g>
-    `;
-}
-
-function drawArt(board, boardL, boardT, boardR, boardB, cx, assignedByGpio) {
-    const cy = (boardT + boardB) / 2;
-    if (board.chip === "rp2040") return drawPicoArt(board, boardL, boardT, boardR, boardB, cx, cy, assignedByGpio);
-    if (board.chip === "esp32")  return drawEspArt(board, boardL, boardT, boardR, boardB, cx, cy, assignedByGpio);
-    return "";
-}
-
-// Blueprint art — line drawings only. No fills, no shadows, no realism.
-function drawPicoArt(board, boardL, boardT, boardR, boardB, cx, cy, assignedByGpio) {
-    const chipSize = 64;
-    const chipX = cx - chipSize / 2;
-    const chipY = cy - chipSize / 2;
-    const ledOn = !!assignedByGpio[board.art.ledGpio];
-    return `
-        <!-- IC outline (RP2040) -->
-        <rect x="${chipX}" y="${chipY}" width="${chipSize}" height="${chipSize}" rx="2" ry="2"
-              class="bp-line" fill="none"/>
-        ${icEdgeTicks(chipX, chipY, chipSize)}
-        <text x="${cx}" y="${cy - 4}" text-anchor="middle" class="bp-label-ic">${escapeHtml(board.art.ic.label)}</text>
-        <text x="${cx}" y="${cy + 9}"  text-anchor="middle" class="bp-label-small">QFN-56</text>
-        <text x="${cx}" y="${chipY - 14}" text-anchor="middle" class="bp-label-title">${escapeHtml(board.art.ic.silk)}</text>
-        <!-- BOOTSEL button — outline -->
-        <g class="pinout-button">
-            <title>BOOTSEL — hold while plugging USB to enter bootloader</title>
-            <rect x="${cx + 30}" y="${chipY - 26}" width="20" height="12" rx="1.5"
-                  class="bp-line" fill="none"/>
-            <text x="${cx + 40}" y="${chipY - 30}" text-anchor="middle" class="bp-label-small">BOOTSEL</text>
-        </g>
-        <!-- On-board LED — small circle, filled when assigned -->
-        <g class="pinout-led ${ledOn ? "is-on" : ""}">
-            <title>On-board LED (GP${board.art.ledGpio})</title>
-            <circle cx="${cx - 40}" cy="${chipY - 18}" r="3.5" class="bp-led"/>
-            <text x="${cx - 40}" y="${chipY - 24}" text-anchor="middle" class="bp-label-small">${escapeHtml(board.art.ledLabel)}</text>
-        </g>
-    `;
-}
-
-function drawEspArt(board, boardL, boardT, boardR, boardB, cx, cy, assignedByGpio) {
-    const moduleW = 130;
-    const moduleH = 170;
-    const mx = cx - moduleW / 2;
-    const my = cy - moduleH / 2 + 18;
-    const ledOn = !!assignedByGpio[board.art.ledGpio];
-    return `
-        <!-- ESP-WROOM-32 outline -->
-        <rect x="${mx}" y="${my}" width="${moduleW}" height="${moduleH}" rx="3"
-              class="bp-line" fill="none"/>
-        <!-- Antenna notch -->
-        <rect x="${mx + 22}" y="${my - 14}" width="${moduleW - 44}" height="14"
-              class="bp-line" fill="none"/>
-        <text x="${cx}" y="${my + 26}"           text-anchor="middle" class="bp-label-ic">${escapeHtml(board.art.ic.label)}</text>
-        <text x="${cx}" y="${my + moduleH - 16}" text-anchor="middle" class="bp-label-small">ESPRESSIF</text>
-        <!-- EN button outline -->
-        <g class="pinout-button">
-            <title>EN — chip enable / reset</title>
-            <rect x="${boardL + 10}" y="${my + 8}" width="20" height="12" rx="1.5"
-                  class="bp-line" fill="none"/>
-            <text x="${boardL + 20}" y="${my + 4}" text-anchor="middle" class="bp-label-small">EN</text>
-        </g>
-        <!-- BOOT button outline -->
-        <g class="pinout-button">
-            <title>BOOT — hold while resetting to enter bootloader</title>
-            <rect x="${boardR - 30}" y="${my + 8}" width="20" height="12" rx="1.5"
-                  class="bp-line" fill="none"/>
-            <text x="${boardR - 20}" y="${my + 4}" text-anchor="middle" class="bp-label-small">BOOT</text>
-        </g>
-        <!-- On-board LED -->
-        <g class="pinout-led ${ledOn ? "is-on" : ""}">
-            <title>On-board LED (GPIO ${board.art.ledGpio})</title>
-            <circle cx="${cx + moduleW / 2 - 18}" cy="${my + moduleH - 24}" r="3.5" class="bp-led"/>
-            <text x="${cx + moduleW / 2 - 18}" y="${my + moduleH - 30}" text-anchor="middle" class="bp-label-small">${escapeHtml(board.art.ledLabel)}</text>
-        </g>
-    `;
-}
-
-// Tiny perimeter tick marks indicating IC pins
-function icEdgeTicks(x, y, size) {
-    const count = 8;
-    const step = (size - 6) / (count - 1);
-    const t = 3;
-    const ticks = [];
-    for (let i = 0; i < count; i++) {
-        const off = 3 + i * step;
-        ticks.push(`<line x1="${x + off}" y1="${y}" x2="${x + off}" y2="${y - t}" class="bp-line-thin"/>`);
-        ticks.push(`<line x1="${x + off}" y1="${y + size}" x2="${x + off}" y2="${y + size + t}" class="bp-line-thin"/>`);
-        ticks.push(`<line x1="${x}" y1="${y + off}" x2="${x - t}" y2="${y + off}" class="bp-line-thin"/>`);
-        ticks.push(`<line x1="${x + size}" y1="${y + off}" x2="${x + size + t}" y2="${y + off}" class="bp-line-thin"/>`);
-    }
-    return ticks.join("");
-}
-
-function drawPin(p, side, edgeX, y, cx, assignedByGpio) {
+function drawPin(p, side, edgeX, y, assignedByGpio) {
     const gpio = String(p.gpio ?? "").trim();
     const assigned = gpio ? assignedByGpio[gpio] : null;
     const type = p.type || "io";
-    const labelX = side === "left" ? edgeX - 9 : edgeX + 9;
+    // Pin marker sits ON the board edge; label outside; variable name
+    // further outside.
+    const labelX = side === "left" ? edgeX - 10 : edgeX + 10;
     const labelAnchor = side === "left" ? "end" : "start";
-    const varX = side === "left" ? labelX - 54 : labelX + 54;
+    const varX = side === "left" ? labelX - 56 : labelX + 56;
 
     const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}`;
     const varLabelSvg = assigned
@@ -300,9 +195,8 @@ function drawPin(p, side, edgeX, y, cx, assignedByGpio) {
     return `
         <g class="${cls}" data-gpio="${escapeHtml(gpio)}" data-name="${escapeHtml(assigned ? assigned.name : "")}">
             <title>${escapeHtml(pinTooltip(p))}</title>
-            <circle cx="${edgeX}" cy="${y}" r="4.5" class="bp-pin-outer"/>
-            <circle cx="${edgeX}" cy="${y}" r="1.4" class="bp-pin-inner"/>
-            <circle cx="${edgeX}" cy="${y}" r="8"   class="bp-pin-ring"/>
+            <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
+            <circle cx="${edgeX}" cy="${y}" r="8" class="bp-pin-ring"/>
             <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(p.label)}</text>
             ${varLabelSvg}
         </g>
