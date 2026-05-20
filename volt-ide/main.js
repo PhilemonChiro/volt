@@ -317,7 +317,11 @@ function startWorker() {
     if (workerStart) return workerStart;
 
     workerStart = new Promise((resolve, reject) => {
-        const script = path.join(__dirname, "scripts", "worker.py");
+        // When packaged, __dirname is inside app.asar but worker.py is
+        // extracted to app.asar.unpacked (asarUnpack in package.json). In
+        // dev mode this replace is a no-op since __dirname has no "app.asar".
+        const script = path.join(__dirname, "scripts", "worker.py")
+            .replace(/app\.asar(?![\/\\]?unpacked)/, "app.asar.unpacked");
         // On macOS the IDE may be launched from Finder without a shell PATH,
         // so /usr/local/bin (Homebrew) and similar aren't visible. Search a
         // few common Python locations directly, falling back to "python3".

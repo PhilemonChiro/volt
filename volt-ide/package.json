@@ -52,6 +52,9 @@
       "!**/.DS_Store",
       "!**/__pycache__/**"
     ],
+    "asarUnpack": [
+      "scripts/**/*"
+    ],
     "extraResources": [
       {
         "from": "sdk",
