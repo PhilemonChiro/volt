@@ -33,8 +33,9 @@ export function init(container) {
                     Serial Monitor
                 </button>
                 <button class="bp-tab" data-tab="problems">
-                    Problems
-                    <span class="bp-badge" id="problemBadge" style="display:none">0</span>
+                    <span id="problemTabLabel">Problems</span>
+                    <span class="bp-badge bp-badge-err"  id="problemBadgeErr"  style="display:none">0</span>
+                    <span class="bp-badge bp-badge-warn" id="problemBadgeWarn" style="display:none">0</span>
                 </button>
             </div>
             <div class="bp-actions">
@@ -258,14 +259,30 @@ export function setMonitorConnected(connected) {
 // ============================================================
 
 export function setProblems(diags) {
-    const el = document.getElementById("bpProblems");
-    const badge = document.getElementById("problemBadge");
+    const el        = document.getElementById("bpProblems");
+    const labelEl   = document.getElementById("problemTabLabel");
+    const errBadge  = document.getElementById("problemBadgeErr");
+    const warnBadge = document.getElementById("problemBadgeWarn");
     if (!el) return;
 
-    if (badge) {
-        const count = diags.length;
-        badge.textContent = count;
-        badge.style.display = count > 0 ? "" : "none";
+    // Split by severity so the tab can show separate error / warning counts
+    // and the label reflects what's actually in the file:
+    //   - errors present (with or without warnings) → "Problems"
+    //   - warnings only                              → "Warnings"
+    //   - nothing                                    → "Problems" (no badges)
+    const nErr  = diags.filter(d => d.severity === "error").length;
+    const nWarn = diags.filter(d => d.severity === "warning" || d.severity === "warn").length;
+
+    if (labelEl) {
+        labelEl.textContent = (nErr === 0 && nWarn > 0) ? "Warnings" : "Problems";
+    }
+    if (errBadge) {
+        errBadge.textContent = nErr;
+        errBadge.style.display = nErr > 0 ? "" : "none";
+    }
+    if (warnBadge) {
+        warnBadge.textContent = nWarn;
+        warnBadge.style.display = nWarn > 0 ? "" : "none";
     }
 
     if (diags.length === 0) {

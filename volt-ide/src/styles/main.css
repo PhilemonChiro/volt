@@ -1116,6 +1116,9 @@ kbd {
     justify-content: center;
     font-variant-numeric: tabular-nums;
 }
+.bp-badge-err  { background: var(--err); }
+.bp-badge-warn { background: var(--warn, #f59e0b); color: #1a1a1a; }
+.bp-badge + .bp-badge { margin-left: 2px; }
 
 .bp-actions { display: flex; gap: 2px; }
 .bp-action {
