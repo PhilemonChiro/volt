@@ -2596,29 +2596,37 @@ kbd {
 }
 
 /* ===========================================================
-   Pinout panel — your board SVG, interactive
+   Pinout panel — board SVG with baked markers + pan / zoom
    =========================================================== */
-.pinout-board {
-    position: relative;        /* anchor for HTML overlay (Pico) */
-    padding: var(--s-3);
+.pinout-canvas {
+    position: relative;
+    width: 100%;
     height: 100%;
-    overflow: auto;
+    overflow: hidden;
+    background: var(--bg-0);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+.pinout-canvas.is-panning { cursor: grabbing; }
+
+/* The host wraps the SVG and receives the pan/zoom transform.
+   Everything inside (SVG + its descendants) scales as one. */
+.pinout-svg-host {
+    transform-origin: 0 0;
+    will-change: transform;
+    padding: var(--s-4);
     display: flex;
     justify-content: center;
 }
-.pinout-board svg {
+.pinout-svg-host svg {
     max-width: 100%;
+    max-height: 100%;
     height: auto;
     display: block;
+    pointer-events: all;
 }
-/* Landscape boards (ESP32) rotated 90° to fit vertical panel. The SVG
-   stays the same; its container handles the layout. */
-.pinout-board.is-rotated svg {
-    transform: rotate(90deg);
-    transform-origin: center center;
-    max-height: calc(100vh - 200px);
-    width: auto;
-}
+
 .pinout-empty {
     color: var(--t3);
     font-size: var(--fs-12);
@@ -2626,23 +2634,28 @@ kbd {
     line-height: var(--lh-base);
 }
 
-/* ESP32 path: we tag the SVG's own <text> elements when their pin is
-   assigned, and append a sibling annotation group with a ring + label. */
-.pinout-board svg text[data-volt-pinlbl].is-assigned {
-    fill: var(--volt) !important;
-    font-weight: 600;
-}
-.pinout-anno {
-    pointer-events: all;
+/* Baked pin markers — invisible at rest, hit-target for hover/click */
+.pin-marker {
     cursor: pointer;
 }
-.pinout-anno-ring {
+.pin-marker:hover {
+    stroke: rgba(43,124,179,0.55) !important;
+    fill: rgba(43,124,179,0.18) !important;
+}
+.pin-marker.is-assigned {
+    stroke: transparent !important;
+    fill: transparent !important;
+}
+
+/* Overlay rings + variable labels added by JS for each assigned pin */
+.pinout-overlay-ring {
     fill: none;
     stroke: var(--volt);
-    stroke-width: 2;
-    filter: drop-shadow(0 0 4px rgba(43,124,179,0.6));
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 6px rgba(43,124,179,0.7));
+    pointer-events: none;
 }
-.pinout-anno-name {
+.pinout-overlay-name {
     fill: var(--volt);
     font-size: 11px;
     font-family: var(--mono);
@@ -2651,59 +2664,35 @@ kbd {
     stroke: #0a0a0a;
     stroke-width: 3;
     stroke-linejoin: round;
+    pointer-events: none;
 }
 
-/* Pico path: HTML overlay buttons over the decorative SVG. */
-.pinout-overlay {
+/* Zoom controls — floating bottom-right corner of the canvas */
+.pinout-controls {
     position: absolute;
-    inset: var(--s-3);
-    pointer-events: none;
-}
-.pinout-pin {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    width: 18px;
-    height: 18px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: auto;
-    cursor: default;
-}
-.pinout-pin.is-assigned { cursor: pointer; }
-.pinout-pin-dot {
-    display: block;
-    width: 10px; height: 10px;
-    margin: 4px auto;
-    border-radius: 50%;
-    background: transparent;
-    border: 2px solid transparent;
-    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-.pinout-pin:hover .pinout-pin-dot {
-    background: rgba(43,124,179,0.25);
-    border-color: var(--volt);
-}
-.pinout-pin.is-assigned .pinout-pin-dot {
-    background: var(--volt);
-    border-color: var(--volt);
-    box-shadow: 0 0 8px rgba(43,124,179,0.65);
-}
-.pinout-pin-name {
-    position: absolute;
-    top: 22px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--volt);
+    right: var(--s-3);
+    bottom: var(--s-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     background: var(--bg-1);
-    padding: 1px 6px;
-    border-radius: 3px;
-    border: 1px solid var(--volt);
-    white-space: nowrap;
-    pointer-events: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-3);
+    overflow: hidden;
+    box-shadow: var(--elev-2);
+    z-index: 5;
 }
+.pinout-ctrl {
+    width: 28px; height: 28px;
+    background: transparent;
+    color: var(--t2);
+    font-size: var(--fs-14);
+    line-height: 1;
+    cursor: pointer;
+    border: 0;
+}
+.pinout-ctrl:hover { background: var(--bg-2); color: var(--t1); }
+.pinout-ctrl + .pinout-ctrl { border-top: 1px solid var(--border); }
 
 /* Legend below the board */
 .pinout-legend {
