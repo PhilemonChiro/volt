@@ -192,14 +192,12 @@ function render(ast) {
     if (activePanel === "hardware") renderHardware(ast);
     else if (activePanel === "tasks") renderTasks(ast);
     else if (activePanel === "outline") renderOutline(ast);
-    else if (activePanel === "pinout") {
-        // Re-import (cached) and push the latest pin list.
-        import("./pinout-panel.js").then(m => {
-            const chip = (window.chipSelector && window.chipSelector.getChip()) ||
-                         (document.getElementById("chipLabel") || {}).textContent || "esp32";
-            m.render(chip.toLowerCase(), ast.pins || []);
-        });
-    }
+    // Pinout intentionally NOT driven from the AST path — the editor's
+    // onContentChange already feeds pinout.render with the full
+    // extractHardware result (pins + buses + devices). Letting the AST
+    // path also call render(chip, ast.pins) overwrites bus/device state
+    // with an incomplete pin-only payload, causing annotations to flicker
+    // or disappear ~150ms after each keystroke.
 }
 
 // ============================================================
