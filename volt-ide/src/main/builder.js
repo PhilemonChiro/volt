@@ -330,9 +330,16 @@ async function buildESP32(projectPath, chip, emit) {
     fs.copyFileSync(src, dst);
 
     const idf = toolchain.espIdfPath(chip);
+    // Prepend the bundled Python + portable cmake/ninja to PATH so that:
+    //   - export.sh activates the venv with Python 3.12+ (avoids the macOS
+    //     stock-3.9 importlib.metadata bug with dotted package names)
+    //   - cmake / ninja are findable on macOS where we ship portable copies
+    const pathPrefix = toolchain.buildPathPrefix();
+    const envPath = pathPrefix ? `${pathPrefix}:` : "";
+
     emit("build", "Building firmware...", 30);
     const ok = await streamCommand(
-        `source "${idf}/export.sh" >/dev/null 2>&1 && cd "${fw}" && idf.py build`,
+        `export PATH="${envPath}$PATH" && source "${idf}/export.sh" >/dev/null 2>&1 && cd "${fw}" && idf.py build`,
         "build", emit
     );
     if (!ok) { emit("error", "Build failed"); return false; }
