@@ -1471,37 +1471,46 @@ kbd {
 
 /* Activity bar — VS Code style icon strip on far right */
 .activity-bar {
-    width: 40px;
+    width: 52px;
     background: var(--bg-1);
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     align-items: center;
     padding-top: var(--s-2);
-    gap: 2px;
+    gap: 4px;
     flex-shrink: 0;
 }
 .activity-btn {
-    width: 34px; height: 34px;
+    width: 44px; height: 44px;
     display: flex; align-items: center; justify-content: center;
     background: transparent;
-    color: var(--t3);
+    color: var(--t2);
     border-radius: var(--r-2);
     position: relative;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.activity-btn svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 1.8;
 }
 .activity-btn:hover {
     color: var(--t1);
     background: var(--bg-2);
 }
-.activity-btn.active { color: var(--t1); }
+.activity-btn.active {
+    color: var(--volt);
+    background: var(--bg-2);
+}
 .activity-btn.active::before {
     content: "";
     position: absolute;
-    right: -3px; top: 6px; bottom: 6px;
-    width: 2px;
+    right: -3px; top: 8px; bottom: 8px;
+    width: 3px;
     background: var(--volt);
     border-radius: var(--r-pill);
-    box-shadow: 0 0 8px rgba(43,124,179,0.6);
+    box-shadow: 0 0 10px rgba(43,124,179,0.65);
     animation: indicator-in var(--dur-base) var(--ease-spring) both;
 }
 @keyframes indicator-in {
