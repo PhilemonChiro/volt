@@ -139,16 +139,20 @@ const HEADER_BOT  = 28;         // bottom margin
 
 function drawBoard(board, assigned) {
     const rows  = Math.max(board.columns[0].length, board.columns[1].length);
-    const innerH = HEADER_TOP + (rows - 1) * PITCH + PAD_H + HEADER_BOT;
+    const headerH = HEADER_TOP + (rows - 1) * PITCH + PAD_H + 20;
 
-    const LABEL_GUTTER = 75;
+    const LABEL_GUTTER = 86;
     const boardW = COL_GAP + PAD_W * 2 + BOARD_PAD_X * 2;
     const totalW = LABEL_GUTTER * 2 + boardW;
     const cx     = totalW / 2;
     const boardL = cx - boardW / 2;
     const boardR = cx + boardW / 2;
-    const boardT = 18;
-    const boardB = innerH - 8;
+    const boardT = 26;
+    const boardB = headerH;
+
+    // Compose: header room (orientation marker), board area, title block
+    const TITLE_BLOCK_H = 70;
+    const innerH = boardB + 18 + TITLE_BLOCK_H + 14;
 
     const assignedByGpio = {};
     for (const a of assigned) {
@@ -157,29 +161,127 @@ function drawBoard(board, assigned) {
     }
 
     const pinsSvg = [
-        ...board.columns[0].map((p, i) => drawPin(p, "left",  boardL + BOARD_PAD_X, HEADER_TOP + i * PITCH, cx, assignedByGpio)),
-        ...board.columns[1].map((p, i) => drawPin(p, "right", boardR - BOARD_PAD_X, HEADER_TOP + i * PITCH, cx, assignedByGpio)),
+        ...board.columns[0].map((p, i) => drawPin(p, "left",  boardL + BOARD_PAD_X, HEADER_TOP + i * PITCH, cx, assignedByGpio, i + 1)),
+        ...board.columns[1].map((p, i) => drawPin(p, "right", boardR - BOARD_PAD_X, HEADER_TOP + i * PITCH, cx, assignedByGpio, rightPhysical(board, i))),
     ].join("");
 
     const artSvg = drawArt(board, boardL, boardT, boardR, boardB, cx, assignedByGpio);
     const usbSvg = drawUsb(cx, boardT, board.art.usb);
+    const orientationSvg = drawOrientation(cx, boardT);
+    const legendSvg = drawLegend(boardR + 6, boardT - 4);
+    const titleSvg = drawTitleBlock(board, boardL, boardB + 18, boardR - boardL, TITLE_BLOCK_H, assigned, assignedByGpio);
 
-    // Blueprint background: deep blue paper with a fine drafting grid.
-    // Lines drawn in soft white. No fills, no shadows, no gradients.
     return `
         <svg class="pinout-svg" viewBox="0 0 ${totalW} ${innerH}" preserveAspectRatio="xMidYMid meet">
             ${blueprintBackground(totalW, innerH)}
-            <!-- Board outline only -->
             <rect x="${boardL}" y="${boardT}" width="${boardR - boardL}" height="${boardB - boardT}"
-                  rx="6" ry="6"
-                  class="bp-line" fill="none"/>
-            <!-- Corner registration marks (drafting convention) -->
+                  rx="6" ry="6" class="bp-line" fill="none"/>
             ${cornerMarks(boardL, boardT, boardR, boardB)}
+            ${dimensionLine(boardL, boardR, boardT - 16)}
+            ${orientationSvg}
             ${usbSvg}
             ${artSvg}
             ${pinsSvg}
+            ${legendSvg}
+            ${titleSvg}
         </svg>
     `;
+}
+
+// Map right-column row-index → physical pin number on the board
+function rightPhysical(board, rowIndex) {
+    // Pico: row 0 of right column is pin 40, row 19 is pin 21
+    if (board.chip === "rp2040") return 40 - rowIndex;
+    // ESP32 DevKitC v4: row 0 right starts at the silkscreen position
+    // (no canonical "pin number" beyond the label itself)
+    return null;
+}
+
+// Horizontal dimension line above the board showing PCB width
+function dimensionLine(L, R, y) {
+    return `
+        <g class="bp-dim">
+            <line x1="${L}" y1="${y - 3}" x2="${L}" y2="${y + 3}" class="bp-line-thin"/>
+            <line x1="${R}" y1="${y - 3}" x2="${R}" y2="${y + 3}" class="bp-line-thin"/>
+            <line x1="${L}" y1="${y}"     x2="${R}" y2="${y}"     class="bp-line-thin"/>
+            <text x="${(L + R) / 2}" y="${y - 5}" text-anchor="middle" class="bp-label-small">2.54mm pitch</text>
+        </g>
+    `;
+}
+
+// "USB ↑" orientation marker pointing into the USB connector
+function drawOrientation(cx, boardT) {
+    return `
+        <g class="bp-orient">
+            <text x="${cx - 70}" y="${boardT - 12}" text-anchor="end" class="bp-label-small">component side</text>
+            <line x1="${cx - 64}" y1="${boardT - 16}" x2="${cx - 64}" y2="${boardT - 6}" class="bp-line-thin"/>
+            <polyline points="${cx-67},${boardT-12} ${cx-64},${boardT-16} ${cx-61},${boardT-12}" class="bp-line-thin"/>
+        </g>
+    `;
+}
+
+// Pin-type colour key, top-right of the board
+function drawLegend(x, y) {
+    const items = [
+        { label: "GPIO",     cls: "pin-type-io" },
+        { label: "POWER",    cls: "pin-type-power" },
+        { label: "GROUND",   cls: "pin-type-ground" },
+        { label: "RESERVED", cls: "pin-type-reserved" },
+    ];
+    const rows = items.map((it, i) => `
+        <g class="pinout-pin ${it.cls}" style="cursor:default">
+            <circle cx="${x + 8}" cy="${y + i * 14 + 8}" r="3.5" class="bp-pin-outer"/>
+            <circle cx="${x + 8}" cy="${y + i * 14 + 8}" r="1" class="bp-pin-inner"/>
+            <text x="${x + 18}" y="${y + i * 14 + 11}" class="bp-label-small">${it.label}</text>
+        </g>
+    `).join("");
+    return `
+        <g class="bp-legend">
+            <rect x="${x - 4}" y="${y - 2}" width="78" height="${items.length * 14 + 8}"
+                  class="bp-title-block-bg"/>
+            <rect x="${x - 4}" y="${y - 2}" width="78" height="${items.length * 14 + 8}"
+                  class="bp-title-block-line"/>
+            ${rows}
+        </g>
+    `;
+}
+
+// Engineering title block at the bottom — board, chip, pin counts, assigned
+function drawTitleBlock(board, L, top, W, H, assigned, assignedByGpio) {
+    const assignedCount = assigned.length;
+    const totalIo = countBy(board, p => p.type === "io" || p.type === "input");
+    const totalPins = board.columns[0].length + board.columns[1].length;
+    const cellW = W / 3;
+    const cellH = H / 2;
+    return `
+        <g class="bp-title-block">
+            <rect x="${L}" y="${top}" width="${W}" height="${H}" class="bp-title-block-bg"/>
+            <rect x="${L}" y="${top}" width="${W}" height="${H}" class="bp-title-block-line"/>
+            <line x1="${L + cellW}"     y1="${top}" x2="${L + cellW}"     y2="${top + H}" class="bp-title-block-line"/>
+            <line x1="${L + cellW * 2}" y1="${top}" x2="${L + cellW * 2}" y2="${top + H}" class="bp-title-block-line"/>
+            <line x1="${L}" y1="${top + cellH}" x2="${L + W}" y2="${top + cellH}" class="bp-title-block-line"/>
+
+            ${tbCell(L,             top,           cellW, cellH, "BOARD",    board.name)}
+            ${tbCell(L + cellW,     top,           cellW, cellH, "MCU",      board.art.ic.label)}
+            ${tbCell(L + cellW * 2, top,           cellW, cellH, "HEADER",   `${totalPins} pins · 2.54mm`)}
+            ${tbCell(L,             top + cellH,   cellW, cellH, "TARGET",   "Volt IDE")}
+            ${tbCell(L + cellW,     top + cellH,   cellW, cellH, "GPIO",     `${totalIo} available`)}
+            ${tbCell(L + cellW * 2, top + cellH,   cellW, cellH, "ASSIGNED", `${assignedCount} / ${totalIo}`)}
+        </g>
+    `;
+}
+
+function tbCell(x, y, w, h, label, value) {
+    return `
+        <text x="${x + 6}" y="${y + 11}" class="bp-tb-label">${escapeHtml(label)}</text>
+        <text x="${x + 6}" y="${y + h - 8}" class="bp-tb-value">${escapeHtml(value)}</text>
+    `;
+}
+
+function countBy(board, pred) {
+    let n = 0;
+    for (const col of board.columns) for (const p of col) if (pred(p)) n++;
+    return n;
 }
 
 // Soft drafting grid behind the board — major + minor lines, like a
@@ -319,28 +421,39 @@ function icEdgeTicks(x, y, size) {
     return ticks.join("");
 }
 
-function drawPin(p, side, edgeX, y, cx, assignedByGpio) {
+function drawPin(p, side, edgeX, y, cx, assignedByGpio, physicalNum) {
     const gpio = String(p.gpio ?? "").trim();
     const assigned = gpio ? assignedByGpio[gpio] : null;
     const type = p.type || "io";
     const labelX = side === "left" ? edgeX - PAD_W / 2 - 4 : edgeX + PAD_W / 2 + 4;
     const labelAnchor = side === "left" ? "end" : "start";
     const varX = side === "left" ? labelX - 56 : labelX + 56;
+    // Physical pin number — small drafting marker INSIDE the board, between
+    // the pin pad and the IC. Tells the user "this is pin 14 of the header".
+    const phyX = side === "left" ? edgeX + 12 : edgeX - 12;
+    const phyAnchor = side === "left" ? "start" : "end";
 
-    const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}`;
+    const isStrapping = /strapping/i.test(p.note || "");
+    const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}${isStrapping ? " is-strapping" : ""}`;
     const varLabelSvg = assigned
         ? `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}">${escapeHtml(assigned.name)}</text>`
+        : "";
+    const strapMarker = isStrapping
+        ? `<polygon points="${edgeX-2},${y-9} ${edgeX+2},${y-9} ${edgeX},${y-13}" class="bp-strap-mark"/>`
+        : "";
+    const phyLabel = physicalNum != null
+        ? `<text x="${phyX}" y="${y + 3}" class="bp-phy-num" text-anchor="${phyAnchor}">${physicalNum}</text>`
         : "";
 
     return `
         <g class="${cls}" data-gpio="${escapeHtml(gpio)}" data-name="${escapeHtml(assigned ? assigned.name : "")}">
             <title>${escapeHtml(pinTooltip(p))}</title>
-            <!-- Drafting circle for the pin — outline at rest, filled when assigned -->
-            <circle cx="${edgeX}" cy="${y}" r="5" class="bp-pin-outer"/>
+            <!-- Pin marker — drafting circle -->
+            <circle cx="${edgeX}" cy="${y}" r="5"   class="bp-pin-outer"/>
             <circle cx="${edgeX}" cy="${y}" r="1.6" class="bp-pin-inner"/>
-            <!-- Hover/assigned highlight ring -->
-            <circle cx="${edgeX}" cy="${y}" r="9" class="bp-pin-ring"/>
-            <!-- Pin label -->
+            <circle cx="${edgeX}" cy="${y}" r="9"   class="bp-pin-ring"/>
+            ${strapMarker}
+            ${phyLabel}
             <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(p.label)}</text>
             ${varLabelSvg}
         </g>

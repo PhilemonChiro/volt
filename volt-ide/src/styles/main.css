@@ -2634,81 +2634,115 @@ kbd {
     line-height: var(--lh-base);
 }
 
-/* ── Blueprint palette ──────────────────────────────────────
-   Dark cyan-blue "paper", soft white drafting lines, accent volt
-   for hover / assigned states. Everything is stroked — no fills,
-   no shadows, no gradients. */
+/* ── Enterprise blueprint palette ──────────────────────────
+   Deep neutral paper, restrained pale-blue lines, focused accent.
+   Premium feel comes from restraint: thin lines, generous space,
+   precise geometry, no decoration without purpose. */
 :root {
-    --bp-paper:        #0d2643;
-    --bp-grid-minor:   rgba(255,255,255,0.04);
-    --bp-grid-major:   rgba(255,255,255,0.08);
-    --bp-line:         #c9def0;
-    --bp-line-soft:    rgba(201,222,240,0.55);
-    --bp-accent:       var(--volt);
+    --bp-paper:        #0c1424;
+    --bp-grid-minor:   rgba(180,210,240,0.025);
+    --bp-grid-major:   rgba(180,210,240,0.06);
+    --bp-line:         #d7e3f0;
+    --bp-line-soft:    rgba(215,227,240,0.42);
+    --bp-line-dim:     rgba(215,227,240,0.18);
+    --bp-accent:       #4dc5f0;        /* refined ice cyan */
+    --bp-accent-dim:   rgba(77,197,240,0.18);
 }
 
-.bp-paper {
-    fill: var(--bp-paper);
-}
+.bp-paper { fill: var(--bp-paper); }
 .bp-grid-minor { stroke: var(--bp-grid-minor); stroke-width: 0.5; }
-.bp-grid-major { stroke: var(--bp-grid-major); stroke-width: 0.8; }
-.bp-line       { stroke: var(--bp-line); stroke-width: 1.2; }
-.bp-line-thin  { stroke: var(--bp-line-soft); stroke-width: 0.7; }
-.bp-corner path { stroke: var(--bp-line); stroke-width: 1; fill: none; }
+.bp-grid-major { stroke: var(--bp-grid-major); stroke-width: 0.7; }
+.bp-line       { stroke: var(--bp-line); stroke-width: 0.9; vector-effect: non-scaling-stroke; }
+.bp-line-thin  { stroke: var(--bp-line-soft); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+.bp-corner path { stroke: var(--bp-line); stroke-width: 0.7; fill: none; }
 
-/* Labels — all in the soft drafting white, mono */
-.bp-label-title { fill: var(--bp-line); font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; }
-.bp-label-ic    { fill: var(--bp-line); font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; }
-.bp-label-small { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; }
-.bp-pin-label   { fill: var(--bp-line); font-family: var(--mono); font-size: 11px; }
+/* Refined type system — drafting mono with tight scale */
+.bp-label-title { fill: var(--bp-line);      font-family: var(--mono); font-size: 9px;  letter-spacing: 0.22em; text-transform: uppercase; }
+.bp-label-ic    { fill: var(--bp-line);      font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; }
+.bp-label-small { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 8px;  letter-spacing: 0.16em; text-transform: uppercase; }
+.bp-pin-label   { fill: var(--bp-line);      font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em; }
 
-/* Pins — outline circle, tiny center mark */
+/* Title block — engineering-drawing convention at the bottom */
+.bp-title-block-line { stroke: var(--bp-line); stroke-width: 0.7; fill: none; }
+.bp-title-block-bg   { fill: rgba(0,0,0,0.18); }
+.bp-tb-heading       { fill: var(--bp-line);      font-family: var(--mono); font-size: 9px;  letter-spacing: 0.18em; text-transform: uppercase; }
+.bp-tb-value         { fill: var(--bp-line);      font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; }
+.bp-tb-label         { fill: var(--bp-line-soft); font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.18em; text-transform: uppercase; }
+
+/* Pins — precision drafting marks */
 .pinout-pin { cursor: pointer; }
 .bp-pin-outer {
-    fill: none;
+    fill: var(--bp-paper);
     stroke: var(--bp-line);
-    stroke-width: 1.2;
+    stroke-width: 0.9;
+    vector-effect: non-scaling-stroke;
+    transition: stroke var(--dur-fast) var(--ease-out), fill var(--dur-fast) var(--ease-out);
 }
 .bp-pin-inner {
     fill: var(--bp-line);
+    transition: fill var(--dur-fast) var(--ease-out);
 }
 .bp-pin-ring {
     fill: none;
     stroke: transparent;
-    stroke-width: 2;
+    stroke-width: 1.5;
     transition: stroke var(--dur-fast) var(--ease-out);
+    vector-effect: non-scaling-stroke;
 }
-.pinout-pin:hover .bp-pin-ring { stroke: var(--bp-line-soft); }
+.pinout-pin:hover .bp-pin-ring  { stroke: var(--bp-line-soft); }
+.pinout-pin:hover .bp-pin-outer { stroke: var(--bp-line); }
+
 .pinout-pin.is-assigned .bp-pin-outer {
     fill: var(--bp-accent);
     stroke: var(--bp-accent);
 }
 .pinout-pin.is-assigned .bp-pin-inner { fill: var(--bp-paper); }
-.pinout-pin.is-assigned .bp-pin-ring  { stroke: var(--bp-accent); stroke-width: 2.5; }
-.pinout-pin.is-assigned .bp-pin-label { fill: var(--bp-accent); font-weight: 600; }
+.pinout-pin.is-assigned .bp-pin-ring  { stroke: var(--bp-accent); stroke-width: 1.8; }
+.pinout-pin.is-assigned .bp-pin-label { fill: var(--bp-accent); font-weight: 500; }
 
 .bp-var-label {
     fill: var(--bp-accent);
     font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
 }
 
-/* Pin-type tints — kept subtle, applied at rest only */
-.pinout-pin.pin-type-power    .bp-pin-outer { stroke: #f08c8c; }
-.pinout-pin.pin-type-ground   .bp-pin-outer { stroke: #8090a0; }
-.pinout-pin.pin-type-input    .bp-pin-outer { stroke: #9bbfd6; }
-.pinout-pin.pin-type-control  .bp-pin-outer { stroke: #e6b870; }
-.pinout-pin.pin-type-reserved .bp-pin-outer { stroke: #555a64; stroke-dasharray: 2 2; }
-.pinout-pin.pin-type-reserved .bp-pin-label { text-decoration: line-through; opacity: 0.7; }
+/* Pin-type tints — desaturated, applied as outline stroke at rest only */
+.pinout-pin.pin-type-power    .bp-pin-outer { stroke: #d27676; }
+.pinout-pin.pin-type-ground   .bp-pin-outer { stroke: #7a8595; }
+.pinout-pin.pin-type-input    .bp-pin-outer { stroke: #92b0c8; }
+.pinout-pin.pin-type-control  .bp-pin-outer { stroke: #c9a36a; }
+.pinout-pin.pin-type-reserved .bp-pin-outer { stroke: #4d5562; stroke-dasharray: 2 2; }
+.pinout-pin.pin-type-reserved .bp-pin-label { text-decoration: line-through; opacity: 0.55; }
 
 /* On-board LED — circle, filled-accent when its GPIO is assigned */
-.bp-led { fill: none; stroke: var(--bp-line); stroke-width: 1.2; }
+.bp-led { fill: var(--bp-paper); stroke: var(--bp-line); stroke-width: 0.9; }
 .pinout-led.is-on .bp-led {
     fill: var(--bp-accent);
     stroke: var(--bp-accent);
 }
 .pinout-button { cursor: help; }
+
+/* Physical pin number (inside the board, between pad and IC) */
+.bp-phy-num {
+    fill: var(--bp-line-dim);
+    font-family: var(--mono);
+    font-size: 7.5px;
+    letter-spacing: 0.04em;
+}
+/* Strapping-pin warning triangle above the pin */
+.bp-strap-mark {
+    fill: #d2a567;
+    stroke: var(--bp-paper);
+    stroke-width: 0.4;
+}
+.pinout-pin.is-strapping .bp-pin-label::after {
+    content: "*";
+}
+/* Dimension call-outs (PCB width / 2.54mm pitch) */
+.bp-dim text { fill: var(--bp-line-soft); }
+.bp-orient text { fill: var(--bp-line-soft); }
 
 /* Zoom controls — floating bottom-right corner of the canvas */
 .pinout-controls {
