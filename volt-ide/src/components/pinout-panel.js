@@ -19,8 +19,31 @@ let _boards = null;
 let _state = { chip: null, assigned: [] };
 let _vp = null;          // viewport: { svg, container, host, scale, tx, ty }
 
+// Global listeners bound once across the lifetime of the page so toggling
+// the panel doesn't pile up duplicates.
+let _globalListenersBound = false;
+function ensureGlobalListeners() {
+    if (_globalListenersBound) return;
+    _globalListenersBound = true;
+    document.addEventListener("pointerdown", (e) => {
+        const pop = document.getElementById("pinoutPopover");
+        if (!pop || pop.style.display === "none") return;
+        if (pop.contains(e.target)) return;
+        if (e.target.closest(".pinout-pin")) return;
+        closePopover();
+    }, true);
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closePopover();
+    });
+}
+
 export function init(container) {
     _root = container;
+    // Re-init invalidates any cached DOM refs and the zoom binding.
+    _skeleton = { chip: null, refs: null, board: null };
+    _zoomListenersBound = false;
+    _vp = null;
+
     container.innerHTML = `
         <div class="pinout-canvas" id="pinoutCanvas">
             <div class="pinout-svg-host" id="pinoutSvgHost"></div>
@@ -36,17 +59,7 @@ export function init(container) {
     document.getElementById("pinoutZoomOut").onclick   = () => zoomBy(0.8);
     document.getElementById("pinoutZoomReset").onclick = () => resetView();
 
-    // Dismiss popover on outside-click or Escape
-    document.addEventListener("pointerdown", (e) => {
-        const pop = document.getElementById("pinoutPopover");
-        if (!pop || pop.style.display === "none") return;
-        if (pop.contains(e.target)) return;
-        if (e.target.closest(".pinout-pin")) return;   // re-click on another pin
-        closePopover();
-    }, true);
-    document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closePopover();
-    });
+    ensureGlobalListeners();
 }
 
 // Lightweight regex extractor — pulls pin/bus/device declarations out of
@@ -71,12 +84,56 @@ export function init(container) {
 //     // flattened assignments by gpio (for board highlighting):
 //     pinByGpio: { "21": {name,kind,role,...}, … }
 //   }
+// Find the byte range of the first `hardware { … }` block, brace-balanced
+// so a nested `{` (e.g. an expression literal inside a value) doesn't cut
+// the block short.
+function findHardwareBlock(source) {
+    const m = source.match(/hardware\s*\{/);
+    if (!m) return null;
+    const open = m.index + m[0].length;     // first char inside the block
+    let depth = 1;
+    for (let i = open; i < source.length; i++) {
+        const c = source[i];
+        if (c === "{") depth++;
+        else if (c === "}") {
+            depth--;
+            if (depth === 0) return { open, close: i, block: source.slice(open, i) };
+        }
+    }
+    return null;
+}
+
+// Strip `// …` line comments outside of string literals so a commented-out
+// pin / bus / device declaration never appears on the board.
+function stripLineComments(s) {
+    let out = "";
+    let inStr = false, quote = "";
+    for (let i = 0; i < s.length; i++) {
+        const c = s[i], next = s[i + 1];
+        if (inStr) {
+            out += c;
+            if (c === "\\" && next != null) { out += next; i++; continue; }
+            if (c === quote) inStr = false;
+            continue;
+        }
+        if (c === '"' || c === "'") { inStr = true; quote = c; out += c; continue; }
+        if (c === "/" && next === "/") {
+            // skip until newline (preserve the newline so line numbers stay aligned)
+            while (i < s.length && s[i] !== "\n") i++;
+            i--;   // for-loop will i++ past it
+            continue;
+        }
+        out += c;
+    }
+    return out;
+}
+
 export function extractHardware(source) {
     if (typeof source !== "string") return { pins: [], buses: [], devices: [], pinByGpio: {} };
-    const m = source.match(/hardware\s*\{([\s\S]*?)\}/);
-    if (!m) return { pins: [], buses: [], devices: [], pinByGpio: {} };
-    const block = m[1];
-    const blockStart = m.index + m[0].indexOf("{") + 1;
+    const hw = findHardwareBlock(source);
+    if (!hw) return { pins: [], buses: [], devices: [], pinByGpio: {} };
+    const block = stripLineComments(hw.block);
+    const blockStart = hw.open;
 
     const pins = [], buses = [], devices = [], pinByGpio = {};
     const lineOf = (offset) => source.slice(0, blockStart + offset).split("\n").length;
@@ -147,7 +204,9 @@ export function extractHardware(source) {
     const pinNames = new Set(pins.map(p => p.name));
     for (const d of devices) {
         if (busNames.has(d.bus) || pinNames.has(d.bus)) continue;
-        const gpio = parseInt(d.address, 10);
+        // Address may be decimal (4), hex (0x4), or a trailing fragment;
+        // parseInt(str) with no radix handles "0x" prefix automatically.
+        const gpio = parseInt(d.address);
         if (isNaN(gpio)) continue;
         const key = String(gpio);
         if (!pinByGpio[key]) {
@@ -321,7 +380,7 @@ function applyAssignments() {
                 const pinNames = new Set((_state.hardware.pins  || []).map(p => p.name));
                 devices = _state.hardware.devices.filter(d => {
                     if (busNames.has(d.bus) || pinNames.has(d.bus)) return false;
-                    return parseInt(d.address, 10) === parseInt(a.gpio, 10);
+                    return parseInt(d.address) === parseInt(a.gpio, 10);
                 });
             }
         }
@@ -329,61 +388,113 @@ function applyAssignments() {
     }
 }
 
-// Build/update the per-pin device list. Each device becomes one <g>:
-//   <text> with the device name (bus-accent) followed by a dimmer
-//   <tspan> with the type. Rows stack at 12px pitch under the var label.
+// Build/update the per-pin device list. Each device becomes a "card":
+// a horizontal trunk-line from the pin's var-label, a small filled pill
+// containing the device name + type. Click jumps to the device's source.
+// Cards stack vertically below the var label.
 function updateDevList(refs, devices) {
     const list = refs.devList;
     if (!list) return;
     if (!devices.length) {
         list.style.display = "none";
-        // Avoid keeping stale children — clear if any
         while (list.firstChild) list.removeChild(list.firstChild);
+        list.removeAttribute("data-snap");
         return;
     }
     list.style.display = "";
 
-    // Diff-and-rewrite: if device names+types match in order, keep DOM
-    // intact to avoid flicker; otherwise rebuild.
     const want = devices.map(d => `${d.name}|${d.type}|${d.address || ""}|${d.line || 0}`).join(";");
     if (list.getAttribute("data-snap") === want) return;
     list.setAttribute("data-snap", want);
-
     while (list.firstChild) list.removeChild(list.firstChild);
+
     const xmlns = "http://www.w3.org/2000/svg";
-    const baseY = refs.varY + 12;
+    const isLeft = refs.anchor === "end";   // left side of board → pins emit labels rightward
+    // Card geometry
+    const cardH = 16;
+    const cardSpacing = 4;
+    const trunkStart = refs.varX;           // anchor of the var label
+    // Cards are placed OUTBOARD of the var label. For left side pins
+    // (anchor=end), outward means LEFT (decreasing x).
+    const cardX = isLeft ? trunkStart - 8 : trunkStart + 8;
+
+    // Trunk line connecting the var label to the first card
+    if (devices.length > 0) {
+        const trunkY = refs.varY + 14 + (devices.length * cardH + (devices.length - 1) * cardSpacing) / 2;
+        const trunk = document.createElementNS(xmlns, "line");
+        trunk.setAttribute("x1", trunkStart);
+        trunk.setAttribute("y1", refs.varY);
+        trunk.setAttribute("x2", trunkStart);
+        trunk.setAttribute("y2", trunkY);
+        trunk.setAttribute("class", "bp-dev-trunk");
+        list.appendChild(trunk);
+    }
+
     devices.forEach((d, i) => {
-        const y = baseY + i * 12;
+        const top = refs.varY + 8 + i * (cardH + cardSpacing);
+        const cy = top + cardH / 2;
+
+        // Approximate card width from text length so the pill hugs content
+        const text = `${d.name} · ${d.type}${d.address ? " @ " + d.address : ""}`;
+        const cardW = Math.max(64, text.length * 6 + 14);
+        const rectX = isLeft ? cardX - cardW : cardX;
+        const textX = isLeft ? rectX + cardW - 7 : rectX + 7;
+
+        // Branch line from trunk to card
+        const branch = document.createElementNS(xmlns, "line");
+        branch.setAttribute("x1", trunkStart);
+        branch.setAttribute("y1", cy);
+        branch.setAttribute("x2", isLeft ? cardX : cardX);
+        branch.setAttribute("y2", cy);
+        branch.setAttribute("class", "bp-dev-branch");
+        list.appendChild(branch);
+
+        // The card itself — a single <g> with rect + text, fully clickable
+        const card = document.createElementNS(xmlns, "g");
+        card.setAttribute("class", "bp-dev-card");
+        card.setAttribute("data-line", String(d.line || 0));
+        card.setAttribute("data-name", d.name);
+
+        const rect = document.createElementNS(xmlns, "rect");
+        rect.setAttribute("x", rectX);
+        rect.setAttribute("y", top);
+        rect.setAttribute("width", cardW);
+        rect.setAttribute("height", cardH);
+        rect.setAttribute("rx", cardH / 2);
+        rect.setAttribute("ry", cardH / 2);
+        rect.setAttribute("class", "bp-dev-card-bg");
+        card.appendChild(rect);
+
+        // Inner text — name in bold accent, separator + type dimmer,
+        // optional @addr last. Anchored at content edge of the pill.
         const t = document.createElementNS(xmlns, "text");
-        t.setAttribute("x", String(refs.varX));
-        t.setAttribute("y", String(y));
-        t.setAttribute("text-anchor", refs.anchor);
-        t.setAttribute("class", "bp-dev-item");
-        t.setAttribute("data-line", String(d.line || 0));
-        t.setAttribute("data-name", d.name);
-        // Name in bus accent; type in dimmer tspan with a separator dot
+        t.setAttribute("x", textX);
+        t.setAttribute("y", cy + 3);
+        t.setAttribute("text-anchor", isLeft ? "end" : "start");
+        t.setAttribute("class", "bp-dev-card-text");
         const name = document.createElementNS(xmlns, "tspan");
         name.setAttribute("class", "bp-dev-name");
         name.textContent = d.name;
+        t.appendChild(name);
         const sep = document.createElementNS(xmlns, "tspan");
         sep.setAttribute("class", "bp-dev-sep");
-        sep.setAttribute("dx", "4");
+        sep.setAttribute("dx", "5");
         sep.textContent = "·";
+        t.appendChild(sep);
         const ty = document.createElementNS(xmlns, "tspan");
         ty.setAttribute("class", "bp-dev-type");
-        ty.setAttribute("dx", "4");
+        ty.setAttribute("dx", "5");
         ty.textContent = d.type;
-        t.appendChild(name);
-        t.appendChild(sep);
         t.appendChild(ty);
         if (d.address) {
             const addr = document.createElementNS(xmlns, "tspan");
             addr.setAttribute("class", "bp-dev-addr");
-            addr.setAttribute("dx", "4");
+            addr.setAttribute("dx", "6");
             addr.textContent = "@ " + d.address;
             t.appendChild(addr);
         }
-        list.appendChild(t);
+        card.appendChild(t);
+        list.appendChild(card);
     });
 }
 
@@ -461,13 +572,10 @@ function normalize(data) {
 // ============================================================
 // Draw — build the schematic as inline SVG
 // ============================================================
-const PITCH       = 22;        // distance between pins vertically
-const COL_GAP     = 130;        // gap between the two pin rows
-const PAD_W       = 18;
-const PAD_H       = 14;
-const BOARD_PAD_X = 36;         // horizontal margin from pads to board edge
-const HEADER_TOP  = 90;         // y-coord of first pin row (USB above)
-const HEADER_BOT  = 28;         // bottom margin
+const PITCH    = 22;        // distance between pins vertically
+const COL_GAP  = 130;       // gap between the two pin rows
+// (PAD_W/PAD_H/BOARD_PAD_X/HEADER_TOP/HEADER_BOT removed — unused since
+// the schematic rewrite.)
 
 function drawBoard(board, assigned) {
     const rows = Math.max(board.columns[0].length, board.columns[1].length);
@@ -494,8 +602,8 @@ function drawBoard(board, assigned) {
     }
 
     const pinsSvg = [
-        ...board.columns[0].map((p, i) => drawPin(p, "left",  boardL, topPad + i * PITCH, assignedByGpio)),
-        ...board.columns[1].map((p, i) => drawPin(p, "right", boardR, topPad + i * PITCH, assignedByGpio)),
+        ...board.columns[0].map((p, i) => drawPin(p, "left",  boardL, topPad + i * PITCH)),
+        ...board.columns[1].map((p, i) => drawPin(p, "right", boardR, topPad + i * PITCH)),
     ].join("");
 
     // Title above the board — single line, mono, restrained
@@ -519,7 +627,7 @@ function drawBoard(board, assigned) {
 // dormant <g> placeholder for the dynamic device list (filled per-pin
 // in applyAssignments). Position metadata is stored as data-* so
 // mutations don't need a position lookup.
-function drawPin(p, side, edgeX, y, _ignored) {
+function drawPin(p, side, edgeX, y) {
     const gpio = String(p.gpio ?? "").trim();
     const type = p.type || "io";
     const labelX = side === "left" ? edgeX - 10 : edgeX + 10;

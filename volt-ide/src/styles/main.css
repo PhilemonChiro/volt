@@ -2753,21 +2753,36 @@ kbd {
 .pinout-pin.is-assigned.is-device .bp-pin-label,
 .pinout-pin.is-assigned.is-device .bp-var-label { fill: var(--bp-bus-accent); }
 
-/* Per-device row beneath a bus's primary lane.
-   Format: <name> · <type> [@ <address>]
-   - name in bus-accent (matches the lane it rides on)
-   - separator + type/address dimmer for visual hierarchy */
-.bp-dev-item {
+/* Per-device CARD beneath a bus's primary lane or beside a pin.
+   Each device is a rounded pill connected by a thin trunk + branch
+   line to the originating pin. */
+.bp-dev-trunk, .bp-dev-branch {
+    stroke: var(--bp-bus-accent);
+    stroke-width: 0.8;
+    stroke-linecap: round;
+    opacity: 0.55;
+    fill: none;
+}
+.bp-dev-card { cursor: pointer; }
+.bp-dev-card-bg {
+    fill: rgba(78, 201, 176, 0.10);     /* bus-accent tinted */
+    stroke: var(--bp-bus-accent);
+    stroke-width: 0.7;
+    transition: fill var(--dur-fast) var(--ease-out);
+}
+.bp-dev-card:hover .bp-dev-card-bg {
+    fill: rgba(78, 201, 176, 0.20);
+}
+.bp-dev-card-text {
     font-family: var(--mono);
-    font-size: 10px;
+    font-size: 9.5px;
     letter-spacing: 0.02em;
-    cursor: pointer;
+    pointer-events: none;
 }
 .bp-dev-name { fill: var(--bp-bus-accent); font-weight: 600; }
 .bp-dev-sep  { fill: var(--bp-line-soft); }
 .bp-dev-type { fill: var(--bp-line); opacity: 0.75; }
-.bp-dev-addr { fill: var(--bp-line-soft); font-size: 9px; }
-.bp-dev-item:hover .bp-dev-name { text-decoration: underline; }
+.bp-dev-addr { fill: var(--bp-line-soft); }
 
 /* Conflict — duplicate GPIO assignments. Red ring overrides the assigned
    ring so the user can't miss it. */
@@ -2965,38 +2980,6 @@ kbd {
 }
 .pinout-ctrl:hover { background: var(--bg-2); color: var(--t1); }
 .pinout-ctrl + .pinout-ctrl { border-top: 1px solid var(--border); }
-
-/* Legend below the board */
-.pinout-legend {
-    border-top: 1px solid var(--border);
-    padding: var(--s-3);
-    flex-shrink: 0;
-    max-height: 40%;
-    overflow-y: auto;
-}
-.pinout-legend-title {
-    font-size: var(--fs-10);
-    color: var(--t3);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: var(--s-2);
-}
-.pinout-legend-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-.pinout-legend-list li {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: var(--s-2);
-    align-items: center;
-    padding: 2px 0;
-    font-size: var(--fs-12);
-}
-.pinout-legend-name { color: var(--t1); font-family: var(--mono); }
-.pinout-legend-pin  { color: var(--volt); font-family: var(--mono); font-size: var(--fs-11); }
-.pinout-legend-type { color: var(--t3); font-size: var(--fs-10); }
 
 .device-detail-body {
     padding: var(--s-4) var(--s-5);

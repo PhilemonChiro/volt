@@ -590,6 +590,13 @@ chipSelector.init((chip) => {
     console.log("[volt] Target chip changed to:", chip);
     bottomPanel.appendOutput("Target chip: " + chip.toUpperCase(), "info");
     if (editorReady) diagnostics.scheduleCheck(editor.getValue());
+    // Repaint the pinout for the new chip (otherwise it shows the
+    // previous board until the user types a character).
+    import("./components/pinout-panel.js").then(m => {
+        const source = editorReady ? editor.getValue() : "";
+        const hw = m.extractHardware(source);
+        m.render(chip.toLowerCase(), Object.values(hw.pinByGpio), hw);
+    }).catch(() => {});
 });
 
 // Init device detection — check for chip mismatch
