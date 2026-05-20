@@ -150,9 +150,22 @@ function httpGetJson(url, timeoutMs = 10000) {
     });
 }
 
-function downloadFile(url, dest) {
+// Format bytes for human display. Matches `[\d.]+[KMG]?` so it's picked up
+// by makeEmit's curl-progress regex (see toolchain.js).
+function humanSize(bytes) {
+    if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + "G";
+    if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + "M";
+    if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + "K";
+    return bytes + "B";
+}
+
+// Download with optional progress callback. onProgress is called at most
+// every ~200ms with (received, total) byte counts. total may be 0 if the
+// server didn't send Content-Length.
+function downloadFile(url, dest, onProgress) {
     return new Promise((resolve, reject) => {
         const out = fs.createWriteStream(dest);
+        let received = 0, total = 0, lastEmit = 0;
         function get(u, hops) {
             if (hops > 5) return reject(new Error("too many redirects"));
             https.get(u, (res) => {
@@ -161,8 +174,20 @@ function downloadFile(url, dest) {
                     return get(new URL(res.headers.location, u).href, hops + 1);
                 }
                 if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode} for ${u}`));
+                total = Number(res.headers["content-length"]) || 0;
+                res.on("data", (chunk) => {
+                    received += chunk.length;
+                    if (!onProgress) return;
+                    const now = Date.now();
+                    if (now - lastEmit < 200) return;
+                    lastEmit = now;
+                    onProgress(received, total);
+                });
                 res.pipe(out);
-                out.on("finish", () => out.close(() => resolve()));
+                out.on("finish", () => {
+                    if (onProgress) onProgress(received, total);
+                    out.close(() => resolve());
+                });
                 out.on("error", reject);
             }).on("error", reject);
         }
@@ -170,11 +195,23 @@ function downloadFile(url, dest) {
     });
 }
 
-function sha256OfFile(filePath) {
+// SHA256 with optional progress callback. Throttled to ~200ms.
+function sha256OfFile(filePath, onProgress) {
     return new Promise((resolve, reject) => {
         const h = crypto.createHash("sha256");
         const s = fs.createReadStream(filePath);
-        s.on("data", (chunk) => h.update(chunk));
+        let total = 0;
+        try { total = fs.statSync(filePath).size; } catch (_) {}
+        let read = 0, lastEmit = 0;
+        s.on("data", (chunk) => {
+            h.update(chunk);
+            read += chunk.length;
+            if (!onProgress) return;
+            const now = Date.now();
+            if (now - lastEmit < 200) return;
+            lastEmit = now;
+            onProgress(read, total);
+        });
         s.on("end", () => resolve(h.digest("hex")));
         s.on("error", reject);
     });
@@ -263,6 +300,13 @@ function sourcesFor(asset, preference) {
 // Download an asset by key. Returns true on success.
 // Resolves the asset definition through loadManifest() so callers always
 // get the latest published version (not whatever was baked into the IDE).
+//
+// Progress reporting:
+// - We don't call emit.progress directly (that requires a stageId and we
+//   don't know what stage we're inside). Instead we log lines that match
+//   makeEmit's existing curl-style auto-detect regex
+//   (`(\d+)%\s+([\d.]+[KMG]?)\s*/\s*([\d.]+[KMG]?)`) — makeEmit picks
+//   them up and forwards as stage_progress events to the renderer.
 async function downloadAsset(key, destPath, emit, preference = "auto") {
     const { manifest, source } = await loadManifest();
     const asset = manifest.assets?.[key];
@@ -272,15 +316,29 @@ async function downloadAsset(key, destPath, emit, preference = "auto") {
         emit?.log?.(`Using ${source} manifest (could not fetch live)`);
     }
 
+    // Progress callback for both download and SHA256 verify. Falls back to
+    // the asset's recorded size_bytes when the server doesn't send a
+    // Content-Length header.
+    const expected = asset.size_bytes || 0;
+    function makeProgressLogger(label) {
+        return (current, total) => {
+            const denom = total || expected;
+            if (!denom) return;
+            const pct = Math.min(100, Math.floor(current / denom * 100));
+            // Format the auto-detect regex needs:  " 45%  130.5M/280.0M"
+            emit?.log?.(`${label}: ${pct}%  ${humanSize(current)}/${humanSize(denom)}`);
+        };
+    }
+
     const sources = sourcesFor(asset, preference);
     for (const src of sources) {
         if (!src.url) continue;
         try {
-            emit?.log?.(`Downloading from ${src.label}…`);
-            await downloadFile(src.url, destPath);
+            emit?.log?.(`Downloading from ${src.label}: ${asset.filename || key}`);
+            await downloadFile(src.url, destPath, makeProgressLogger("download"));
             if (asset.sha256) {
                 emit?.log?.("Verifying SHA256…");
-                const h = await sha256OfFile(destPath);
+                const h = await sha256OfFile(destPath, makeProgressLogger("verify"));
                 if (h !== asset.sha256) {
                     emit?.log?.(`SHA256 mismatch on ${src.label} (got ${h.slice(0,16)}…, expected ${asset.sha256.slice(0,16)}…)`);
                     try { fs.unlinkSync(destPath); } catch (_) {}

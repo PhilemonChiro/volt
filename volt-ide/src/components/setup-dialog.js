@@ -360,6 +360,8 @@ function updateOverall(overlay, state) {
     refs.fill.className = "setup-progress-fill" +
         (state.finished ? (state.success ? " is-done" : " is-error") : "");
     updateStats(overlay, state);
+    // Mirror the same progress on the minimized pill if it's up
+    if (activeDialog?.minimized) updateMiniProgress(pct);
 }
 
 function updateStage(overlay, s) {
@@ -465,6 +467,11 @@ function toggleLog(state) {
     }
 }
 
+// Ring math: r=7 → circumference ≈ 43.98. We use a single dasharray of that
+// length and animate stroke-dashoffset from full-empty (43.98) to full
+// (0). The 7 reads slightly better at 16px than r=6 — thicker arc.
+const MINI_RING_CIRC = 2 * Math.PI * 7;
+
 function toggleMinimize() {
     if (!activeDialog) return;
     activeDialog.minimized = !activeDialog.minimized;
@@ -474,15 +481,38 @@ function toggleMinimize() {
         chip.className = "setup-mini-chip";
         chip.id = "setupMiniChip";
         chip.innerHTML = `
-            <span class="setup-mini-spinner"></span>
+            <svg class="setup-mini-ring" viewBox="0 0 18 18" width="16" height="16">
+                <circle class="setup-mini-ring-track" cx="9" cy="9" r="7" fill="none" stroke-width="2"/>
+                <circle class="setup-mini-ring-fill"  cx="9" cy="9" r="7" fill="none" stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-dasharray="${MINI_RING_CIRC.toFixed(2)}"
+                        stroke-dashoffset="${MINI_RING_CIRC.toFixed(2)}"
+                        transform="rotate(-90 9 9)"/>
+            </svg>
+            <span class="setup-mini-pct"   id="setupMiniPct">0%</span>
             <span class="setup-mini-label">Installing ${esc(CHIP_LABELS[activeDialog.state.chip] || activeDialog.state.chip)}…</span>
         `;
         chip.onclick = () => toggleMinimize();
         document.body.appendChild(chip);
+        // Sync the ring with whatever overall % the dialog is at right now.
+        updateMiniProgress(computeOverallPct(activeDialog.state));
     } else {
         const chip = document.getElementById("setupMiniChip");
         if (chip) chip.remove();
     }
+}
+
+// Update the minimized pill's progress ring + percent label. Cheap — only
+// touches three DOM nodes. Called from updateOverall so the ring tracks the
+// same overall progress the dialog shows.
+function updateMiniProgress(pct) {
+    const chip = document.getElementById("setupMiniChip");
+    if (!chip) return;
+    const fill = chip.querySelector(".setup-mini-ring-fill");
+    const text = chip.querySelector("#setupMiniPct");
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    if (fill) fill.style.strokeDashoffset = (MINI_RING_CIRC * (1 - clamped / 100)).toFixed(2);
+    if (text) text.textContent = clamped + "%";
 }
 
 function confirmCancel(state) {

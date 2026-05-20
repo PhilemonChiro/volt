@@ -2809,6 +2809,7 @@ kbd {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
 }
+/* Legacy indeterminate spinner — kept only if some flow still references it */
 .setup-mini-spinner {
     width: 12px; height: 12px;
     border: 2px solid var(--bg-3);
@@ -2818,4 +2819,26 @@ kbd {
 }
 @keyframes setup-mini-spin {
     to { transform: rotate(360deg); }
+}
+
+/* Determinate circular progress on the minimized pill. The JS sets
+   stroke-dashoffset on .setup-mini-ring-fill to draw the arc from 12 o'clock
+   clockwise (the SVG itself is pre-rotated -90deg via transform). */
+.setup-mini-ring {
+    flex: 0 0 auto;
+}
+.setup-mini-ring-track {
+    stroke: var(--bg-3);
+    opacity: 0.6;
+}
+.setup-mini-ring-fill {
+    stroke: var(--volt);
+    transition: stroke-dashoffset var(--dur-base) var(--ease-out);
+}
+.setup-mini-pct {
+    color: var(--t2);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-11);
+    min-width: 2.6em;
+    text-align: right;
 }

@@ -176,6 +176,9 @@ function makeEmit(legacy) {
             // git: "Receiving objects:  33% (15234/46123)"
             let m = s.match(/(?:Receiving objects|Resolving deltas):\s+(\d+)%\s*\(([\d.]+)\/([\d.]+)\)/);
             if (m) { emit.progress(currentStageId, +m[1], `git: ${m[2]} / ${m[3]} objects`); return; }
+            // toolchain-mirror: "download: 45%  130.5M/280.0M" (or "verify: …")
+            m = s.match(/^(\w+):\s+(\d+)%\s+([\d.]+[KMG]?)\s*\/\s*([\d.]+[KMG]?)/);
+            if (m) { emit.progress(currentStageId, +m[2], `${m[1]} ${m[3]} / ${m[4]}`); return; }
             // curl/wget: " 45%  300M/700M"
             m = s.match(/(\d+)%\s+([\d.]+[KMG]?)\s*\/\s*([\d.]+[KMG]?)/);
             if (m) { emit.progress(currentStageId, +m[1], `${m[2]} / ${m[3]}`); return; }
