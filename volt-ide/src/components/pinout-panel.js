@@ -138,6 +138,29 @@ export function extractHardware(source) {
         });
     }
 
+    // Resolve 'orphan' devices — ones whose `on <name>` doesn't reference a
+    // declared bus OR a declared pin. These are typically GPIO-attached
+    // devices (DHT, HC-SR04, NEOPIXEL …) where the user hasn't yet declared
+    // a pin for them. Anchor them to the GPIO in their `at <N>` clause so
+    // the board shows the device at the right pin.
+    const busNames = new Set(buses.map(b => b.name));
+    const pinNames = new Set(pins.map(p => p.name));
+    for (const d of devices) {
+        if (busNames.has(d.bus) || pinNames.has(d.bus)) continue;
+        const gpio = parseInt(d.address, 10);
+        if (isNaN(gpio)) continue;
+        const key = String(gpio);
+        if (!pinByGpio[key]) {
+            pinByGpio[key] = {
+                name: d.name,
+                kind: "device",
+                gpio: key,
+                line: d.line,
+                deviceType: d.type,
+            };
+        }
+    }
+
     return { pins, buses, devices, pinByGpio };
 }
 
@@ -248,18 +271,23 @@ function applyAssignments() {
         // Toggle pin-state classes in one pass
         refs.g.classList.toggle("is-assigned", !!a);
         refs.g.classList.toggle("is-conflict", !!conflict);
-        refs.g.classList.toggle("is-bus", kind === "bus");
-        refs.g.classList.toggle("is-pin", kind === "pin");
+        refs.g.classList.toggle("is-bus",    kind === "bus");
+        refs.g.classList.toggle("is-pin",    kind === "pin");
+        refs.g.classList.toggle("is-device", kind === "device");
 
         // data-* used by click-to-jump + hover events
         refs.g.setAttribute("data-name", a ? a.name : "");
         refs.g.setAttribute("data-kind", kind || "");
         refs.g.setAttribute("data-line", a && a.line ? a.line : 0);
 
-        // Var label text
+        // Var label text — for bus pins show the role (sda/scl); for
+        // device-anchored pins show the device name; for pin assignments
+        // show the variable name.
         const labelText = a
             ? (kind === "bus" ? (a.role || "?") : a.name)
             : "";
+        // Note: device kind uses a.name which is the device name (set in
+        // extractHardware's orphan pass).
         if (refs.varLabel) {
             refs.varLabel.style.display = a ? "" : "none";
             if (refs.varLabel.textContent !== labelText) refs.varLabel.textContent = labelText;
@@ -270,8 +298,9 @@ function applyAssignments() {
         //   bus pins  → on the primary lane only, list everything that
         //               targets that bus.
         //   regular pin → list any device whose 'on <name>' references
-        //               this pin's variable name (e.g. DHT22 on gpio_pin
-        //               where `pin gpio_pin = 4`).
+        //               this pin's variable name.
+        //   device-anchored pin → the device that anchored here (user
+        //               hadn't declared a pin for it).
         let devices = [];
         if (a && _state.hardware && _state.hardware.devices) {
             if (kind === "bus") {
@@ -283,9 +312,17 @@ function applyAssignments() {
                     }
                 }
             } else if (kind === "pin") {
-                // GPIO-bound devices (DHT22, HC-SR04, NEOPIXEL, etc.):
-                // the device's 'on <X>' references the pin's variable name
                 devices = _state.hardware.devices.filter(d => d.bus === a.name);
+            } else if (kind === "device") {
+                // Direct GPIO attachment — find the device(s) whose 'at'
+                // numerically targets this GPIO and whose 'on <name>' isn't
+                // a declared bus or pin.
+                const busNames = new Set((_state.hardware.buses || []).map(b => b.name));
+                const pinNames = new Set((_state.hardware.pins  || []).map(p => p.name));
+                devices = _state.hardware.devices.filter(d => {
+                    if (busNames.has(d.bus) || pinNames.has(d.bus)) return false;
+                    return parseInt(d.address, 10) === parseInt(a.gpio, 10);
+                });
             }
         }
         if (refs.devList) updateDevList(refs, devices);

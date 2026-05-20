@@ -2741,13 +2741,17 @@ kbd {
 :root {
     --bp-bus-accent: #4ec9b0;   /* teal — VS Code's type-name green */
 }
-.pinout-pin.is-assigned.is-bus .bp-pin-outer {
+.pinout-pin.is-assigned.is-bus    .bp-pin-outer,
+.pinout-pin.is-assigned.is-device .bp-pin-outer {
     fill: var(--bp-bus-accent);
     stroke: var(--bp-bus-accent);
 }
-.pinout-pin.is-assigned.is-bus .bp-pin-ring { stroke: var(--bp-bus-accent); }
-.pinout-pin.is-assigned.is-bus .bp-pin-label,
-.pinout-pin.is-assigned.is-bus .bp-var-label { fill: var(--bp-bus-accent); }
+.pinout-pin.is-assigned.is-bus    .bp-pin-ring,
+.pinout-pin.is-assigned.is-device .bp-pin-ring { stroke: var(--bp-bus-accent); }
+.pinout-pin.is-assigned.is-bus    .bp-pin-label,
+.pinout-pin.is-assigned.is-bus    .bp-var-label,
+.pinout-pin.is-assigned.is-device .bp-pin-label,
+.pinout-pin.is-assigned.is-device .bp-var-label { fill: var(--bp-bus-accent); }
 
 /* Per-device row beneath a bus's primary lane.
    Format: <name> · <type> [@ <address>]
