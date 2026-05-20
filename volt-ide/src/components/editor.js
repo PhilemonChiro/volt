@@ -11,6 +11,25 @@ export function init(container, { onContentChange, onCursorChange }) {
     // Register Volt language
     monaco.languages.register({ id: "volt" });
 
+    // Comment markers + bracket pairs — Monaco's commentLine action and
+    // bracket matching rely on this. Without it Ctrl+/ does nothing.
+    monaco.languages.setLanguageConfiguration("volt", {
+        comments: { lineComment: "//", blockComment: ["/*", "*/"] },
+        brackets: [["{","}"], ["[","]"], ["(",")"]],
+        autoClosingPairs: [
+            { open: "{", close: "}" },
+            { open: "[", close: "]" },
+            { open: "(", close: ")" },
+            { open: '"', close: '"', notIn: ["string"] },
+        ],
+        surroundingPairs: [
+            { open: "{", close: "}" },
+            { open: "[", close: "]" },
+            { open: "(", close: ")" },
+            { open: '"', close: '"' },
+        ],
+    });
+
     monaco.languages.setMonarchTokensProvider("volt", {
         keywords: ["setup", "loop", "task", "machine", "state", "func", "return",
             "if", "else", "while", "for", "in", "match", "on", "every", "after",
@@ -208,6 +227,25 @@ export function init(container, { onContentChange, onCursorChange }) {
     // Cursor position
     editor.onDidChangeCursorPosition((e) => {
         if (onCursorChange) onCursorChange(e.position.lineNumber, e.position.column);
+    });
+
+    // Ctrl+/ (Cmd+/ on Mac) — toggle line comment. Monaco binds this by
+    // default; we re-register it explicitly so it survives keybinding
+    // edits and works consistently across platforms.
+    editor.addAction({
+        id: "volt.toggle-line-comment",
+        label: "Toggle Line Comment",
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash],
+        contextMenuGroupId: "edit",
+        run: (ed) => ed.trigger("keyboard", "editor.action.commentLine", null),
+    });
+    // Ctrl+Shift+/ → block comment toggle (/* … */ around the selection)
+    editor.addAction({
+        id: "volt.toggle-block-comment",
+        label: "Toggle Block Comment",
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Slash],
+        contextMenuGroupId: "edit",
+        run: (ed) => ed.trigger("keyboard", "editor.action.blockComment", null),
     });
 
     return editor;
