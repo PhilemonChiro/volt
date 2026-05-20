@@ -1,6 +1,6 @@
 {
   "name": "volt-ide",
-  "version": "2.0.0",
+  "version": "2.0.8",
   "description": "Volt IDE — embedded development that reads like English",
   "main": "main.js",
   "homepage": "https://github.com/pchiro/volt",

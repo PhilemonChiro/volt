@@ -21,6 +21,9 @@ settings.init().then(() => {
     applyBodyClassSettings();
 });
 
+// Show app version in the status bar (status-bar right side).
+window.volt.getVersion().then((v) => statusBar.setVersion(v)).catch(() => {});
+
 // Settings that map to body-level classes (motion, density, etc.)
 function applyBodyClassSettings() {
     document.body.classList.toggle(
@@ -266,6 +269,30 @@ function closeProject() {
     console.log("[volt] Project closed");
 }
 
+// Ensure the chip toolchain is installed before build. If missing, open the
+// modal install dialog (stages, progress, log, background, soft-cancel).
+// Returns true if ready / install succeeded, false on cancel or failure.
+async function ensureToolchainWithDialog(chip) {
+    const ready = await window.volt.checkToolchain(chip);
+    if (ready) {
+        bottomPanel.appendOutput(`${chip} toolchain: ready`, "success");
+        return true;
+    }
+    bottomPanel.appendOutput(`${chip} toolchain not found — opening installer…`, "warn");
+    bottomPanel.updatePipelineStage("build", `Installing ${chip} toolchain…`, 30);
+    statusBar.setBuild("Installing toolchain…");
+    const setupDialog = await import("./components/setup-dialog.js");
+    const ok = await new Promise((resolve) => {
+        setupDialog.show({
+            chip,
+            onComplete: () => resolve(true),
+            onCancel:   () => resolve(false),
+        });
+    });
+    if (ok) bottomPanel.appendOutput("Toolchain ready", "success");
+    return ok;
+}
+
 async function onRun() {
     if (!currentFile) {
         bottomPanel.appendOutput("No file open. Click Open or New first.", "warn");
@@ -324,30 +351,11 @@ async function onRun() {
         bottomPanel.updatePipelineStage("build", `Checking ${targetChip} toolchain...`, 25);
         statusBar.setBuild("Checking toolchain...");
 
-        const ready = await window.volt.checkToolchain(targetChip);
-        if (!ready) {
-            bottomPanel.appendOutput(`${targetChip} toolchain not found — opening installer…`, "warn");
-            bottomPanel.updatePipelineStage("build", `Installing ${targetChip} toolchain…`, 30);
-            statusBar.setBuild("Installing toolchain…");
-
-            // Modal dialog drives the install — shows stages, progress, log,
-            // background mode, soft-cancel. Resolves when done.
-            const setupDialog = await import("./components/setup-dialog.js");
-            const installed = await new Promise((resolve) => {
-                setupDialog.show({
-                    chip: targetChip,
-                    onComplete: () => resolve(true),
-                    onCancel:   () => resolve(false),
-                });
-            });
-            if (!installed) {
-                bottomPanel.updatePipelineStage("error", "Toolchain install cancelled or failed", 30);
-                statusBar.setBuild("Setup failed");
-                return;
-            }
-            bottomPanel.appendOutput("Toolchain ready", "success");
-        } else {
-            bottomPanel.appendOutput(`${targetChip} toolchain: ready`, "success");
+        const installed = await ensureToolchainWithDialog(targetChip);
+        if (!installed) {
+            bottomPanel.updatePipelineStage("error", "Toolchain install cancelled or failed", 30);
+            statusBar.setBuild("Setup failed");
+            return;
         }
 
         // Stage 2-5: Build → Flash → Connect → Verify (via main process)
@@ -421,16 +429,11 @@ async function onCheck() {
 
         // Stage 2: Toolchain
         bottomPanel.updatePipelineStage("build", `Checking ${targetChip} toolchain...`, 25);
-        const ready = await window.volt.checkToolchain(targetChip);
-        if (!ready) {
-            bottomPanel.appendOutput(`${targetChip} toolchain not found — installing...`, "warn");
-            bottomPanel.updatePipelineStage("build", `Installing ${targetChip} toolchain...`, 30);
-            const setup = await window.volt.setupToolchain(targetChip);
-            if (!setup.ok) {
-                bottomPanel.updatePipelineStage("error", "Toolchain setup failed", 30);
-                statusBar.setBuild("Setup failed");
-                return;
-            }
+        const installed = await ensureToolchainWithDialog(targetChip);
+        if (!installed) {
+            bottomPanel.updatePipelineStage("error", "Toolchain install cancelled or failed", 30);
+            statusBar.setBuild("Setup failed");
+            return;
         }
 
         // Stage 3: Build (no flash)

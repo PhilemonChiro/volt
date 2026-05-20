@@ -104,6 +104,8 @@ ipcMain.handle("win_maximize", () => {
 });
 ipcMain.handle("win_close", () => win?.close());
 
+ipcMain.handle("app_version", () => app.getVersion());
+
 // ============================================================
 // Projects
 // ============================================================
