@@ -316,6 +316,13 @@ export async function render(chip, assignedPins, hardware) {
 // + update textContent + data-line attributes only.
 function applyAssignments() {
     if (!_skeleton.refs) return;
+    resetCardLayout();    // fresh occupancy ledger each frame
+    // Invalidate per-pin card snapshots — column placement is a global
+    // function of the whole frame's cards, so we can't trust last-frame's
+    // cache if anything changed.
+    for (const refs of Object.values(_skeleton.refs)) {
+        if (refs.devList) refs.devList.removeAttribute("data-snap");
+    }
     const assignedByGpio = {};
     for (const a of _state.assigned) {
         const gpio = String(a.gpio ?? a.pin_number ?? a.pin ?? "").trim();
@@ -388,10 +395,48 @@ function applyAssignments() {
     }
 }
 
-// Build/update the per-pin device list. Each device becomes a "card":
-// a horizontal trunk-line from the pin's var-label, a small filled pill
-// containing the device name + type. Click jumps to the device's source.
-// Cards stack vertically below the var label.
+// ============================================================
+// Device cards — anti-collision layout
+// ============================================================
+//
+// Cards live in dedicated columns OUTBOARD of the var-labels so they
+// never share Y-space with other pins' annotations. For each side
+// (left / right) we maintain an occupancy ledger keyed by column,
+// each column tracking [top, bottom] intervals already taken. When
+// updateDevList places cards for a pin, it finds (or opens) the
+// nearest column with vertical room for the whole stack — pushing
+// further outward only when the current column would overlap an
+// existing claim.
+//
+// _cardLayout is reset on every applyAssignments() run so the ledger
+// reflects only the CURRENT frame's cards.
+
+const CARD_W       = 150;
+const CARD_H       = 18;
+const CARD_GAP     = 4;
+const COL_GUTTER   = 18;       // gap between var-label X and the first card column
+const COL_PITCH    = CARD_W + 12;  // distance to the next outboard column
+
+let _cardLayout = null;
+function resetCardLayout() {
+    _cardLayout = { left: [], right: [] };
+}
+
+// Reserve a vertical run [top, bottom] in a column on `side`. Returns the
+// chosen column's left-X. If the requested column collides, walks outward
+// to the next free column.
+function reserveColumn(side, top, bottom) {
+    const list = _cardLayout[side];
+    for (let i = 0; ; i++) {
+        const col = list[i] || (list[i] = []);
+        const collide = col.some(([t, b]) => !(bottom <= t || top >= b));
+        if (!collide) {
+            col.push([top, bottom]);
+            return i;
+        }
+    }
+}
+
 function updateDevList(refs, devices) {
     const list = refs.devList;
     if (!list) return;
@@ -403,96 +448,96 @@ function updateDevList(refs, devices) {
     }
     list.style.display = "";
 
+    // Per-frame snapshot — skip work if nothing changed AND no column
+    // shift would have happened (we rebuild on changes anyway).
     const want = devices.map(d => `${d.name}|${d.type}|${d.address || ""}|${d.line || 0}`).join(";");
     if (list.getAttribute("data-snap") === want) return;
     list.setAttribute("data-snap", want);
     while (list.firstChild) list.removeChild(list.firstChild);
 
+    const isLeft = refs.anchor === "end";
+    const side = isLeft ? "left" : "right";
     const xmlns = "http://www.w3.org/2000/svg";
-    const isLeft = refs.anchor === "end";   // left side of board → pins emit labels rightward
-    // Card geometry
-    const cardH = 16;
-    const cardSpacing = 4;
-    const trunkStart = refs.varX;           // anchor of the var label
-    // Cards are placed OUTBOARD of the var label. For left side pins
-    // (anchor=end), outward means LEFT (decreasing x).
-    const cardX = isLeft ? trunkStart - 8 : trunkStart + 8;
 
-    // Trunk line connecting the var label to the first card
-    if (devices.length > 0) {
-        const trunkY = refs.varY + 14 + (devices.length * cardH + (devices.length - 1) * cardSpacing) / 2;
-        const trunk = document.createElementNS(xmlns, "line");
-        trunk.setAttribute("x1", trunkStart);
-        trunk.setAttribute("y1", refs.varY);
-        trunk.setAttribute("x2", trunkStart);
-        trunk.setAttribute("y2", trunkY);
-        trunk.setAttribute("class", "bp-dev-trunk");
-        list.appendChild(trunk);
+    // Total stack height — anchor the stack so its centre lines up with
+    // the var-label's Y (the source pin's row). Cards above and below.
+    const stackH = devices.length * CARD_H + (devices.length - 1) * CARD_GAP;
+    const stackTop = refs.varY - stackH / 2 + CARD_H / 2;  // top of first card
+    const stackBot = stackTop + stackH;
+
+    // Pad the occupancy claim by 2px so cards from adjacent buses don't
+    // touch edge-to-edge.
+    const colIndex = reserveColumn(side, stackTop - 2, stackBot + 2);
+    const colDist = COL_GUTTER + colIndex * COL_PITCH;
+    const cardX = isLeft ? refs.varX - colDist - CARD_W : refs.varX + colDist;
+    const axisX = isLeft ? cardX + CARD_W : cardX;   // inboard edge of the column
+
+    // Horizontal trunk from var-label to the column's inboard edge,
+    // then a vertical trunk down the column spanning the cards.
+    const tHoriz = document.createElementNS(xmlns, "line");
+    tHoriz.setAttribute("x1", refs.varX);
+    tHoriz.setAttribute("y1", refs.varY);
+    tHoriz.setAttribute("x2", axisX);
+    tHoriz.setAttribute("y2", refs.varY);
+    tHoriz.setAttribute("class", "bp-dev-trunk");
+    list.appendChild(tHoriz);
+
+    if (devices.length > 1) {
+        const tVert = document.createElementNS(xmlns, "line");
+        tVert.setAttribute("x1", axisX);
+        tVert.setAttribute("y1", stackTop);
+        tVert.setAttribute("x2", axisX);
+        tVert.setAttribute("y2", stackBot - CARD_H / 2);   // run to last card centre
+        tVert.setAttribute("class", "bp-dev-trunk");
+        list.appendChild(tVert);
     }
 
     devices.forEach((d, i) => {
-        const top = refs.varY + 8 + i * (cardH + cardSpacing);
-        const cy = top + cardH / 2;
+        const top = stackTop + i * (CARD_H + CARD_GAP) - CARD_H / 2;
+        const cy = top + CARD_H / 2;
+        const textX = isLeft ? cardX + CARD_W - 8 : cardX + 8;
 
-        // Approximate card width from text length so the pill hugs content
-        const text = `${d.name} · ${d.type}${d.address ? " @ " + d.address : ""}`;
-        const cardW = Math.max(64, text.length * 6 + 14);
-        const rectX = isLeft ? cardX - cardW : cardX;
-        const textX = isLeft ? rectX + cardW - 7 : rectX + 7;
-
-        // Branch line from trunk to card
+        // Branch line from axis to card
         const branch = document.createElementNS(xmlns, "line");
-        branch.setAttribute("x1", trunkStart);
+        branch.setAttribute("x1", axisX);
         branch.setAttribute("y1", cy);
-        branch.setAttribute("x2", isLeft ? cardX : cardX);
+        branch.setAttribute("x2", isLeft ? cardX + CARD_W : cardX);
         branch.setAttribute("y2", cy);
         branch.setAttribute("class", "bp-dev-branch");
         list.appendChild(branch);
 
-        // The card itself — a single <g> with rect + text, fully clickable
         const card = document.createElementNS(xmlns, "g");
         card.setAttribute("class", "bp-dev-card");
         card.setAttribute("data-line", String(d.line || 0));
         card.setAttribute("data-name", d.name);
 
         const rect = document.createElementNS(xmlns, "rect");
-        rect.setAttribute("x", rectX);
+        rect.setAttribute("x", cardX);
         rect.setAttribute("y", top);
-        rect.setAttribute("width", cardW);
-        rect.setAttribute("height", cardH);
-        rect.setAttribute("rx", cardH / 2);
-        rect.setAttribute("ry", cardH / 2);
+        rect.setAttribute("width", CARD_W);
+        rect.setAttribute("height", CARD_H);
+        rect.setAttribute("rx", CARD_H / 2);
+        rect.setAttribute("ry", CARD_H / 2);
         rect.setAttribute("class", "bp-dev-card-bg");
         card.appendChild(rect);
 
-        // Inner text — name in bold accent, separator + type dimmer,
-        // optional @addr last. Anchored at content edge of the pill.
         const t = document.createElementNS(xmlns, "text");
         t.setAttribute("x", textX);
         t.setAttribute("y", cy + 3);
         t.setAttribute("text-anchor", isLeft ? "end" : "start");
         t.setAttribute("class", "bp-dev-card-text");
-        const name = document.createElementNS(xmlns, "tspan");
-        name.setAttribute("class", "bp-dev-name");
-        name.textContent = d.name;
-        t.appendChild(name);
-        const sep = document.createElementNS(xmlns, "tspan");
-        sep.setAttribute("class", "bp-dev-sep");
-        sep.setAttribute("dx", "5");
-        sep.textContent = "·";
-        t.appendChild(sep);
-        const ty = document.createElementNS(xmlns, "tspan");
-        ty.setAttribute("class", "bp-dev-type");
-        ty.setAttribute("dx", "5");
-        ty.textContent = d.type;
-        t.appendChild(ty);
-        if (d.address) {
-            const addr = document.createElementNS(xmlns, "tspan");
-            addr.setAttribute("class", "bp-dev-addr");
-            addr.setAttribute("dx", "6");
-            addr.textContent = "@ " + d.address;
-            t.appendChild(addr);
-        }
+        // Truncate display text so it fits roughly inside the pill.
+        const make = (cls, txt, dx) => {
+            const s = document.createElementNS(xmlns, "tspan");
+            s.setAttribute("class", cls);
+            if (dx != null) s.setAttribute("dx", String(dx));
+            s.textContent = txt;
+            return s;
+        };
+        t.appendChild(make("bp-dev-name", d.name));
+        t.appendChild(make("bp-dev-sep", "·", 5));
+        t.appendChild(make("bp-dev-type", d.type, 5));
+        if (d.address) t.appendChild(make("bp-dev-addr", "@ " + d.address, 6));
         card.appendChild(t);
         list.appendChild(card);
     });
