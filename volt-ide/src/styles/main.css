@@ -2746,6 +2746,16 @@ kbd {
 .pinout-pin.is-assigned.is-bus .bp-pin-label,
 .pinout-pin.is-assigned.is-bus .bp-var-label { fill: var(--bp-bus-accent); }
 
+/* Secondary line below a bus pin's role label — the list of devices
+   that share this bus. Slightly smaller, dimmer than the role label. */
+.bp-dev-label {
+    fill: var(--bp-bus-accent);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.02em;
+    opacity: 0.78;
+}
+
 /* Conflict — duplicate GPIO assignments. Red ring overrides the assigned
    ring so the user can't miss it. */
 .pinout-pin.is-conflict .bp-pin-outer { fill: #e34d4d; stroke: #e34d4d; }

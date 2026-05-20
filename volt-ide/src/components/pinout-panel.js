@@ -339,10 +339,30 @@ function drawPin(p, side, edgeX, y, assignedByGpio) {
     const labelText = assigned
         ? (assigned.kind === "bus" ? (assigned.role || "?") : assigned.name)
         : "";
-    const varLabelSvg = assigned
-        ? `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}"
-                 data-line="${assigned.line || 0}">${escapeHtml(labelText)}</text>`
-        : "";
+    // For bus pins, also list device names attached to that bus on the
+    // FIRST role-pin only (so the list doesn't repeat on every lane).
+    let devicesText = "";
+    if (assigned && assigned.kind === "bus" && _state.hardware && _state.hardware.devices) {
+        const bus = (_state.hardware.buses || []).find(b => b.name === assigned.name);
+        if (bus) {
+            // Decide which role is the "primary" — first key in the roles object
+            const firstRole = Object.keys(bus.roles || {})[0];
+            if (firstRole === assigned.role) {
+                const devs = _state.hardware.devices
+                    .filter(d => d.bus === assigned.name)
+                    .map(d => d.name);
+                if (devs.length) devicesText = devs.join(" · ");
+            }
+        }
+    }
+    let varLabelSvg = "";
+    if (assigned) {
+        varLabelSvg += `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}"
+                 data-line="${assigned.line || 0}">${escapeHtml(labelText)}</text>`;
+        if (devicesText) {
+            varLabelSvg += `<text x="${varX}" y="${y + 16}" class="bp-dev-label" text-anchor="${labelAnchor}">${escapeHtml(devicesText)}</text>`;
+        }
+    }
 
     return `
         <g class="${cls}" data-gpio="${escapeHtml(gpio)}" data-name="${escapeHtml(assigned ? assigned.name : "")}"
