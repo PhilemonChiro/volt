@@ -333,12 +333,11 @@ function drawPin(p, side, edgeX, y, assignedByGpio) {
     // Pin kind drives the visual: 'pin' = volt accent, 'bus' = bus accent
     const kindCls = assigned ? `is-${assigned.kind || "pin"}` : "";
     const cls = `pinout-pin pin-type-${type}${assigned ? " is-assigned" : ""}${conflict ? " is-conflict" : ""} ${kindCls}`;
-    // Variable label text — bus roles show "i2c0:sda" so the user sees
-    // both the bus name AND which lane this pin carries
+    // Variable label text — for bus pins show just the role (sda / scl /
+    // mosi …). The bus name lives in the popover. For regular pins show
+    // the variable name as before.
     const labelText = assigned
-        ? (assigned.kind === "bus"
-            ? `${assigned.name}:${assigned.role || "?"}`
-            : assigned.name)
+        ? (assigned.kind === "bus" ? (assigned.role || "?") : assigned.name)
         : "";
     const varLabelSvg = assigned
         ? `<text x="${varX}" y="${y + 4}" class="bp-var-label" text-anchor="${labelAnchor}"
