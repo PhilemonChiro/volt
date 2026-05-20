@@ -326,16 +326,22 @@ async function onRun() {
 
         const ready = await window.volt.checkToolchain(targetChip);
         if (!ready) {
-            bottomPanel.appendOutput(`${targetChip} toolchain not found — installing automatically...`, "warn");
-            bottomPanel.updatePipelineStage("build", `Installing ${targetChip} toolchain...`, 30);
-            statusBar.setBuild("Installing toolchain...");
+            bottomPanel.appendOutput(`${targetChip} toolchain not found — opening installer…`, "warn");
+            bottomPanel.updatePipelineStage("build", `Installing ${targetChip} toolchain…`, 30);
+            statusBar.setBuild("Installing toolchain…");
 
-            window.volt.onToolchainLog((msg) => bottomPanel.appendOutput(msg, "info"));
-
-            const setup = await window.volt.setupToolchain(targetChip);
-            if (!setup.ok) {
-                bottomPanel.updatePipelineStage("error", "Toolchain setup failed", 30);
-                bottomPanel.appendOutput("Toolchain setup failed. See output for details.", "error");
+            // Modal dialog drives the install — shows stages, progress, log,
+            // background mode, soft-cancel. Resolves when done.
+            const setupDialog = await import("./components/setup-dialog.js");
+            const installed = await new Promise((resolve) => {
+                setupDialog.show({
+                    chip: targetChip,
+                    onComplete: () => resolve(true),
+                    onCancel:   () => resolve(false),
+                });
+            });
+            if (!installed) {
+                bottomPanel.updatePipelineStage("error", "Toolchain install cancelled or failed", 30);
                 statusBar.setBuild("Setup failed");
                 return;
             }

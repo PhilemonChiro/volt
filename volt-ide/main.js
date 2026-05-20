@@ -684,12 +684,60 @@ ipcMain.handle("check_toolchain", (_, chip) => toolchain.isToolchainReady(chip))
 
 ipcMain.handle("setup_toolchain", async (_, chip) => {
     const logs = [];
+    // toolchain.ensureToolchain accepts either a log(msg) fn or an emit-shaped
+    // object. We pass log; the toolchain module wraps it into an emit
+    // internally and threads __STAGE__: markers through it. Here we parse
+    // those markers back out into structured "toolchain:event" IPC events.
     const log = (msg) => {
-        logs.push(msg);
-        if (win) win.webContents.send("toolchain:log", msg);
+        const s = String(msg ?? "");
+        // Stage marker — forward as structured event, do NOT include in logs
+        const marker = s.match(/^__STAGE__:([^:]+):([a-z]+)(?::(.*))?$/);
+        if (marker) {
+            const [, id, action, rest] = marker;
+            if (action === "start") {
+                if (win) win.webContents.send("toolchain:event", { type: "stage_start", id });
+            } else if (action === "done") {
+                if (win) win.webContents.send("toolchain:event", { type: "stage_done", id });
+            } else if (action === "error") {
+                if (win) win.webContents.send("toolchain:event", { type: "stage_error", id, message: rest || "" });
+            } else if (action === "progress") {
+                // rest is "percent:detail"
+                const idx = (rest || "").indexOf(":");
+                const percent = Number(idx < 0 ? rest : rest.slice(0, idx));
+                const detail = idx < 0 ? "" : rest.slice(idx + 1);
+                if (win) win.webContents.send("toolchain:event", { type: "stage_progress", id, percent, detail });
+            }
+            return;
+        }
+        // Plain log line — keep + forward to both channels (legacy log + new event)
+        logs.push(s);
+        if (win) {
+            win.webContents.send("toolchain:log", s);
+            win.webContents.send("toolchain:event", { type: "log", message: s });
+        }
     };
-    const ok = toolchain.ensureToolchain(chip, log);
+
+    let ok = false;
+    try {
+        ok = toolchain.ensureToolchain(chip, log);
+    } catch (e) {
+        if (win) win.webContents.send("toolchain:event", {
+            type: "stage_error",
+            id: "exception",
+            message: e.message || String(e),
+        });
+    }
+
+    // Final structured signal so the dialog flips to its done/failed state
+    if (win) win.webContents.send("toolchain:event", { type: "complete", success: !!ok });
+
     return { ok, logs };
+});
+
+// Renderer-driven "cancel the in-flight install" — soft cancel for now.
+// Sets a flag the long-running operations check at safe boundaries.
+ipcMain.handle("cancel_toolchain", () => {
+    toolchain.cancel?.();
 });
 
 const builder = require("./src/main/builder");
