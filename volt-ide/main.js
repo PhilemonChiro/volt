@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, screen } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -73,9 +73,18 @@ function clearMacOSQuarantine() {
 app.whenReady().then(() => {
     clearMacOSQuarantine();
 
+    // Open at ~85% of the primary display's work area (excludes dock /
+    // taskbar), capped at 1800x1200 so 4K+ monitors don't open giants.
+    // Floor at 1100x720 so tiny laptop screens still get a usable layout.
+    const work = screen.getPrimaryDisplay().workAreaSize;
+    const initWidth  = Math.max(1100, Math.min(1800, Math.floor(work.width  * 0.85)));
+    const initHeight = Math.max(720,  Math.min(1200, Math.floor(work.height * 0.85)));
+
     win = new BrowserWindow({
-        width: 1280,
-        height: 800,
+        width:  initWidth,
+        height: initHeight,
+        minWidth:  1024,
+        minHeight: 640,
         title: "Volt IDE",
         frame: false,
         webPreferences: {

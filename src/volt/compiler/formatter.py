@@ -27,13 +27,56 @@ ONE_LINE_THRESHOLD = 60  # max chars for a single-line block body
 
 def format_source(source: str) -> str:
     """Format Volt source code. Returns formatted string.
-    Falls back to basic indent formatting if parse fails."""
+
+    Two paths:
+      - AST round-trip (preferred): parse → re-emit. Maximum style polish.
+      - Brace-based basic format: indentation-only, but preserves all
+        original text including comments and blank lines verbatim.
+
+    Comments are currently stripped by the grammar (%ignore COMMENT in
+    grammar.lark) so the AST round-trip would lose them. Until comments
+    are threaded through the AST, fall back to basic formatting whenever
+    the source has any '//' line comments or '/* */' block comments.
+    """
+    if _has_comments(source):
+        return _basic_format(source)
     try:
         program = parse(source)
         return _emit_program(program)
     except Exception:
         # Parse failed — fall back to basic brace formatter
         return _basic_format(source)
+
+
+def _has_comments(source: str) -> bool:
+    """Detect '//' line comments or '/* */' block comments outside of strings.
+    Conservative: a single '//' inside a string would also match, but the
+    consequence is just using the basic formatter — never lost data."""
+    in_str = False
+    quote = ""
+    i = 0
+    n = len(source)
+    while i < n:
+        ch = source[i]
+        if in_str:
+            if ch == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if ch == quote:
+                in_str = False
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            in_str = True
+            quote = ch
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n:
+            nxt = source[i + 1]
+            if nxt == "/" or nxt == "*":
+                return True
+        i += 1
+    return False
 
 
 # ============================================================
