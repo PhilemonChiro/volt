@@ -719,7 +719,7 @@ ipcMain.handle("setup_toolchain", async (_, chip) => {
 
     let ok = false;
     try {
-        ok = toolchain.ensureToolchain(chip, log);
+        ok = await toolchain.ensureToolchain(chip, log);
     } catch (e) {
         if (win) win.webContents.send("toolchain:event", {
             type: "stage_error",
