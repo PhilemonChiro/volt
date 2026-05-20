@@ -360,38 +360,9 @@ function applyAssignments() {
             refs.varLabel.setAttribute("data-line", a && a.line ? a.line : 0);
         }
 
-        // Device list — attach to the pin on the board.
-        //   bus pins  → on the primary lane only, list everything that
-        //               targets that bus.
-        //   regular pin → list any device whose 'on <name>' references
-        //               this pin's variable name.
-        //   device-anchored pin → the device that anchored here (user
-        //               hadn't declared a pin for it).
-        let devices = [];
-        if (a && _state.hardware && _state.hardware.devices) {
-            if (kind === "bus") {
-                const bus = (_state.hardware.buses || []).find(b => b.name === a.name);
-                if (bus) {
-                    const firstRole = Object.keys(bus.roles || {})[0];
-                    if (firstRole === a.role) {
-                        devices = _state.hardware.devices.filter(d => d.bus === a.name);
-                    }
-                }
-            } else if (kind === "pin") {
-                devices = _state.hardware.devices.filter(d => d.bus === a.name);
-            } else if (kind === "device") {
-                // Direct GPIO attachment — find the device(s) whose 'at'
-                // numerically targets this GPIO and whose 'on <name>' isn't
-                // a declared bus or pin.
-                const busNames = new Set((_state.hardware.buses || []).map(b => b.name));
-                const pinNames = new Set((_state.hardware.pins  || []).map(p => p.name));
-                devices = _state.hardware.devices.filter(d => {
-                    if (busNames.has(d.bus) || pinNames.has(d.bus)) return false;
-                    return parseInt(d.address) === parseInt(a.gpio, 10);
-                });
-            }
-        }
-        if (refs.devList) updateDevList(refs, devices);
+        // Device cards on the graphic were too noisy; devices live in
+        // the popover only now. Keep the dormant placeholder hidden.
+        if (refs.devList) updateDevList(refs, []);
     }
 }
 
