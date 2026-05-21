@@ -138,6 +138,27 @@ async function ensurePicotool(emit) {
         fs.chmodSync(path.join(out, "picotool"), 0o755);
         fs.unlinkSync(tmp);
     } catch (_) {}
+
+    // macOS-only: re-sign the binary + bundled dylib with an ad-hoc
+    // signature. The linker-supplied ad-hoc signature gets rejected by
+    // Gatekeeper when the binary lives in a non-system path; an explicit
+    // `codesign --force --deep --sign -` here makes it pass. Without this,
+    // the binary launches and is killed with SIGKILL (exit 137).
+    if (process.platform === "darwin") {
+        try {
+            const { spawnSync } = require("child_process");
+            spawnSync("xattr", ["-dr", "com.apple.quarantine", out], { stdio: "ignore" });
+            spawnSync("codesign", ["--force", "--deep", "--sign", "-",
+                                   path.join(out, "picotool")], { stdio: "ignore" });
+            const dylib = path.join(out, "lib", "libusb-1.0.0.dylib");
+            if (fs.existsSync(dylib)) {
+                spawnSync("codesign", ["--force", "--deep", "--sign", "-", dylib], { stdio: "ignore" });
+            }
+        } catch (e) {
+            emit.log(`WARN: picotool re-sign failed: ${e.message} (binary may be Gatekeeper-blocked)`);
+        }
+    }
+
     emit.log("picotool installed — direct-USB flashing enabled");
     return true;
 }
