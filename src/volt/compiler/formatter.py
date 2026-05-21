@@ -367,6 +367,23 @@ def _emit_stmt(stmt, depth) -> str:
         lines.append(f"{ind}}}")
         return "\n".join(lines)
 
+    if isinstance(stmt, TryBlock):
+        # Format:
+        #   try {
+        #       <body>
+        #   } or <policy>
+        if stmt.policy == "retry" and stmt.retry_limit is None:
+            tail = "or retry"
+        elif stmt.policy == "retry":
+            tail = f"or retry {stmt.retry_limit} times else {stmt.terminal}"
+        else:
+            tail = f"or {stmt.policy}"
+        lines = [f"{ind}try {{"]
+        for s in stmt.body:
+            lines.append(_emit_stmt(s, depth + 1))
+        lines.append(f"{ind}}} {tail}")
+        return "\n".join(lines)
+
     if isinstance(stmt, MatchStmt):
         return _emit_match(stmt, depth)
 

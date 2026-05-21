@@ -365,6 +365,24 @@ class TimeoutBlock(Node):
 
 
 @dataclass
+class TryBlock(Node):
+    """try { ... } or <policy>
+
+    policy:       "retry" | "skip" | "restart"
+    retry_limit:  int | None        # None = unbounded; set only when policy="retry"
+    terminal:     str | None        # "skip" | "restart" | "fail" — required iff retry_limit is set
+    """
+    body: list[Statement] = field(default_factory=list)
+    policy: str = "skip"
+    retry_limit: int | None = None
+    terminal: str | None = None
+    # Filled by later passes:
+    try_id: int = 0                 # unique within the enclosing C function; assigned by transformer
+    needs_context_lift: bool = False  # set by transformer if body yields and retry counter must persist
+    is_yield_point: bool = False    # cached by analyzer; transformer reads this
+
+
+@dataclass
 class MatchStmt(Node):
     """match(state) { .idle -> expr ... }"""
     expr: Expr = None

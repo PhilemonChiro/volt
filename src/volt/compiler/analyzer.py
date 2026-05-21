@@ -137,6 +137,9 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
         if task.tier == "critical":
             _check_critical_safety(task, errors)
 
+    # 4b. Try-block restrictions
+    _check_try_block_restrictions(program, scope, errors)
+
     # 5. Shared state detection
     _detect_shared_state(program, scope, errors)
 
@@ -371,6 +374,155 @@ def _check_critical_safety(task: TaskDecl, errors: CompilerErrors):
                     hint="Move this to a Background or Priority task. "
                          "Share data with the critical task via a volatile variable.",
                 )
+
+
+# ============================================================
+# 4b. Try-block restrictions
+# ============================================================
+
+def _walk_try_blocks(stmts):
+    """Yield every TryBlock node reachable from this statement list."""
+    for s in stmts:
+        if s is None:
+            continue
+        if isinstance(s, TryBlock):
+            yield s
+            yield from _walk_try_blocks(s.body)
+        for attr in ("body", "try_body", "fallback_body", "then_body"):
+            if hasattr(s, attr):
+                inner = getattr(s, attr)
+                if isinstance(inner, list):
+                    yield from _walk_try_blocks(inner)
+        if hasattr(s, "else_body") and isinstance(s.else_body, list):
+            yield from _walk_try_blocks(s.else_body)
+
+
+def _check_try_block_restrictions(program, scope, errors):
+    """Four restrictions on `try` blocks:
+
+      a. Forbidden in critical tasks (the body may contain yielding operations
+         and the counter machinery isn't ISR-safe).
+      b. Forbidden in state-machine enter/exit blocks when the policy is
+         unbounded `or retry` (would hang the state machine mid-transition).
+      c. Mutable state inside a retry'd body: warn that side effects will
+         repeat on each attempt.
+      d. Redundant nesting: a try block whose body is exactly one statement
+         which is itself another try block — merge them.
+    """
+
+    # (a) Critical-task forbiddance
+    for task in program.tasks:
+        if task.tier == "critical":
+            for tb in _walk_try_blocks(task.body):
+                errors.error(
+                    tb.region, "TASK ERROR",
+                    f"`try` blocks are forbidden in critical tasks because "
+                    f"the body may contain yielding operations.",
+                    hint="Move this to a Background or Priority task, or use "
+                         "expression-level `or` clauses at each call site.",
+                )
+
+    # (b) State machine enter/exit + unbounded retry
+    for machine in program.machines:
+        for state in machine.states:
+            for blk_name, blk in (("enter", state.enter_body), ("exit", state.exit_body)):
+                if not blk:
+                    continue
+                for tb in _walk_try_blocks(blk):
+                    if tb.policy == "retry" and tb.retry_limit is None:
+                        errors.error(
+                            tb.region, "STATE MACHINE ERROR",
+                            f"unbounded `or retry` forbidden in state-machine "
+                            f"`{blk_name}` blocks; would hang the transition.",
+                            hint=f"Use bounded retry with an `else` policy: "
+                                 f"`or retry N times else <skip|restart|fail>`.",
+                        )
+
+    # (c) Mutable-state warning + (d) redundant nesting
+    # Walk every body in the program.
+    all_bodies = []
+    for task in program.tasks:
+        all_bodies.append(task.body)
+    if program.setup:
+        all_bodies.append(program.setup.body)
+    if program.loop:
+        all_bodies.append(program.loop.body)
+    for func in program.functions:
+        all_bodies.append(func.body)
+    for machine in program.machines:
+        for state in machine.states:
+            if state.enter_body: all_bodies.append(state.enter_body)
+            if state.exit_body: all_bodies.append(state.exit_body)
+
+    # Collect names whose definition scope is "outside any block" — i.e.
+    # global vars and storage vars. Mutations to these from a retry'd body
+    # are the dangerous ones.
+    outer_names = set(v.name for v in program.global_vars)
+    outer_names.update(s.name for s in program.storage_vars)
+
+    # Channel names — sending to a channel inside retry duplicates the enqueue.
+    channel_names = set(c.name for c in program.channels)
+
+    for body in all_bodies:
+        for tb in _walk_try_blocks(body):
+            # (d) Redundant nesting
+            if len(tb.body) == 1 and isinstance(tb.body[0], TryBlock):
+                errors.warning(
+                    tb.region, "REDUNDANT TRY",
+                    "redundant nested `try` block; merge into outer or remove inner policy.",
+                )
+
+            # (c) Mutable-state warning — only for retry'd bodies
+            if tb.policy != "retry":
+                continue
+            for mutation in _walk_mutations(tb.body, outer_names, channel_names):
+                name, kind, region = mutation
+                if kind == "channel_send":
+                    errors.warning(
+                        region, "RETRY SIDE EFFECT",
+                        f"channel `.send()` on `{name}` inside retry'd `try` block; "
+                        f"each retry re-enqueues.",
+                        hint="Move the send outside the try, or accept the duplication.",
+                    )
+                else:
+                    errors.warning(
+                        region, "RETRY SIDE EFFECT",
+                        f"mutation to `{name}` inside retry'd `try` block; "
+                        f"side effects will repeat on each retry.",
+                        hint="Move the mutation outside the try, or verify the "
+                             "operation is idempotent.",
+                    )
+
+
+def _walk_mutations(stmts, outer_names, channel_names):
+    """Yield (name, kind, region) tuples for every mutation to an outer-scope
+    name inside `stmts`. kind is 'assign', 'compound_assign', or 'channel_send'.
+    """
+    for s in stmts:
+        if s is None:
+            continue
+        if isinstance(s, AssignExpr):
+            if isinstance(s.target, VarRef) and s.target.name in outer_names:
+                yield (s.target.name, "assign", s.region)
+        if isinstance(s, CompoundAssign):
+            if isinstance(s.target, VarRef) and s.target.name in outer_names:
+                yield (s.target.name, "compound_assign", s.region)
+        # ExprStmt wrapping a .send() call
+        if isinstance(s, ExprStmt) and isinstance(s.expr, MethodCall):
+            if s.expr.method == "send" and isinstance(s.expr.obj, VarRef):
+                if s.expr.obj.name in channel_names:
+                    yield (s.expr.obj.name, "channel_send", s.region)
+        # Recurse into nested bodies (but NOT into nested TryBlocks — those
+        # are warned by their own policy if they themselves are retry'd).
+        if isinstance(s, TryBlock):
+            continue
+        for attr in ("body", "try_body", "fallback_body", "then_body"):
+            if hasattr(s, attr):
+                inner = getattr(s, attr)
+                if isinstance(inner, list):
+                    yield from _walk_mutations(inner, outer_names, channel_names)
+        if hasattr(s, "else_body") and isinstance(s.else_body, list):
+            yield from _walk_mutations(s.else_body, outer_names, channel_names)
 
 
 # ============================================================

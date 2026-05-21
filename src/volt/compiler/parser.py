@@ -658,6 +658,57 @@ class ASTBuilder(Transformer):
             region=_region(children[0]),
         )
 
+    # ----- try { ... } or <policy> -----
+    # The Lark rules:
+    #   try_block: "try" block try_or_clause
+    #   try_or_clause:
+    #       "or" "retry" [INT "times" "else" terminal_policy] -> or_retry_clause
+    #     | "or" "skip"     -> or_skip_clause
+    #     | "or" "restart"  -> or_restart_clause
+    # The clause-level methods return a (policy, retry_limit, terminal) tuple
+    # that try_block then unpacks into a TryBlock.
+
+    def try_block(self, children):
+        body = children[0]                          # list[Statement]
+        policy, retry_limit, terminal = children[1] # tuple from try_or_clause
+        # Empty body is a syntax error per the proposal — Lark's "stmt+" already
+        # enforces ≥1 statement at parse time, so by the time we land here body
+        # is non-empty. Keep an assertion in case the grammar drifts.
+        assert body, "try block body must contain at least one statement"
+        return TryBlock(
+            body=body,
+            policy=policy,
+            retry_limit=retry_limit,
+            terminal=terminal,
+            region=_region(children[0][0]) if body else Region(),
+        )
+
+    def or_retry_clause(self, children):
+        # Lark's optional bracket can yield either an empty children list
+        # OR a [None, None] pair (depending on version + whether the optional
+        # group has captured children). Treat any falsy-first-child as unbounded.
+        if not children or children[0] is None:
+            return ("retry", None, None)
+        # Bounded: [INT, terminal_policy_string]
+        limit = int(children[0])
+        terminal = children[1]
+        return ("retry", limit, terminal)
+
+    def or_skip_clause(self, _children):
+        return ("skip", None, None)
+
+    def or_restart_clause(self, _children):
+        return ("restart", None, None)
+
+    def term_skip(self, _children):
+        return "skip"
+
+    def term_restart(self, _children):
+        return "restart"
+
+    def term_fail(self, _children):
+        return "fail"
+
     def match_stmt(self, children):
         expr = children[0]
         arms = [c for c in children[1:] if isinstance(c, MatchArm)]

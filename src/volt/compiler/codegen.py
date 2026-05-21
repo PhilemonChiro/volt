@@ -292,6 +292,11 @@ class CCodeGen:
         self._enum_types: dict = {}  # enum_name -> [variant_names]
         self._skip_counters: set = set()  # skip counter names for or-skip sites
         self._storage_str_buf_count: int = 0  # storage.load_str() buffer count
+        # try-block: ID counter for emitting unique labels. Step 5 will move
+        # this to a per-task counter assigned by the transformer; for steps 3-4
+        # a single global counter is enough because labels don't collide
+        # across C functions (labels are function-scoped in C).
+        self._try_counter: int = 0
 
         # Section 1: Header
         self._emit_header(program)
@@ -1191,6 +1196,134 @@ class CCodeGen:
         for stmt in stmts:
             self._emit_stmt(stmt, ctx_prefix, crossing_vars or [], use_freertos_delay)
 
+    def _is_error_returning_call_stmt(self, stmt) -> bool:
+        """Is this statement an expression statement whose top-level expression
+        is a function or method call? Such statements can return error_t and
+        should be wrapped with an error check inside a try block."""
+        if isinstance(stmt, ExprStmt) and isinstance(stmt.expr, (FuncCall, MethodCall)):
+            # sleep() is a yield primitive, not an error-returning call.
+            if isinstance(stmt.expr, FuncCall) and stmt.expr.name == "sleep":
+                return False
+            return True
+        return False
+
+    def _emit_try_block(self, stmt, ctx_prefix, cv, use_freertos_delay):
+        """Emit a try { ... } or <policy> block.
+
+        Three skeleton shapes:
+          - or skip:    error → goto _try_N_end, fall through
+          - or restart: error → system_restart() (matches expression-level
+                                 `or restart` semantics; full device reboot)
+          - or retry:   error → goto _try_N_start; for bounded, also a
+                                 counter + terminal dispatch (step 5)
+        """
+        tid = stmt.try_id if stmt.try_id else self._try_counter
+        self._try_counter += 1
+        # Use the assigned try_id if the transformer filled it, otherwise our
+        # local counter. Either way `tid` is now stable for this block.
+        end_label = f"_try_{tid}_end"
+        start_label = f"_try_{tid}_start"
+
+        self._line_directive(stmt)
+        self._out("{")
+        self.indent += 1
+        self._out("volt_error_t _try_err = VOLT_OK;")
+        self._out("(void)_try_err;")
+
+        if stmt.policy == "skip":
+            for body_stmt in stmt.body:
+                self._emit_try_body_stmt(body_stmt, end_label, ctx_prefix, cv, use_freertos_delay)
+            self._out(f"{end_label}: ;")
+
+        elif stmt.policy == "restart":
+            # On any error, call system_restart() — matches expression-level
+            # `or restart`. The label still exists so any later step that
+            # adds explicit goto-end has a target.
+            for body_stmt in stmt.body:
+                if self._is_error_returning_call_stmt(body_stmt):
+                    call_str = self._emit_expr_str(body_stmt.expr, ctx_prefix, cv)
+                    self._out(f"if ((_try_err = {call_str}) != VOLT_OK) {{ system_restart(); }}")
+                else:
+                    self._emit_stmts([body_stmt], ctx_prefix, cv, use_freertos_delay)
+            self._out(f"{end_label}: ;")
+
+        elif stmt.policy == "retry" and stmt.retry_limit is None:
+            # Unbounded retry: single label, loop on error.
+            self._out(f"{start_label}:")
+            for body_stmt in stmt.body:
+                self._emit_try_body_stmt(body_stmt, start_label, ctx_prefix, cv, use_freertos_delay)
+            self._out(f"{end_label}: ;")
+
+        elif stmt.policy == "retry" and stmt.retry_limit is not None:
+            # Bounded retry: counter + entry-from-outside / entry-from-retry
+            # label pair + terminal dispatch.
+            #
+            # Counter lives in the task's context struct if the body might
+            # yield (protothread re-entry resets stack frames otherwise);
+            # else it lives on the C function stack.
+            check_label = f"_try_{tid}_check"
+            counter_ref = (
+                f"{ctx_prefix or 'ctx->'}_try_attempts_{tid}"
+                if stmt.needs_context_lift
+                else f"_try_attempts_{tid}"
+            )
+            if not stmt.needs_context_lift:
+                # Local: declaration initializes; no separate zeroing needed.
+                self._out(f"int32_t _try_attempts_{tid} = 0;")
+            else:
+                # Context-lifted: zero on entry from outside (retry path
+                # skips by jumping to start_label below).
+                self._out(f"{counter_ref} = 0;")
+            self._out(f"{start_label}:")
+            for body_stmt in stmt.body:
+                self._emit_try_body_stmt(body_stmt, check_label, ctx_prefix, cv, use_freertos_delay)
+            self._out(f"goto {end_label};")
+            self._out(f"{check_label}:")
+            self.indent += 1
+            self._out(f"if (++{counter_ref} < {stmt.retry_limit}) goto {start_label};")
+            # Exhaustion: dispatch terminal policy
+            self._emit_try_terminal(stmt.terminal, end_label, use_freertos_delay)
+            self.indent -= 1
+            self._out(f"{end_label}: ;")
+
+        self.indent -= 1
+        self._out("}")
+
+    def _emit_try_body_stmt(self, body_stmt, on_err_label, ctx_prefix, cv, use_freertos_delay):
+        """Emit one statement inside a try body. If it's an error-returning
+        call, wrap with an error check that branches to on_err_label on failure.
+        Otherwise emit the statement normally."""
+        if self._is_error_returning_call_stmt(body_stmt):
+            call_str = self._emit_expr_str(body_stmt.expr, ctx_prefix, cv)
+            self._out(f"if ((_try_err = {call_str}) != VOLT_OK) goto {on_err_label};")
+        else:
+            self._emit_stmts([body_stmt], ctx_prefix, cv, use_freertos_delay)
+
+    def _emit_try_terminal(self, terminal: str, end_label: str, use_freertos_delay: bool):
+        """Emit the terminal dispatch for bounded retry exhaustion.
+
+        - skip:    goto past the block, continue execution.
+        - restart: system_restart() — full device reboot (matches expression-
+                   level `or restart` semantics).
+        - fail:    log + end the task. In a protothread context this means
+                   marking the task DONE and returning so the scheduler stops
+                   calling it. In setup/loop context, a plain return; ends the
+                   block early.
+        """
+        if terminal == "skip":
+            self._out(f"goto {end_label};")
+        elif terminal == "restart":
+            self._out("system_restart();")
+        elif terminal == "fail":
+            self._out('log_error("try", "exhausted retries");')
+            if use_freertos_delay:
+                # setup/priority/loop — no protothread state to manage
+                self._out("return;")
+            else:
+                # background protothread — mark DONE so scheduler stops invoking
+                self._out("_vt->status = VOLT_TASK_DONE;")
+                self._out("return;")
+
     def _emit_stmt(
         self,
         stmt,
@@ -1433,6 +1566,9 @@ class CCodeGen:
             self._out("}")
             self.indent -= 1
             self._out("}")
+
+        elif isinstance(stmt, TryBlock):
+            self._emit_try_block(stmt, ctx_prefix, cv, use_freertos_delay)
 
     # ============================================================
     # Expression emission

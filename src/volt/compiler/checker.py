@@ -588,6 +588,48 @@ def _check_stmts(stmts: list, scope: Scope, errors: CompilerErrors,
         _check_stmt(stmt, scope, errors, expected_return)
 
 
+def _body_has_call(stmts: list) -> bool:
+    """True if any statement in the body (or nested expression) is or
+    contains a function/method call. Used by the TryBlock dead-policy
+    warning — a body with no calls cannot return error_t, so the policy
+    can never fire."""
+    def walk_expr(e) -> bool:
+        if e is None:
+            return False
+        if isinstance(e, (FuncCall, MethodCall)):
+            return True
+        if not hasattr(e, "__dict__"):
+            return False
+        for v in e.__dict__.values():
+            if isinstance(v, list):
+                if any(walk_expr(x) for x in v):
+                    return True
+            elif walk_expr(v):
+                return True
+        return False
+
+    def walk_stmt(s) -> bool:
+        if s is None:
+            return False
+        if isinstance(s, ExprStmt):
+            return walk_expr(s.value if hasattr(s, "value") else s.expr if hasattr(s, "expr") else None)
+        if isinstance(s, VarDecl):
+            return walk_expr(s.value)
+        if isinstance(s, AssignExpr):
+            return walk_expr(s.value)
+        if isinstance(s, IfStmt):
+            return any(walk_stmt(x) for x in s.then_body) or any(walk_stmt(x) for x in (s.else_body or []))
+        # Nested blocks: recurse into common "has body" attributes
+        for attr in ("body", "try_body", "fallback_body"):
+            if hasattr(s, attr):
+                inner = getattr(s, attr)
+                if isinstance(inner, list) and any(walk_stmt(x) for x in inner):
+                    return True
+        return False
+
+    return any(walk_stmt(s) for s in stmts)
+
+
 def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                  expected_return: str | None):
     if stmt is None:
@@ -800,6 +842,23 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                          f"Timeout must be a duration, got `{dur_type}`.")
         _check_stmts(stmt.try_body, scope, errors, expected_return)
         _check_stmts(stmt.fallback_body, scope, errors, expected_return)
+
+    elif isinstance(stmt, TryBlock):
+        _check_stmts(stmt.body, scope, errors, expected_return)
+        # Dead-policy warning: if no body statement contains a call (function
+        # or method), no error_t can be produced and the policy never fires.
+        # Conservative — we don't introspect the call's return type, just its
+        # presence. False negatives (a call that's actually total) are an
+        # acceptable trade for catching genuine "purely synchronous body" mistakes.
+        if not _body_has_call(stmt.body):
+            policy_str = stmt.policy if stmt.retry_limit is None else f"retry {stmt.retry_limit} times"
+            errors.warning(
+                stmt.region, "DEAD POLICY",
+                f"`try` block has no error-returning statements; "
+                f"`or {policy_str}` is dead code.",
+                hint="Remove the `try` wrapper, or add a call that can fail "
+                     "(wifi/mqtt/storage/device-init).",
+            )
 
     elif isinstance(stmt, MatchStmt):
         _infer(stmt.expr, scope, errors)

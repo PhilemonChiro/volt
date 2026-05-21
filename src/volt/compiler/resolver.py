@@ -321,6 +321,12 @@ def _resolve_stmt(stmt, scope: Scope, errors: CompilerErrors):
         _resolve_stmts(stmt.try_body, scope, errors)
         _resolve_stmts(stmt.fallback_body, scope, errors)
 
+    elif isinstance(stmt, TryBlock):
+        # `let` declarations inside the body are scoped to the block.
+        # The parent scope sees no new symbols.
+        inner = Scope(parent=scope, name="try")
+        _resolve_stmts(stmt.body, inner, errors)
+
     elif isinstance(stmt, MatchStmt):
         _resolve_expr(stmt.expr, scope, errors)
         for arm in stmt.arms:

@@ -198,6 +198,7 @@ _inline_stmt: var_decl
     | every_block
     | on_block
     | timeout_block
+    | try_block
     | break_stmt _NL
     | continue_stmt _NL
 
@@ -253,11 +254,29 @@ debounce_clause: "debounce" expr
 
 throttle_clause: "throttle" expr
 
-// Timeout: timeout 10s { try } else { fallback }
-// v1 compat: timeout 10s { try } { fallback }
+// Timeout: timeout 10s { primary_block } else { fallback }
+// v1 compat: timeout 10s { primary_block } { fallback }
 timeout_block: "timeout" expr block TIMEOUT_ELSE? block
 
 TIMEOUT_ELSE.5: "else"
+
+// Try-block error handling — block form of `or retry/skip/restart`.
+//   try { ... } or skip                            // fall through on error
+//   try { ... } or restart                         // reboot task on error
+//   try { ... } or retry                           // unbounded loop
+//   try { ... } or retry N times else <terminal>   // bounded; required else
+// Disambiguated form: optional bracket on the retry tail lets LALR(1)
+// pick between unbounded `or retry` and bounded `or retry N times else ...`
+// with a single lookahead.
+try_block: "try" block try_or_clause
+
+try_or_clause: "or" "retry" [INT "times" "else" terminal_policy] -> or_retry_clause
+    | "or" "skip" -> or_skip_clause
+    | "or" "restart" -> or_restart_clause
+
+?terminal_policy: "skip" -> term_skip
+    | "restart" -> term_restart
+    | "fail" -> term_fail
 
 // Match: match(state) { .idle -> ... .active -> ... }
 match_stmt: "match" "(" expr ")" "{" (_NL | match_arm)* "}"

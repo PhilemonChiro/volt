@@ -57,18 +57,31 @@ def transform(program: Program) -> Program:
     context_structs = []
 
     for task in expanded_tasks:
-        if task.tier == "background" and task.crossing_vars:
-            ctx_struct = _build_context_struct(task)
-            context_structs.append(ctx_struct)
-
         # Inline yielding functions
         new_body = _inline_yielding_calls(task.body, func_map)
+
+        # Assign try_ids and decide context-lift for retry counters.
+        # Background tasks lift (protothread re-entry resets stack frames);
+        # priority/critical run as plain functions and don't need lifting.
+        try_counter = YieldCounter()
+        new_body = _assign_try_ids(new_body, try_counter,
+                                   lift_when_call=(task.tier == "background"))
 
         # Assign yield labels
         counter = YieldCounter()
         new_body = _assign_yield_labels(new_body, counter)
 
-        new_tasks.append(replace(task, body=new_body))
+        # Replace body BEFORE building context struct so the struct sees
+        # the up-to-date TryBlock metadata.
+        task = replace(task, body=new_body)
+
+        if task.tier == "background" and (task.crossing_vars or
+                                          any(tb.needs_context_lift
+                                              for tb in _all_try_blocks(task.body))):
+            ctx_struct = _build_context_struct(task)
+            context_structs.append(ctx_struct)
+
+        new_tasks.append(task)
 
     # Desugar match statements in all bodies
     new_tasks = [replace(t, body=_desugar_match_stmts(t.body)) for t in new_tasks]
@@ -197,7 +210,7 @@ def _split_multi_every(task: TaskDecl) -> list[TaskDecl]:
 # ============================================================
 
 def _build_context_struct(task: TaskDecl) -> StructDecl:
-    """Build a context struct for lifted variables."""
+    """Build a context struct for lifted variables and try-block retry counters."""
     fields = []
     for var in _all_var_decls(task.body):
         if var.name in task.crossing_vars:
@@ -206,11 +219,101 @@ def _build_context_struct(task: TaskDecl) -> StructDecl:
                 type_name=var.type_name or "int",
                 region=var.region,
             ))
+    # Lifted try-block retry counters — one int32 per bounded-retry try
+    # block whose body yields. Set by _assign_try_ids() during transform.
+    for tb in _all_try_blocks(task.body):
+        if tb.needs_context_lift:
+            fields.append(FieldDecl(
+                name=f"_try_attempts_{tb.try_id}",
+                type_name="int",
+                region=tb.region,
+            ))
     return StructDecl(
         name=f"{task.name}_ctx_t",
         fields=fields,
         region=task.region,
     )
+
+
+def _all_try_blocks(stmts: list):
+    """Yield every TryBlock node reachable from this statement list."""
+    for s in stmts:
+        if s is None:
+            continue
+        if isinstance(s, TryBlock):
+            yield s
+            yield from _all_try_blocks(s.body)
+        for attr in ("body", "try_body", "fallback_body", "then_body", "else_body"):
+            if hasattr(s, attr):
+                inner = getattr(s, attr)
+                if isinstance(inner, list):
+                    yield from _all_try_blocks(inner)
+
+
+def _stmts_contain_call(stmts: list) -> bool:
+    """True iff any expression statement in this list contains a FuncCall or
+    MethodCall. Used to decide whether a try block's retry counter must lift
+    to the task's context struct — calls might internally yield, and a
+    yielding body means the protothread re-enters from outside the block,
+    which would reset a stack-local counter to zero on every retry."""
+    def walk(node) -> bool:
+        if node is None:
+            return False
+        if isinstance(node, (FuncCall, MethodCall)):
+            return True
+        if hasattr(node, "__dict__"):
+            for v in node.__dict__.values():
+                if isinstance(v, list):
+                    if any(walk(x) for x in v):
+                        return True
+                elif walk(v):
+                    return True
+        return False
+    return any(walk(s) for s in stmts)
+
+
+def _assign_try_ids(stmts: list, counter, lift_when_call: bool):
+    """Walk statements, assign unique try_id per TryBlock encountered, and
+    decide whether the retry counter needs to lift to the context struct.
+
+    Args:
+      counter: a YieldCounter (or any .next() provider) to allocate IDs.
+      lift_when_call: True for background protothread tasks (where yields
+        across the try body reset stack-local counters). False for setup,
+        priority tasks, and the main loop where the function never re-enters.
+
+    Returns the (possibly transformed) list of statements with try_ids assigned.
+    """
+    out = []
+    for s in stmts:
+        if s is None:
+            out.append(s); continue
+        if isinstance(s, TryBlock):
+            # Assign before recursing so nested try IDs are unique.
+            tid = counter.next()
+            new_body = _assign_try_ids(s.body, counter, lift_when_call)
+            lift = (
+                s.policy == "retry"
+                and s.retry_limit is not None
+                and lift_when_call
+                and _stmts_contain_call(new_body)
+            )
+            out.append(replace(s, body=new_body, try_id=tid,
+                               needs_context_lift=lift,
+                               is_yield_point=_stmts_contain_call(new_body)))
+            continue
+        # Recurse into the usual nested-body attributes.
+        new_s = s
+        for attr in ("body", "try_body", "fallback_body", "then_body"):
+            if hasattr(s, attr):
+                inner = getattr(s, attr)
+                if isinstance(inner, list):
+                    new_s = replace(new_s, **{attr: _assign_try_ids(inner, counter, lift_when_call)})
+        # else_body can be either a list or a single IfStmt
+        if hasattr(s, "else_body") and isinstance(s.else_body, list):
+            new_s = replace(new_s, else_body=_assign_try_ids(s.else_body, counter, lift_when_call))
+        out.append(new_s)
+    return out
 
 
 # ============================================================
@@ -408,6 +511,11 @@ def _assign_yield_labels(stmts: list, counter: YieldCounter) -> list:
                 fallback_body=_assign_yield_labels(stmt.fallback_body, counter))
             new_stmt._yield_label = counter.next()
             result.append(new_stmt)
+        elif isinstance(stmt, TryBlock):
+            # Yield labels inside the body still need assigning so any
+            # sleep()/etc. inside a try gets a proper protothread label.
+            new_body = _assign_yield_labels(stmt.body, counter)
+            result.append(replace(stmt, body=new_body))
         elif isinstance(stmt, IfStmt):
             new_then = _assign_yield_labels(stmt.then_body, counter)
             new_else = None

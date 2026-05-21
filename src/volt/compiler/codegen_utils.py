@@ -156,6 +156,8 @@ def _sub_bodies(stmt):
     elif isinstance(stmt, TimeoutBlock):
         yield stmt.try_body
         yield stmt.fallback_body
+    elif isinstance(stmt, TryBlock):
+        yield stmt.body
     elif isinstance(stmt, MatchStmt):
         for arm in stmt.arms:
             if isinstance(arm.body, list):
