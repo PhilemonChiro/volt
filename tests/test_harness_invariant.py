@@ -32,16 +32,57 @@ TRIVIAL = (
 )
 
 
-# The set of (module_path, function_name) pairs that constitute "a compiler
-# pass." If a new pass is added later, append it here AND wire it into both
-# the real CLI and compile_to_c — this test will fail until both sides match.
-PASSES = [
-    ("volt.compiler.parser",      "parse"),
-    ("volt.compiler.resolver",    "resolve"),
-    ("volt.compiler.checker",     "check_types"),
-    ("volt.compiler.analyzer",    "analyze"),
-    ("volt.compiler.transformer", "transform"),
-]
+def _discover_real_passes() -> list:
+    """Return the list of (defining_module, function_name) pairs that
+    constitute "a compiler pass the real CLI invokes." Derived dynamically:
+
+      1. Inspect voltc.compile_volt's source — find every top-level
+         function call it makes (ast.Call nodes with ast.Name funcs).
+      2. Intersect with voltc's module globals — keep only names that
+         resolve to callables defined in a volt.compiler.* submodule
+         (so we exclude builtins, locals, helpers from non-compiler
+         packages, and voltc's own private helpers).
+
+    The result is whatever voltc.compile_volt actually calls today —
+    no hardcoded list to drift out of sync. Add a new pass to
+    compile_volt and it shows up here automatically; forget to wire
+    it into the brutal helper and the invariant test will fail with a
+    pointer to the new pass.
+    """
+    import ast as pyast
+    import inspect
+    from volt.compiler import voltc
+
+    source = inspect.getsource(voltc.compile_volt)
+    # Each top-level def in a function body gets re-indented when fetched
+    # via inspect.getsource; AST parsing handles that fine.
+    tree = pyast.parse(source)
+    call_names = set()
+    for node in pyast.walk(tree):
+        if isinstance(node, pyast.Call) and isinstance(node.func, pyast.Name):
+            call_names.add(node.func.id)
+
+    passes = []
+    voltc_globals = vars(voltc)
+    for name in call_names:
+        obj = voltc_globals.get(name)
+        if obj is None or not callable(obj):
+            continue
+        mod_name = getattr(obj, "__module__", "") or ""
+        if not mod_name.startswith("volt.compiler."):
+            continue
+        if mod_name == "volt.compiler.voltc":
+            continue  # voltc's own helpers — not a "pass"
+        # Skip type/class constructors — CompilerErrors etc.; we want
+        # the pipeline-pass functions, not data-class instantiations.
+        if isinstance(obj, type):
+            continue
+        import sys as _sys
+        passes.append((_sys.modules[mod_name], name))
+    return sorted(passes, key=lambda p: p[1])
+
+
+PASSES = _discover_real_passes()
 
 
 def _called_passes_running(callable_under_test) -> set:
@@ -76,8 +117,7 @@ def _called_passes_running(callable_under_test) -> set:
 
     originals = []
     try:
-        for mod_path, fname in PASSES:
-            mod = importlib.import_module(mod_path)
+        for mod, fname in PASSES:
             orig = getattr(mod, fname)
             wrapper = make_recorder(fname, orig)
             # (1) Defining module

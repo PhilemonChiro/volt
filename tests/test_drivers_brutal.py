@@ -33,7 +33,7 @@ from volt.compiler.parser   import parse           # noqa: E402
 from volt.compiler.resolver import resolve         # noqa: E402
 from volt.compiler.checker  import check_types     # noqa: E402
 from volt.compiler.analyzer import analyze         # noqa: E402
-from volt.compiler.codegen  import CCodeGen        # noqa: E402
+from volt.compiler.codegen  import generate        # noqa: E402
 from volt.compiler.errors   import CompilerErrors  # noqa: E402
 from volt.compiler.device_registry import get_registry  # noqa: E402
 
@@ -81,8 +81,9 @@ def compile_to_c(source: str):
         errors.errors.append(type("E", (), {"severity": "error", "message": f"transform: {e}"})())
         return errors, ""
     try:
-        gen = CCodeGen()
-        c = gen.generate(ast)
+        # Match the real CLI entry point (voltc.compile_volt) — avoid
+        # bypassing the module-level wrapper.
+        c = generate(ast)
     except Exception as e:
         errors.errors.append(type("E", (), {"severity": "error", "message": f"codegen: {e}"})())
         return errors, ""
