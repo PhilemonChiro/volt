@@ -807,6 +807,11 @@ class CCodeGen:
         for var in machine.variables:
             c_type = TYPE_MAP.get(var.type_name, "int32_t")
             self._out(f"{c_type} {_c_name(var.name)};")
+        # Lifted try-block retry counters. Machines re-enter on every
+        # scheduler tick, so a stack-local counter resets on each entry
+        # and the bound never trips. Lift to the machine's own context.
+        for tb in self._machine_lifted_try_blocks(machine):
+            self._out(f"int32_t _try_attempts_{tb.try_id};")
         self.indent -= 1
         self._out(f"}} {name}_ctx_t;")
         self._out("")
@@ -1871,6 +1876,28 @@ class CCodeGen:
     def _uses_critical_task(self, prog):
         """True if program has any critical (strict) tasks — needs IRAM_ATTR."""
         return any(getattr(t, "tier", "") == "critical" for t in prog.tasks)
+
+    def _machine_lifted_try_blocks(self, machine):
+        """Yield every TryBlock inside this machine whose retry counter must
+        live in the machine's context struct (bounded retry with calls in
+        the body — see _assign_try_ids in the transformer)."""
+        def walk(stmts):
+            for s in stmts or []:
+                if isinstance(s, TryBlock):
+                    if s.needs_context_lift:
+                        yield s
+                    yield from walk(s.body)
+                for attr in ("body", "try_body", "fallback_body", "then_body"):
+                    if hasattr(s, attr):
+                        inner = getattr(s, attr)
+                        if isinstance(inner, list):
+                            yield from walk(inner)
+                if hasattr(s, "else_body") and isinstance(s.else_body, list):
+                    yield from walk(s.else_body)
+        for state in machine.states:
+            yield from walk(state.enter_body)
+            yield from walk(state.exit_body)
+            yield from walk(state.body)
 
     # ---- String concatenation with non-string types ----
 

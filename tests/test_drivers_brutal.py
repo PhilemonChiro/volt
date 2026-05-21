@@ -71,6 +71,15 @@ def compile_to_c(source: str):
         return errors, ""
     if errors.has_errors:
         return errors, ""
+    # Pass 6 — transformer. Mirrors voltc.py: required for yield labels,
+    # context-struct lifting, function inlining, match desugaring. Skipping
+    # this used to hide bugs (e.g., try-block try_id always 0).
+    try:
+        from volt.compiler.transformer import transform
+        ast = transform(ast)
+    except Exception as e:
+        errors.errors.append(type("E", (), {"severity": "error", "message": f"transform: {e}"})())
+        return errors, ""
     try:
         gen = CCodeGen()
         c = gen.generate(ast)

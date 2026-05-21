@@ -168,6 +168,36 @@ class AnalyzerRestrictions(unittest.TestCase):
             [e.message for e in errors.errors],
         )
 
+    def test_state_machine_retry_counter_lifts_to_machine_ctx(self):
+        """When a bounded-retry try block lives inside a state-machine enter
+        block AND its body contains a call (which may yield), the retry counter
+        MUST live in the machine's context struct. A stack-local counter would
+        reset on every scheduler re-entry of m_run, defeating the bound."""
+        src = (
+            "chip esp32\n"
+            "hardware { pin led: Output = 4 }\n"
+            "machine m {\n"
+            "    state a {\n"
+            "        enter { try { wifi.connect(\"a\",\"b\") } or retry 3 times else skip }\n"
+            "        after 1s -> b\n"
+            "    }\n"
+            "    state b { enter { led.on() } }\n"
+            "}\n"
+        )
+        errors, c = compile_to_c(src)
+        self.assertFalse(errors.has_errors, [e.message for e in errors.errors])
+        # The machine's context struct must include the counter field.
+        # _try_attempts_<N> for some N (transformer numbers them per-machine).
+        import re
+        self.assertTrue(
+            re.search(r"typedef struct \{[^}]*int32_t _try_attempts_\d+;[^}]*\} m_ctx_t;", c, re.S),
+            "machine context struct must include _try_attempts_<N>",
+        )
+        # The counter increment/check must dereference ctx->, not a local.
+        self.assertIn("ctx->_try_attempts_", c)
+        self.assertNotIn("int32_t _try_attempts_0 = 0;", c)  # would be stack-local
+        self.assertNotIn("int32_t _try_attempts_1 = 0;", c)
+
     def test_mutable_global_inside_retry_warns(self):
         src = (
             "chip esp32\n"

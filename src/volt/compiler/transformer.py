@@ -83,6 +83,25 @@ def transform(program: Program) -> Program:
 
         new_tasks.append(task)
 
+    # Assign try-ids inside state machines too. Machines re-enter across
+    # yields (the scheduler calls m_run repeatedly), so any bounded-retry
+    # try block whose body contains a call needs its counter lifted to
+    # the machine's own context struct — otherwise the stack-local counter
+    # resets on every re-entry and the bound never trips.
+    new_machines = []
+    for machine in program.machines:
+        new_states = []
+        m_try_counter = YieldCounter()
+        for state in machine.states:
+            new_enter = _assign_try_ids(state.enter_body, m_try_counter, lift_when_call=True) if state.enter_body else state.enter_body
+            new_exit = _assign_try_ids(state.exit_body, m_try_counter, lift_when_call=True) if state.exit_body else state.exit_body
+            new_body = _assign_try_ids(state.body, m_try_counter, lift_when_call=True) if state.body else state.body
+            new_states.append(replace(state,
+                                      enter_body=new_enter,
+                                      exit_body=new_exit,
+                                      body=new_body))
+        new_machines.append(replace(machine, states=new_states))
+
     # Desugar match statements in all bodies
     new_tasks = [replace(t, body=_desugar_match_stmts(t.body)) for t in new_tasks]
     new_funcs = [replace(f, body=_desugar_match_stmts(f.body)) for f in program.functions]
@@ -102,6 +121,7 @@ def transform(program: Program) -> Program:
     return replace(program,
                    tasks=new_tasks,
                    functions=new_funcs,
+                   machines=new_machines,
                    structs=all_structs,
                    setup=new_setup,
                    loop=new_loop)
