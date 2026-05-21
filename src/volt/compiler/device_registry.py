@@ -40,6 +40,9 @@ class DeviceInfo:
         self.description = data.get("description", "")
         self.c_prefix = data.get("c_prefix", self.name.lower())
         self.c_source = data.get("c_source", "")
+        # Optional init-arg template. Placeholders: {pin}, {addr}, {bus_id}.
+        # If omitted, codegen picks a default shape per interface.
+        self.init_args = data.get("init_args", "")
         self.methods = {}
 
         for method_name, method_data in data.get("methods", {}).items():

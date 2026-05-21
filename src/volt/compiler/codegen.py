@@ -1042,19 +1042,46 @@ class CCodeGen:
                 self._out("")
 
             # Sensor initialization
-            # Build bus type lookup for correct init args
+            # Build bus type lookup for correct init args. Devices anchored
+            # on a GPIO pin have no entry here; they use the device's own
+            # interface (gpio) from the registry.
             bus_types = {}
             for bus in program.hardware.buses:
                 bus_types[bus.name] = bus.bus_type.lower()
+            try:
+                from .device_registry import get_registry
+                _reg = get_registry()
+            except Exception:
+                _reg = None
             for sensor in program.hardware.sensors:
                 stype = self._c_prefix(sensor.sensor_type)
-                bus_type = bus_types.get(sensor.bus_name, "i2c")
+                dev_info = _reg.get(sensor.sensor_type) if _reg else None
+                # Pick interface in priority order:
+                # 1. The bus this device is on (i2c/spi/uart) — bus wins because
+                #    the same chip can be either I2C or SPI depending on wiring.
+                # 2. The device.json `interface` field — for GPIO-anchored devices.
+                # 3. Fall back to "i2c" (legacy default).
+                iface = bus_types.get(sensor.bus_name)
+                if iface is None:
+                    iface = (dev_info.interface if dev_info else "i2c").lower()
                 self._out(f"// Device: {sensor.name} ({sensor.sensor_type})")
-                if bus_type == "spi":
-                    # SPI devices: third arg is CS pin, not I2C address
+                template = (dev_info.init_args if dev_info else "") or ""
+                if template:
+                    # Device-specific init template — e.g. "{pin}, 22" for DHT22.
+                    args = template.format(
+                        pin=sensor.address,
+                        addr=sensor.address,
+                        bus_id=0,
+                    )
+                    self._out(f"{stype}_init(&_{sensor.name}, {args});")
+                elif iface == "spi":
                     self._out(
                         f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // cs_pin={sensor.address}"
                     )
+                elif iface == "gpio":
+                    self._out(f"{stype}_init(&_{sensor.name}, {sensor.address});  // pin={sensor.address}")
+                elif iface in ("uart", "serial"):
+                    self._out(f"{stype}_init(&_{sensor.name}, 0);  // uart bus")
                 else:
                     self._out(
                         f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // i2c_addr=0x{sensor.address:02x}"

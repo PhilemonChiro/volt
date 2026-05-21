@@ -6,6 +6,7 @@
   "description": "Basic temperature and humidity",
   "c_prefix": "dht",
   "c_source": "gpio_dht.c",
+  "init_args": "{pin}, 11",
   "methods": {
     "temperature": {
       "returns": "float",

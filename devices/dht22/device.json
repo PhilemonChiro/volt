@@ -1,11 +1,12 @@
 {
   "name": "DHT22",
   "category": "sensor",
-  "interface": "i2c",
-  "default_address": "0x00",
-  "description": "Temperature and humidity (legacy)",
-  "c_prefix": "dht22",
+  "interface": "gpio",
+  "default_address": "",
+  "description": "Temperature and humidity (AM2302, higher precision than DHT11)",
+  "c_prefix": "dht",
   "c_source": "",
+  "init_args": "{pin}, 22",
   "methods": {
     "temperature": {
       "returns": "float",
