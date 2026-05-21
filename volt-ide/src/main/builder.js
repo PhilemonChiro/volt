@@ -35,6 +35,16 @@ function frameworkDir(chip) {
             if (fs.existsSync(bundledInclude) && !fs.existsSync(userInclude)) {
                 fs.cpSync(bundledInclude, userInclude, { recursive: true });
             }
+            // And devices/ — needed because main/CMakeLists.txt has
+            // file(GLOB "../../../devices/*/driver.c") which resolves to
+            // ~/.volt/sdk/devices/*/driver.c. Without this the link step
+            // can't find aht20_init, hd44780_init, etc.
+            const bundledDevices = path.join(process.resourcesPath, "sdk", "devices");
+            const userDevices = path.join(os.homedir(), ".volt", "sdk", "devices");
+            if (fs.existsSync(bundledDevices) && !fs.existsSync(userDevices)) {
+                console.log(`[framework] copying bundled devices → ${userDevices}`);
+                fs.cpSync(bundledDevices, userDevices, { recursive: true });
+            }
         }
     }
 
