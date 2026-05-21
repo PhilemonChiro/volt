@@ -648,11 +648,24 @@ class CCodeGen:
                 )
                 self._out("")
 
+    def _c_prefix(self, sensor_type: str) -> str:
+        """Resolve the C-side symbol prefix for a Volt sensor_type.
+        Aliases like LCD16x2/LCD20x4 → hd44780 are honoured via the device
+        registry; without an entry we fall back to the lowercased type."""
+        try:
+            from .device_registry import get_registry
+            dev = get_registry().get(sensor_type)
+            if dev and dev.c_prefix:
+                return dev.c_prefix
+        except Exception:
+            pass
+        return sensor_type.lower()
+
     def _emit_sensor_instances(self, program: Program):
         if program.hardware and program.hardware.sensors:
             self._out("// Sensor instances")
             for sensor in program.hardware.sensors:
-                stype = sensor.sensor_type.lower()
+                stype = self._c_prefix(sensor.sensor_type)
                 self._out(f"static {stype}_t _{sensor.name} = {{0}};")
             self._out("")
 
@@ -1034,7 +1047,7 @@ class CCodeGen:
             for bus in program.hardware.buses:
                 bus_types[bus.name] = bus.bus_type.lower()
             for sensor in program.hardware.sensors:
-                stype = sensor.sensor_type.lower()
+                stype = self._c_prefix(sensor.sensor_type)
                 bus_type = bus_types.get(sensor.bus_name, "i2c")
                 self._out(f"// Device: {sensor.name} ({sensor.sensor_type})")
                 if bus_type == "spi":
@@ -1829,8 +1842,8 @@ class CCodeGen:
                 key = (stype, method)
                 if key in METHOD_MAP:
                     return METHOD_MAP[key].format(sensor=f"&_{obj}", args="")
-                # Fallback: use c_prefix from sensor type
-                return f"{stype.lower()}_{method}(&_{obj})"
+                # Fallback: use c_prefix from sensor type via the registry
+                return f"{self._c_prefix(stype)}_{method}(&_{obj})"
             return f"{obj}_{method}()"
 
         # Handle simple variable reference with ctx prefix
