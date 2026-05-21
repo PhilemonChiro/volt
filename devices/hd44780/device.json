@@ -6,6 +6,7 @@
   "description": "16x2/20x4 character LCD",
   "c_prefix": "hd44780",
   "c_source": "display_hd44780.c",
+  "init_args": "0, {addr}, 16, 2",
   "methods": {
     "clear": {
       "returns": "void",

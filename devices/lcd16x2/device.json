@@ -6,6 +6,7 @@
   "description": "16x2 character LCD display (I2C backpack)",
   "c_prefix": "hd44780",
   "c_source": "",
+  "init_args": "0, {addr}, 16, 2",
   "methods": {
     "clear": {
       "returns": "void",

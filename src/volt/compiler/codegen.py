@@ -455,6 +455,19 @@ class CCodeGen:
             spi_types = {"MAX31855", "MCP3008", "W25Q"}
             if any(s.sensor_type in spi_types for s in program.hardware.sensors):
                 self._out('#include "volt/spi_devices.h"')
+            # GPIO-bound devices (DHT11, DHT22, HC-SR04, …) live in a
+            # separate header — include it whenever any device declares
+            # interface=gpio in device.json.
+            try:
+                from .device_registry import get_registry
+                _reg = get_registry()
+                if any(
+                    (_reg.get(s.sensor_type) and _reg.get(s.sensor_type).interface == "gpio")
+                    for s in program.hardware.sensors
+                ):
+                    self._out('#include "volt/gpio_devices.h"')
+            except Exception:
+                pass
         self._out("")
         # String interpolation buffers (used by string concat, log interpolation, UART read_line)
         self._out("static char _volt_strbuf[16][128];")
