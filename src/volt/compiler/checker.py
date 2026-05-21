@@ -761,6 +761,15 @@ def _check_stmt(stmt, scope: Scope, errors: CompilerErrors,
                 stmt.interval.region, "TYPE MISMATCH",
                 f"Interval must be a duration (e.g., 500ms), got `{interval_type}`.",
             )
+        # Reject zero-duration intervals — they cause the scheduler to
+        # spin without yielding, starving every other task on the core.
+        if isinstance(stmt.interval, DurationLiteral) and stmt.interval.microseconds <= 0:
+            errors.error(
+                stmt.interval.region, "DURATION ERROR",
+                f"`every` interval must be greater than zero — "
+                f"a zero-duration every block would spin without yielding.",
+                hint="Use a real interval like `every 1ms` for the fastest meaningful rate.",
+            )
         if stmt.guard:
             guard_type = _infer(stmt.guard, scope, errors)
             if guard_type != ERROR_TYPE and guard_type != BOOL:
