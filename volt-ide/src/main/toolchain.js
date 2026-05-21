@@ -933,5 +933,5 @@ module.exports = {
     ensureToolchain, isToolchainReady, diagnoseToolchain, repairToolchain,
     freeDiskBytes,
     picoSdkPath, espIdfPath, TOOLCHAINS_DIR,
-    bundledPythonBin, cmakeBin, ninjaBin, buildPathPrefix,
+    bundledPythonBin, cmakeBin, ninjaBin, picotoolBin, buildPathPrefix,
 };

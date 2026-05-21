@@ -313,16 +313,22 @@ async function flashRP2040(projectPath, port, emit) {
 
     // Running-state Pico (CDC serial) — picotool can reboot it into
     // BOOTSEL and load, no manual button hold required.
-    if (hasCommand("picotool")) {
+    // Prefer the bundled binary at ~/.volt/toolchains/picotool/picotool
+    // (installed by ensurePicotool in v2.0.63+). Fall back to system PATH
+    // for users who installed picotool another way (e.g. brew, apt).
+    const picotool = toolchain.picotoolBin()
+        ? `"${toolchain.picotoolBin()}"`
+        : (hasCommand("picotool") ? "picotool" : null);
+    if (picotool) {
         emit("flash", "Flashing with picotool...", 65);
-        let ok = await streamCommand(`picotool load "${uf2}" -f`, "flash", emit);
+        let ok = await streamCommand(`${picotool} load "${uf2}" -f`, "flash", emit);
         if (!ok) {
             emit("flash", "Retrying with sudo...", 68);
-            ok = await streamCommand(`sudo picotool load "${uf2}" -f`, "flash", emit);
+            ok = await streamCommand(`sudo ${picotool} load "${uf2}" -f`, "flash", emit);
         }
         if (ok) {
             emit("flash", "Rebooting device...", 93);
-            spawnSync("picotool", ["reboot"]);
+            spawnSync(toolchain.picotoolBin() || "picotool", ["reboot"]);
             return true;
         }
     }
