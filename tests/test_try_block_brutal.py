@@ -168,6 +168,38 @@ class AnalyzerRestrictions(unittest.TestCase):
             [e.message for e in errors.errors],
         )
 
+    def test_synchronous_body_does_not_lift(self):
+        """A bounded-retry try block whose body is purely synchronous (no
+        sleep, no wifi/mqtt/http/storage, no nested every/on/timeout) does
+        not need a context-struct counter — the function never re-enters.
+        We assert the counter is stack-local to avoid ctx-struct bloat."""
+        src = (
+            "chip esp32\n"
+            "hardware {\n"
+            "    pin led: Output = 4\n"
+            "    bus i2c0: I2C(sda: 21, scl: 22)\n"
+            "    device bme: BME280 on i2c0 at 0x76\n"
+            "}\n"
+            "machine m {\n"
+            "    state a {\n"
+            "        enter { try { bme.temperature() } or retry 3 times else skip }\n"
+            "        after 1s -> b\n"
+            "    }\n"
+            "    state b { enter { led.on() } }\n"
+            "}\n"
+        )
+        errors, c = compile_to_c(src)
+        self.assertFalse(errors.has_errors, [e.message for e in errors.errors])
+        # Stack-local: `int32_t _try_attempts_<N> = 0;` declared, no ctx-> deref.
+        self.assertIn("int32_t _try_attempts_", c)
+        self.assertNotIn("ctx->_try_attempts_", c)
+        # And the machine's ctx struct must NOT carry the counter.
+        import re
+        m_ctx = re.search(r"typedef struct \{([^}]*)\} m_ctx_t;", c, re.S)
+        self.assertTrue(m_ctx)
+        self.assertNotIn("_try_attempts_", m_ctx.group(1),
+                         "synchronous body should not bloat the ctx struct")
+
     def test_state_machine_retry_counter_lifts_to_machine_ctx(self):
         """When a bounded-retry try block lives inside a state-machine enter
         block AND its body contains a call (which may yield), the retry counter

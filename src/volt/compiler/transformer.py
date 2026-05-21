@@ -65,7 +65,7 @@ def transform(program: Program) -> Program:
         # priority/critical run as plain functions and don't need lifting.
         try_counter = YieldCounter()
         new_body = _assign_try_ids(new_body, try_counter,
-                                   lift_when_call=(task.tier == "background"))
+                                   lift_when_yields=(task.tier == "background"))
 
         # Assign yield labels
         counter = YieldCounter()
@@ -93,9 +93,9 @@ def transform(program: Program) -> Program:
         new_states = []
         m_try_counter = YieldCounter()
         for state in machine.states:
-            new_enter = _assign_try_ids(state.enter_body, m_try_counter, lift_when_call=True) if state.enter_body else state.enter_body
-            new_exit = _assign_try_ids(state.exit_body, m_try_counter, lift_when_call=True) if state.exit_body else state.exit_body
-            new_body = _assign_try_ids(state.body, m_try_counter, lift_when_call=True) if state.body else state.body
+            new_enter = _assign_try_ids(state.enter_body, m_try_counter, lift_when_yields=True) if state.enter_body else state.enter_body
+            new_exit = _assign_try_ids(state.exit_body, m_try_counter, lift_when_yields=True) if state.exit_body else state.exit_body
+            new_body = _assign_try_ids(state.body, m_try_counter, lift_when_yields=True) if state.body else state.body
             new_states.append(replace(state,
                                       enter_body=new_enter,
                                       exit_body=new_exit,
@@ -270,37 +270,97 @@ def _all_try_blocks(stmts: list):
                     yield from _all_try_blocks(inner)
 
 
-def _stmts_contain_call(stmts: list) -> bool:
-    """True iff any expression statement in this list contains a FuncCall or
-    MethodCall. Used to decide whether a try block's retry counter must lift
-    to the task's context struct — calls might internally yield, and a
-    yielding body means the protothread re-enters from outside the block,
-    which would reset a stack-local counter to zero on every retry."""
-    def walk(node) -> bool:
-        if node is None:
-            return False
-        if isinstance(node, (FuncCall, MethodCall)):
+def _stmts_contain_yield(stmts: list) -> bool:
+    """True iff any statement in this list could yield back to the scheduler.
+
+    Yield-back happens on:
+      - sleep / deep_sleep / light_sleep — explicit yield primitives
+      - WiFi / MQTT / HTTP / storage calls (BLOCKING_APIs) — internally yield
+        in protothread context
+      - Nested EveryBlock, OnBlock, TimeoutBlock — explicit yield points
+
+    Pure-synchronous calls (sensor reads, hardware writes, math, etc.) do
+    NOT cause yields, so a try-block whose body is purely synchronous can
+    keep its retry counter on the C stack — the function won't re-enter.
+
+    This was over-broad before v2.0.58: any FuncCall or MethodCall triggered
+    a context-struct lift, which over-allocated ctx fields for synchronous
+    bodies. False positives were harmless (one int32) but bloated."""
+    # Object.method pairs that internally yield. Keep in sync with
+    # analyzer.BLOCKING_APIS — the truth is the same: anything classifying
+    # a task as priority is also the yield surface.
+    YIELDING_METHODS = {
+        ("wifi", "connect"), ("wifi", "disconnect"), ("wifi", "scan"),
+        ("wifi", "on_connect"), ("wifi", "on_disconnect"),
+        ("mqtt", "connect"), ("mqtt", "disconnect"), ("mqtt", "on_receive"),
+        ("mqtt", "send"), ("mqtt", "send_int"), ("mqtt", "send_float"),
+        ("http", "get"), ("http", "post"),
+        ("storage", "save"), ("storage", "load"),
+    }
+    YIELDING_BUILTINS = {"sleep", "deep_sleep", "light_sleep"}
+
+    def is_yielding_call(call) -> bool:
+        if isinstance(call, FuncCall) and call.name in YIELDING_BUILTINS:
             return True
-        if hasattr(node, "__dict__"):
-            for v in node.__dict__.values():
+        if isinstance(call, MethodCall):
+            obj = call.obj
+            if hasattr(obj, "name") and (obj.name, call.method) in YIELDING_METHODS:
+                return True
+        return False
+
+    def walk_expr(e) -> bool:
+        if e is None:
+            return False
+        if isinstance(e, (FuncCall, MethodCall)) and is_yielding_call(e):
+            return True
+        if hasattr(e, "__dict__"):
+            for v in e.__dict__.values():
                 if isinstance(v, list):
-                    if any(walk(x) for x in v):
+                    if any(walk_expr(x) for x in v):
                         return True
-                elif walk(v):
+                elif walk_expr(v):
                     return True
         return False
-    return any(walk(s) for s in stmts)
+
+    def walk_stmt(s) -> bool:
+        if s is None:
+            return False
+        # Structural yield points
+        if isinstance(s, (EveryBlock, OnBlock, TimeoutBlock)):
+            return True
+        # Expressions on statements
+        if hasattr(s, "__dict__"):
+            for v in s.__dict__.values():
+                if isinstance(v, list):
+                    if any(walk_stmt(x) if hasattr(x, "__dict__") and not isinstance(x, (FuncCall, MethodCall)) else walk_expr(x) for x in v):
+                        return True
+                elif hasattr(v, "__dict__"):
+                    if walk_expr(v):
+                        return True
+        return False
+
+    return any(walk_stmt(s) for s in stmts)
 
 
-def _assign_try_ids(stmts: list, counter, lift_when_call: bool):
+# Kept for any other call site that genuinely wants "body contains any call"
+# (currently no external users — checker has its own _body_has_call). Aliased
+# to the new predicate so the old name still does something safe; if the
+# semantic difference matters later, callers should switch explicitly.
+_stmts_contain_call = _stmts_contain_yield
+
+
+def _assign_try_ids(stmts: list, counter, lift_when_yields: bool):
     """Walk statements, assign unique try_id per TryBlock encountered, and
     decide whether the retry counter needs to lift to the context struct.
 
-    Args:
-      counter: a YieldCounter (or any .next() provider) to allocate IDs.
-      lift_when_call: True for background protothread tasks (where yields
-        across the try body reset stack-local counters). False for setup,
-        priority tasks, and the main loop where the function never re-enters.
+    A retry counter must lift when BOTH conditions hold:
+      1. The enclosing function re-enters across yields (background
+         protothread tasks, state machines). lift_when_yields = True.
+      2. The try block's body actually yields. A purely synchronous body
+         never causes re-entry, so a stack-local counter persists.
+
+    For setup, priority tasks, and main loop (lift_when_yields=False), the
+    function runs sequentially without re-entry — stack-local always works.
 
     Returns the (possibly transformed) list of statements with try_ids assigned.
     """
@@ -311,16 +371,17 @@ def _assign_try_ids(stmts: list, counter, lift_when_call: bool):
         if isinstance(s, TryBlock):
             # Assign before recursing so nested try IDs are unique.
             tid = counter.next()
-            new_body = _assign_try_ids(s.body, counter, lift_when_call)
+            new_body = _assign_try_ids(s.body, counter, lift_when_yields)
+            body_yields = _stmts_contain_yield(new_body)
             lift = (
                 s.policy == "retry"
                 and s.retry_limit is not None
-                and lift_when_call
-                and _stmts_contain_call(new_body)
+                and lift_when_yields
+                and body_yields
             )
             out.append(replace(s, body=new_body, try_id=tid,
                                needs_context_lift=lift,
-                               is_yield_point=_stmts_contain_call(new_body)))
+                               is_yield_point=body_yields))
             continue
         # Recurse into the usual nested-body attributes.
         new_s = s
@@ -328,10 +389,10 @@ def _assign_try_ids(stmts: list, counter, lift_when_call: bool):
             if hasattr(s, attr):
                 inner = getattr(s, attr)
                 if isinstance(inner, list):
-                    new_s = replace(new_s, **{attr: _assign_try_ids(inner, counter, lift_when_call)})
+                    new_s = replace(new_s, **{attr: _assign_try_ids(inner, counter, lift_when_yields)})
         # else_body can be either a list or a single IfStmt
         if hasattr(s, "else_body") and isinstance(s.else_body, list):
-            new_s = replace(new_s, else_body=_assign_try_ids(s.else_body, counter, lift_when_call))
+            new_s = replace(new_s, else_body=_assign_try_ids(s.else_body, counter, lift_when_yields))
         out.append(new_s)
     return out
 
