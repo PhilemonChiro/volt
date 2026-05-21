@@ -315,23 +315,42 @@ async function flashRP2040(projectPath, port, emit) {
         }
     }
 
-    emit("error", "Cannot flash: hold BOOTSEL, plug in, then Run again");
+    emit(
+        "error",
+        "Cannot flash: no Pico in BOOTSEL mode detected. " +
+        "Hold the BOOTSEL button, plug the cable in, wait for the " +
+        "RPI-RP2 disk to mount, then click Run. " +
+        "(Tip: in Finder, the disk should appear under /Volumes/RPI-RP2.)"
+    );
     return false;
 }
 
 function findPicoMount() {
-    for (const base of ["/media", "/mnt", "/run/media"]) {
+    // BOOTSEL-mode Pico mounts as a USB mass storage volume named RPI-RP2
+    // (RP2040) or RP2350 (newer Pico 2). Mount root differs per OS:
+    //   macOS  → /Volumes/<label>
+    //   Linux  → /media/<user>/<label>  or  /mnt/<label>  or  /run/media/<user>/<label>
+    //   Windows is handled elsewhere via drive-letter scan (not here).
+    const PICO_LABELS = ["RPI-RP2", "RP2350"];
+    const matches = (name) => PICO_LABELS.some((label) => name.includes(label));
+
+    for (const base of ["/Volumes", "/media", "/mnt", "/run/media"]) {
         if (!fs.existsSync(base)) continue;
         try {
             for (const d of fs.readdirSync(base)) {
                 const p = path.join(base, d);
-                if (!fs.statSync(p).isDirectory()) continue;
+                let stat;
+                try { stat = fs.statSync(p); } catch { continue; }
+                if (!stat.isDirectory()) continue;
+                // Direct hit at this depth (typical for /Volumes on macOS,
+                // /mnt/<label> on Linux).
+                if (matches(d)) return p;
+                // Linux /media/<user>/<label> — one more level down.
                 try {
                     for (const sub of fs.readdirSync(p)) {
-                        if (sub.includes("RPI-RP2")) return path.join(p, sub);
+                        if (matches(sub)) return path.join(p, sub);
                     }
                 } catch {}
-                if (d.includes("RPI-RP2")) return p;
             }
         } catch {}
     }
