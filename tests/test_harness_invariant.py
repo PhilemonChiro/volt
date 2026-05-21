@@ -48,6 +48,19 @@ def _discover_real_passes() -> list:
     compile_volt and it shows up here automatically; forget to wire
     it into the brutal helper and the invariant test will fail with a
     pointer to the new pass.
+
+    Blind spot — what this discovery does NOT catch:
+      - Indirect dispatch: `passes[name](ast)` in a loop.
+      - Attribute calls: `pipeline.run(ast)` on an orchestrator object.
+      - Reflective calls: `getattr(module, name)(ast)`.
+      - Calls inside helper functions that compile_volt delegates to
+        (the AST walk is scoped to compile_volt's own body).
+    Today voltc.compile_volt uses direct bare-name calls only, so this
+    is fine. If a refactor introduces any of the patterns above, this
+    discovery becomes blind to the new pass and the invariant silently
+    weakens — same Round 42 shape, one level up. The fix would be either
+    to keep compile_volt's calls direct or to extend this walker
+    accordingly.
     """
     import ast as pyast
     import inspect
