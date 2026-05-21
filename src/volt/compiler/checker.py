@@ -480,10 +480,22 @@ def check_types(program: Program, scope: Scope, errors: CompilerErrors):
         loop_scope = scope.child("loop")
         _check_stmts(program.loop.body, loop_scope, errors, None)
 
-    # Check global variable declarations
+    # Check global variable declarations — verify the initializer type
+    # matches the declared type (storage_vars below does the same check;
+    # globals were silently emitting wrong-typed C before Round 34).
     for gv in program.global_vars:
         if gv.value:
-            _infer(gv.value, scope, errors)
+            val_type = _infer(gv.value, scope, errors)
+            if gv.type_name and val_type != ERROR_TYPE:
+                normalized = _normalize_type(gv.type_name)
+                if val_type != normalized:
+                    errors.error(
+                        gv.region, "TYPE MISMATCH",
+                        f"Variable `{gv.name}` declared as `{gv.type_name}` "
+                        f"but assigned `{val_type}`.",
+                        hint=f"Change the type to `{val_type}` or convert "
+                             f"the value with `{gv.type_name}(value)`.",
+                    )
 
     # Check storage declarations
     for storage in program.storage_vars:
