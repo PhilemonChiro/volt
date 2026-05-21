@@ -41,6 +41,14 @@ function armGccBin() {
     return fs.existsSync(p) ? p : null;
 }
 
+// Portable picotool for RP2040 direct-USB flashing. Bundled with libusb-1.0
+// alongside (rpath/install_name rewritten so the binary finds it next to
+// itself). Available for darwin-arm64 and linux-x64 today.
+function picotoolBin() {
+    const p = path.join(TOOLCHAINS_DIR, "picotool", "picotool");
+    return fs.existsSync(p) ? p : null;
+}
+
 // Build the PATH prefix needed to compile ESP-IDF projects: bundled Python
 // first (so install.sh / activate_venv pick 3.12+), then cmake, then ninja.
 // Caller prepends to their own PATH.
@@ -54,6 +62,8 @@ function buildPathPrefix() {
     if (nj) parts.push(path.dirname(nj));
     const arm = armGccBin();
     if (arm) parts.push(path.dirname(arm));
+    const pt = picotoolBin();
+    if (pt) parts.push(path.dirname(pt));
     return parts.join(path.delimiter);
 }
 
@@ -84,6 +94,51 @@ async function ensureArmGcc(emit) {
     }
     try { fs.unlinkSync(tmp); } catch (_) {}
     emit.log("ARM GCC installed");
+    return true;
+}
+
+// Portable picotool — direct USB flashing for RP2040. Pico Foundation doesn't
+// publish prebuilt binaries; we built and uploaded our own (bundled with
+// libusb-1.0 next to the binary, install_name/rpath rewritten).
+//
+// darwin-arm64 + linux-x64 today. darwin-x86_64 and win-x64 are pending —
+// users on those platforms fall back to the BOOTSEL volume-copy path.
+async function ensurePicotool(emit) {
+    if (picotoolBin()) { emit.log("picotool already present"); return true; }
+
+    let key;
+    if (process.platform === "darwin" && process.arch === "arm64") {
+        key = "picotool-2.1-darwin-arm64";
+    } else if (process.platform === "linux" && (process.arch === "x64" || process.arch === "x86_64")) {
+        key = "picotool-2.1-linux-x64";
+    } else {
+        // Platform not supported by the bundled picotool yet — soft skip.
+        // flashRP2040 will fall back to the BOOTSEL volume-copy path.
+        emit.log(`picotool: no prebuilt available for ${process.platform}-${process.arch}; skipping (BOOTSEL copy will still work)`);
+        return true;
+    }
+
+    ensureDir(TOOLCHAINS_DIR);
+    const tmp = path.join(TOOLCHAINS_DIR, "_picotool.tar.gz");
+    emit.log("Fetching picotool 2.1 (~1 MB)…");
+    const ok = await mirror.downloadAsset(key, tmp, emit, mirror.getPreference());
+    if (!ok) {
+        emit.log("WARN: picotool download failed — RP2040 flashing will require BOOTSEL");
+        return true;  // not fatal; BOOTSEL copy still works
+    }
+    const out = path.join(TOOLCHAINS_DIR, "picotool");
+    fs.mkdirSync(out, { recursive: true });
+    const ex = await extractArchive(tmp, out, "tar.gz", emit.log);
+    if (!ex.ok) {
+        emit.log(`WARN: picotool extract failed: ${ex.error}`);
+        try { fs.unlinkSync(tmp); } catch (_) {}
+        return true;
+    }
+    try {
+        fs.chmodSync(path.join(out, "picotool"), 0o755);
+        fs.unlinkSync(tmp);
+    } catch (_) {}
+    emit.log("picotool installed — direct-USB flashing enabled");
     return true;
 }
 
@@ -397,25 +452,34 @@ async function ensureRP2040(legacy) {
     }
     emit.stageDone("clone-sdk");
 
-    // 4. picotool — Linux builds from source; macOS: skip (BOOTSEL drag-drop works)
+    // 4. picotool — prebuilt bundle from volt-toolchains release (~1 MB).
+    // Enables direct USB flashing: no BOOTSEL hold needed for routine
+    // reflashes, faster than the MSC-copy path (uses picoboot USB
+    // protocol directly). If the download fails or the platform has no
+    // prebuilt, we degrade gracefully — the BOOTSEL volume-copy path
+    // (in builder.js flashRP2040) is unaffected.
     emit.stage("picotool");
-    if (process.platform === "linux") {
-        if (!hasCommand("picotool")) {
-            log("Installing picotool for direct flashing...");
+    if (picotoolBin() || hasCommand("picotool")) {
+        log("picotool already installed");
+        emit.stageDone("picotool");
+    } else {
+        log("Installing picotool for direct USB flashing...");
+        const ok = await ensurePicotool(emit);
+        if (ok && picotoolBin()) {
+            emit.stageDone("picotool");
+        } else if (process.platform === "linux") {
+            // Linux fallback: build from source via the legacy installer.
+            log("Prebuilt unavailable — falling back to source build");
             if (!(await installPicotool(emit))) {
-                log("picotool install failed — you can still flash via BOOTSEL mode");
-                emit.stageError("picotool", "build failed (BOOTSEL still works)");
+                log("picotool source build failed — BOOTSEL mode still works");
+                emit.stageError("picotool", "source build failed (BOOTSEL still works)");
             } else {
                 emit.stageDone("picotool");
             }
         } else {
-            log("picotool already installed");
+            log("picotool not available on this platform — BOOTSEL mode will be used (hold BOOTSEL, plug Pico, click Run).");
             emit.stageDone("picotool");
         }
-    } else {
-        // macOS / Windows: skip — BOOTSEL drag-and-drop .uf2 works natively
-        log("Skipping picotool on this platform — use BOOTSEL mode (hold BOOTSEL, plug Pico, drag .uf2 to RPI-RP2 drive).");
-        emit.stageDone("picotool");
     }
 
     // 5. udev rules — Linux only

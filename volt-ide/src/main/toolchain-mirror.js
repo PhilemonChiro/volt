@@ -105,12 +105,40 @@ const FALLBACK_MANIFEST = {
             kind:       "build-system",
             version:    "1.12.1",
         },
+        // picotool — direct-USB RP2040 flashing. Built from
+        // github.com/raspberrypi/picotool (no official prebuilts upstream),
+        // bundled with libusb-1.0 alongside, install_name/RPATH rewritten
+        // to look in ./lib next to the binary. ~750-870 KB per platform.
+        "picotool-2.1-darwin-arm64": {
+            filename:   "picotool-2.1-darwin-arm64.tar.gz",
+            url:        `${MIRROR_BASE}/picotool-2.1-darwin-arm64.tar.gz`,
+            upstream:   "https://github.com/raspberrypi/picotool/releases/tag/2.1.0",
+            sha256:     "b8df42935a0ee2a73ae8aa40d9c1b66112f07f1c640e567743a5ff9d64a885ef",
+            size_bytes: 750994,
+            extract:    { format: "tar.gz", strip_components: 0 },
+            install_to: "picotool",
+            exposes:    { "picotool": "picotool" },
+            kind:       "flash-tool",
+            version:    "2.1.0",
+        },
+        "picotool-2.1-linux-x64": {
+            filename:   "picotool-2.1-linux-x64.tar.gz",
+            url:        `${MIRROR_BASE}/picotool-2.1-linux-x64.tar.gz`,
+            upstream:   "https://github.com/raspberrypi/picotool/releases/tag/2.1.0",
+            sha256:     "016ff925a9e1284219e56252d43cf43c036f8b4278c8930b31fc8d8fc6e708cc",
+            size_bytes: 864086,
+            extract:    { format: "tar.gz", strip_components: 0 },
+            install_to: "picotool",
+            exposes:    { "picotool": "picotool" },
+            kind:       "flash-tool",
+            version:    "2.1.0",
+        },
     },
     chip_requirements: {
         rp2040: {
-            "darwin-arm64":  ["arm-gnu-toolchain-13.2-darwin-arm64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
-            "darwin-x86_64": ["arm-gnu-toolchain-13.2-darwin-x86_64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
-            "linux-x64":     [], // apt path handles it
+            "darwin-arm64":  ["arm-gnu-toolchain-13.2-darwin-arm64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac", "picotool-2.1-darwin-arm64"],
+            "darwin-x86_64": ["arm-gnu-toolchain-13.2-darwin-x86_64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"], // picotool darwin-x86_64 not yet built
+            "linux-x64":     ["picotool-2.1-linux-x64"], // apt handles gcc/cmake/ninja; picotool isn't packaged there
         },
         esp32: {
             "darwin-arm64":  ["cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
