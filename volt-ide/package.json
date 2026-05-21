@@ -1,6 +1,6 @@
 {
   "name": "volt-ide",
-  "version": "2.0.58",
+  "version": "2.0.59",
   "description": "Volt IDE — declare hardware. Write logic. Flash.",
   "main": "main.js",
   "homepage": "https://github.com/PhilemonChiro/volt",
