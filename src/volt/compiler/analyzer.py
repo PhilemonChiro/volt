@@ -140,6 +140,12 @@ def analyze(program: Program, scope: Scope, errors: CompilerErrors):
     # 4b. Try-block restrictions
     _check_try_block_restrictions(program, scope, errors)
 
+    # 4c. Device pin-param completeness — multi-pin devices (HCSR04, etc.)
+    # written in the legacy `device d: T on X at N` syntax can't supply
+    # all needed pins. Catch this here with a clear hint to use the
+    # named-pins syntax, rather than letting codegen emit broken C.
+    _check_device_pin_params(program, errors)
+
     # 5. Shared state detection
     _detect_shared_state(program, scope, errors)
 
@@ -374,6 +380,50 @@ def _check_critical_safety(task: TaskDecl, errors: CompilerErrors):
                     hint="Move this to a Background or Priority task. "
                          "Share data with the critical task via a volatile variable.",
                 )
+
+
+# ============================================================
+# 4c. Device pin-param completeness
+# ============================================================
+
+def _check_device_pin_params(program, errors):
+    """Every device whose init_args template references named pin
+    placeholders (e.g. `{trig}`, `{echo}` for HCSR04) must be declared
+    with the named-pins syntax so those names get bound. If declared
+    via the legacy single-anchor form, report a Volt-level error with
+    a concrete fix suggestion."""
+    if not program.hardware:
+        return
+    try:
+        from .device_registry import get_registry
+        reg = get_registry()
+    except Exception:
+        return
+
+    import re
+    BUILTIN_KEYS = {"pin", "addr", "bus_id"}
+
+    for sensor in program.hardware.sensors:
+        dev = reg.get(sensor.sensor_type)
+        if not dev or not dev.init_args:
+            continue
+        placeholders = set(re.findall(r"\{(\w+)\}", dev.init_args))
+        named_keys = placeholders - BUILTIN_KEYS
+        if not named_keys:
+            continue
+        # This device requires named pins. Confirm the user supplied them.
+        missing = sorted(named_keys - set(sensor.pin_params or {}))
+        if not missing:
+            continue
+        params_hint = ", ".join(f"{k}: <gpio>" for k in sorted(named_keys))
+        errors.error(
+            sensor.region, "DEVICE PIN ERROR",
+            f"`{sensor.sensor_type}` needs {len(named_keys)} pins "
+            f"({', '.join(sorted(named_keys))}) but the declaration "
+            f"only provides one. Missing: {', '.join(missing)}.",
+            hint=f"Use the named-pins syntax: "
+                 f"`device {sensor.name}: {sensor.sensor_type}({params_hint})`",
+        )
 
 
 # ============================================================

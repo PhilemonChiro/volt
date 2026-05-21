@@ -135,9 +135,28 @@ def example_program(device, var_name="dev", chip="esp32"):
         bus_decl = "    bus uart0: UART(tx: 17, rx: 16)\n"
         dev_decl = f"    device {var_name}: {device['name']} on uart0 at 0\n"
     else:
-        # GPIO-bound device — needs a real pin declared
-        bus_decl = "    pin trig: Output = 5\n"
-        dev_decl = f"    device {var_name}: {device['name']} on trig at 5\n"
+        # GPIO-bound device. Two forms in Volt:
+        #   - single-anchor (legacy):  `device d: T on pin_name at N`
+        #   - named-pins:              `device d: T(p1: 5, p2: 6)`
+        # For multi-pin devices (HCSR04 etc.), the legacy form can't
+        # encode all pins. Use the named-pins form whenever the device's
+        # init_args template references named keys other than the
+        # built-in {pin}/{addr}/{bus_id} set.
+        import re
+        init_args = device.get("init_args", "") or ""
+        placeholders = set(re.findall(r"\{(\w+)\}", init_args))
+        builtin_keys = {"pin", "addr", "bus_id"}
+        named_keys = placeholders - builtin_keys
+        if named_keys:
+            # Named-pins form — assign each named pin a sequential GPIO
+            # starting at 5 (any safe pin).
+            bus_decl = ""
+            params = ", ".join(f"{k}: {5 + i}" for i, k in enumerate(sorted(named_keys)))
+            dev_decl = f"    device {var_name}: {device['name']}({params})\n"
+        else:
+            # Single-anchor form
+            bus_decl = "    pin trig: Output = 5\n"
+            dev_decl = f"    device {var_name}: {device['name']} on trig at 5\n"
 
     body = "every 1s {\n    led.toggle()\n"
     if method_call:
@@ -319,19 +338,39 @@ class DriverEdgeCases(unittest.TestCase):
         self.assertIn("max31855_init(&_tc, 0, 5)", c, "SPI init should pass CS pin as 3rd arg")
 
     def test_gpio_device_pin_declared(self):
-        """A GPIO-bound device needs a pin declared with the same name."""
+        """A multi-pin GPIO device uses the named-pins form."""
         src = (
             "chip esp32\n"
             "hardware {\n"
-            "    pin led: Output = 2\n"
-            "    pin trig: Output = 5\n"
-            "    device dist: HCSR04 on trig at 5\n"
+            "    pin led: Output = 4\n"
+            "    device dist: HCSR04(trig: 5, echo: 6)\n"
             "}\n"
             "every 1s { led.toggle() }\n"
         )
         errors, c = compile_to_c(src)
         self.assertFalse(errors.has_errors, [e.message for e in errors.errors])
-        self.assertIn("hcsr04_init(&_dist", c)
+        self.assertIn("hcsr04_init(&_dist, 5, 6)", c,
+                      "named-pins HCSR04 must emit init(&_dist, trig, echo)")
+
+    def test_multipin_device_in_legacy_syntax_rejected(self):
+        """HCSR04 written with the legacy single-anchor form should
+        produce a clear Volt-level error pointing at the named-pins
+        syntax, not a 'too few arguments' C-compile error."""
+        src = (
+            "chip esp32\n"
+            "hardware {\n"
+            "    pin led: Output = 4\n"
+            "    pin trig: Output = 5\n"
+            "    device dist: HCSR04 on trig at 5\n"
+            "}\n"
+            "every 1s { led.toggle() }\n"
+        )
+        errors, _ = compile_to_c(src)
+        self.assertTrue(errors.has_errors,
+                        "legacy HCSR04 syntax must error before reaching gcc")
+        msgs = [e.message for e in errors.errors]
+        self.assertTrue(any("HCSR04" in m and ("trig" in m or "echo" in m) for m in msgs),
+                        f"error must mention HCSR04 + a named pin. Got: {msgs}")
 
     def test_dht11_passes_type_11(self):
         """DHT11 codegen must pass the GPIO pin + sensor type 11 to dht_init."""

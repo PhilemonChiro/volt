@@ -97,11 +97,18 @@ class BusDecl(Node):
 
 @dataclass
 class SensorDecl(Node):
-    """device bme: BME280 on sensors at 0x76"""
+    """device bme: BME280 on sensors at 0x76
+       device dist: HCSR04(trig: 5, echo: 6)   ← named-pins form
+
+    For the legacy form, bus_name + address are set; pin_params is empty.
+    For the named-pins form, pin_params is the dict; bus_name is "" and
+    address is 0. Codegen branches on `pin_params` being non-empty.
+    """
     name: str = ""
-    sensor_type: str = ""   # "BME280", "DHT22", etc.
-    bus_name: str = ""      # which bus it's on
-    address: int = 0        # I2C address
+    sensor_type: str = ""        # "BME280", "DHT22", etc.
+    bus_name: str = ""           # which bus it's on (legacy form only)
+    address: int = 0             # I2C address or single GPIO pin (legacy form)
+    pin_params: dict = field(default_factory=dict)  # {trig: 5, echo: 6} for named-pins form
 
 
 @dataclass

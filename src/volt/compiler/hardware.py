@@ -244,6 +244,11 @@ def _validate_sensor(sensor: SensorDecl, used_addrs: dict, errors: CompilerError
                      bus_kinds: dict | None = None):
     """Validate sensor declaration (I2C address conflicts + I2C range)."""
 
+    # Named-pins form (e.g. HCSR04(trig:5, echo:6)) has no bus_name and no
+    # single address — the I²C-address checks don't apply. Skip cleanly.
+    if sensor.pin_params:
+        return
+
     bus = sensor.bus_name
     addr = sensor.address
 

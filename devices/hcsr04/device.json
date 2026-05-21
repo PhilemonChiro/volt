@@ -6,6 +6,7 @@
   "description": "Ultrasonic distance sensor (2-400cm)",
   "c_prefix": "hcsr04",
   "c_source": "driver.c",
+  "init_args": "{trig}, {echo}",
   "methods": {
     "distance_cm": {
       "returns": "float",

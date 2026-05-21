@@ -1090,12 +1090,26 @@ class CCodeGen:
                 self._out(f"// Device: {sensor.name} ({sensor.sensor_type})")
                 template = (dev_info.init_args if dev_info else "") or ""
                 if template:
-                    # Device-specific init template — e.g. "{pin}, 22" for DHT22.
-                    args = template.format(
-                        pin=sensor.address,
-                        addr=sensor.address,
-                        bus_id=0,
-                    )
+                    # Device-specific init template — e.g. "{pin}, 22" for DHT22
+                    # or "{trig}, {echo}" for HCSR04 (named-pins form).
+                    fmt_args = {
+                        "pin": sensor.address,
+                        "addr": sensor.address,
+                        "bus_id": 0,
+                    }
+                    # Named-pins form: `device d: HCSR04(trig: 5, echo: 6)`
+                    # makes {trig} and {echo} available in the template.
+                    fmt_args.update(sensor.pin_params or {})
+                    try:
+                        args = template.format(**fmt_args)
+                    except KeyError as e:
+                        # Should be unreachable — the analyzer
+                        # (_check_device_pin_params) catches this before
+                        # codegen runs. If somehow reached, emit a comment
+                        # so the failure is visible at the C level.
+                        missing = str(e).strip("'")
+                        self._out(f"// ERROR: missing {missing} pin for {sensor.sensor_type}")
+                        continue
                     self._out(f"{stype}_init(&_{sensor.name}, {args});")
                 elif iface == "spi":
                     self._out(

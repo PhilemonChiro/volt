@@ -254,22 +254,23 @@ async function buildRP2040(projectPath, emit) {
     // Resolve the cmake to call: portable on macOS, system on Linux.
     const cmakeCmd = toolchain.cmakeBin() ? `"${toolchain.cmakeBin()}"` : "cmake";
 
-    // CMake configure
+    // CMake configure (with stale-cache recovery — a partial cache after
+    // an SDK refresh can make compiler detection fail; wipe + retry once).
     if (!fs.existsSync(path.join(buildDir, "Makefile")) &&
         !fs.existsSync(path.join(buildDir, "build.ninja"))) {
         emit("build", "Configuring CMake...", 28);
-        const ok = await streamCommand(
+        const ok = await streamCommandWithStaleCacheRecovery(
             `${cmakeCmd} -S "${fw}" -B "${buildDir}" -DPICO_SDK_PATH="${sdk}"`,
-            "build", emit, env
+            "build", emit, env, buildDir
         );
         if (!ok) { emit("error", "CMake configure failed"); return false; }
     }
 
     // Build
     emit("build", "Building firmware...", 30);
-    const ok = await streamCommand(
+    const ok = await streamCommandWithStaleCacheRecovery(
         `${cmakeCmd} --build "${buildDir}" --parallel`,
-        "build", emit, env
+        "build", emit, env, buildDir
     );
 
     const uf2 = path.join(buildDir, "volt-rp2040.uf2");
@@ -393,6 +394,45 @@ function findPicoMount() {
 // ESP32
 // ============================================================
 
+// Run `streamCommand`, but if the build fails with a "CMake Error" /
+// "configure_file" / "CMakeCache.txt" pattern in the output, wipe the
+// build/ directory and try once more. This is the stale-cache shape
+// that bit a real user on 2026-05-21 — partial cache after an SDK
+// refresh left CMake unable to do compiler detection.
+//
+// The retry is silent up to the point of failure (so the user doesn't
+// see noise on the happy path). On retry, we log explicitly so it's
+// clear what's happening.
+async function streamCommandWithStaleCacheRecovery(cmd, stage, emit, envExtra, buildDir) {
+    const STALE_CACHE_SIGNALS = [
+        /CMake Error.*configure_file/i,
+        /CMakeFiles\/CMakeTmp/i,
+        /Error in dependency provider/i,    // esp-idf-specific
+        /Build files have been written.*\n.*FAILED/i,
+    ];
+    let captured = "";
+    const wrappedEmit = (s, msg, pct) => {
+        if (typeof msg === "string") captured += msg + "\n";
+        emit(s, msg, pct);
+    };
+    let ok = await streamCommand(cmd, stage, wrappedEmit, envExtra);
+    if (ok) return true;
+
+    const looksStale = STALE_CACHE_SIGNALS.some((re) => re.test(captured));
+    if (!looksStale || !buildDir || !fs.existsSync(buildDir)) return false;
+
+    emit(stage, "Build cache looks stale — wiping build/ and retrying once...", null);
+    try {
+        fs.rmSync(buildDir, { recursive: true, force: true });
+    } catch (e) {
+        emit("error", `Failed to wipe build/: ${e.message}`);
+        return false;
+    }
+    captured = "";
+    ok = await streamCommand(cmd, stage, wrappedEmit, envExtra);
+    return ok;
+}
+
 async function buildESP32(projectPath, chip, emit) {
     const fw = frameworkDir("esp32");
     if (!fs.existsSync(fw)) { emit("error", "ESP32 framework not found"); return false; }
@@ -411,9 +451,10 @@ async function buildESP32(projectPath, chip, emit) {
     const envPath = pathPrefix ? `${pathPrefix}:` : "";
 
     emit("build", "Building firmware...", 30);
-    const ok = await streamCommand(
+    const buildDir = path.join(fw, "build");
+    const ok = await streamCommandWithStaleCacheRecovery(
         `export PATH="${envPath}$PATH" && source "${idf}/export.sh" >/dev/null 2>&1 && cd "${fw}" && idf.py build`,
-        "build", emit
+        "build", emit, undefined, buildDir
     );
     if (!ok) { emit("error", "Build failed"); return false; }
 
@@ -446,10 +487,17 @@ function hasCommand(name) {
 }
 
 function waitForPort(prefix, timeoutMs) {
+    // Accept either a single prefix or an array of prefixes. Match the
+    // first /dev entry whose name starts with any of them. macOS port
+    // names (tty.usbmodem, cu.usbmodem) need to be in the list explicitly
+    // — otherwise the post-flash "Device on …" status never updates and
+    // the user gets "Reconnect manually" even though the device reappeared.
+    const prefixes = Array.isArray(prefix) ? prefix : [prefix];
     const end = Date.now() + timeoutMs;
     while (Date.now() < end) {
         try {
-            const found = fs.readdirSync("/dev").find(e => e.startsWith(prefix));
+            const entries = fs.readdirSync("/dev");
+            const found = entries.find(e => prefixes.some(p => e.startsWith(p)));
             if (found) return "/dev/" + found;
         } catch {}
         spawnSync("sleep", ["0.5"]);

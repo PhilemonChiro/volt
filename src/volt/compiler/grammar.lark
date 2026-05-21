@@ -65,7 +65,16 @@ pin_mode: NAME ("." NAME)*
 
 bus_decl: "bus" NAME ":" NAME "(" named_args? ")"
 
+// Two device-decl forms:
+//   1. Single-anchor (legacy): `device X: T on Y at N`
+//      Y is a bus name (i2c0) or a pin name; N is an I²C address,
+//      SPI CS pin, or single GPIO pin.
+//   2. Named-pins (for multi-pin GPIO devices like HCSR04):
+//      `device X: T(trig: 5, echo: 6)`
+//      Mirrors the `bus name: Type(sda: x, scl: y)` form. The param
+//      names must match the device's pins schema in device.json.
 sensor_decl: "device" NAME ":" NAME "on" NAME "at" expr
+    | "device" NAME ":" NAME "(" named_args? ")" -> sensor_decl_named
 
 
 // --- Power Block (for compile-time power estimation) ---

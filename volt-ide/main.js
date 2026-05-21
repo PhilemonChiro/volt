@@ -959,10 +959,25 @@ ipcMain.handle("run_project", async (_, projectPath, voltFile, port, chip) => {
     }
     if (!ok) return { ok: false };
 
-    // Wait for device
+    // Wait for device. After a flash + reboot, the same physical device
+    // typically re-enumerates under the same prefix family but possibly
+    // a different unit number (e.g. ttyACM0 → ttyACM1, tty.usbmodem1301
+    // → tty.usbmodem1201). Watch all known prefix families for this
+    // platform so the auto-reconnect actually works on macOS too.
     buildEmit("connect", "Waiting for device...", 96);
-    const prefix = port.includes("ttyACM") ? "ttyACM" : "ttyUSB";
-    const newPort = builder.waitForPort(prefix, 8000);
+    let prefixes;
+    if (process.platform === "darwin") {
+        // macOS USB-CDC serial enumeration:
+        //   /dev/tty.usbmodem* — what apps usually open
+        //   /dev/cu.usbmodem*  — call-out variant; some flows pick this
+        //   /dev/tty.usbserial-* / /dev/cu.usbserial-* — CP210x/CH340 (ESP32 dev boards)
+        prefixes = ["tty.usbmodem", "cu.usbmodem", "tty.usbserial", "cu.usbserial"];
+    } else if (port.includes("ttyACM")) {
+        prefixes = ["ttyACM"];
+    } else {
+        prefixes = ["ttyUSB", "ttyACM"];
+    }
+    const newPort = builder.waitForPort(prefixes, 8000);
     buildEmit("connect", newPort ? "Device on " + newPort : "Reconnect manually", 98);
 
     // Auto-start serial monitor

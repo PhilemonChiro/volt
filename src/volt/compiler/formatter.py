@@ -174,6 +174,11 @@ def _emit_bus_decl(bus) -> str:
 
 
 def _emit_sensor_decl(sensor) -> str:
+    # Two forms — named-pins (`device d: HCSR04(trig: 5, echo: 6)`) and
+    # the legacy single-anchor (`device bme: BME280 on i2c0 at 0x76`).
+    if sensor.pin_params:
+        parts = ", ".join(f"{k}: {v}" for k, v in sensor.pin_params.items())
+        return f"device {sensor.name}: {sensor.sensor_type}({parts})"
     # Emit I2C addresses as hex (convention)
     addr = sensor.address
     if isinstance(addr, int) and addr > 0:

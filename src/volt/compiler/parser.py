@@ -223,6 +223,26 @@ class ASTBuilder(Transformer):
             region=_region(children[0]),
         )
 
+    def sensor_decl_named(self, children):
+        # `device X: T(p1: v1, p2: v2)` — named-pins form.
+        # children = [NAME, NAME, named_args_dict?]. The dict is omitted
+        # when the device has zero params (legal but pointless).
+        name = str(children[0])
+        sensor_type = str(children[1])
+        params_dict = children[2] if len(children) > 2 and isinstance(children[2], dict) else {}
+        # Lower each value to its int — pins are always ints in this form
+        # (you can't write `device d: T(trig: led_pin)` yet; if/when that's
+        # needed, this is the place to add ident resolution).
+        pin_params = {}
+        for k, v in params_dict.items():
+            pin_params[k] = v.value if isinstance(v, IntLiteral) else v
+        return SensorDecl(
+            name=name, sensor_type=sensor_type,
+            bus_name="", address=0,
+            pin_params=pin_params,
+            region=_region(children[0]),
+        )
+
     # --- Power ---
 
     def power_block(self, children):
