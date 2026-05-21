@@ -287,6 +287,32 @@ async function flashRP2040(projectPath, port, emit) {
     const uf2 = path.join(fw, "build", "volt-rp2040.uf2");
     if (!fs.existsSync(uf2)) { emit("error", "No .uf2 file"); return false; }
 
+    // The caller passes the selected device's `port`. For a BOOTSEL-mode
+    // Pico, that "port" is actually the mount directory (e.g.
+    // /Volumes/RPI-RP2) — recognise it and copy directly, skipping the
+    // picotool dance entirely.
+    const looksLikeBootselMount =
+        port && (
+            port.startsWith("/Volumes/") ||
+            port.startsWith("/media/") ||
+            port.startsWith("/mnt/") ||
+            port.startsWith("/run/media/")
+        ) && (port.includes("RPI-RP2") || port.includes("RP2350"));
+
+    if (looksLikeBootselMount && fs.existsSync(port)) {
+        emit("flash", "Copying .uf2 to Pico (BOOTSEL)...", 80);
+        try {
+            fs.copyFileSync(uf2, path.join(port, "volt-rp2040.uf2"));
+            emit("flash", "Firmware copied — Pico rebooting", 95);
+            return true;
+        } catch (e) {
+            emit("error", "Copy failed: " + e.message);
+            return false;
+        }
+    }
+
+    // Running-state Pico (CDC serial) — picotool can reboot it into
+    // BOOTSEL and load, no manual button hold required.
     if (hasCommand("picotool")) {
         emit("flash", "Flashing with picotool...", 65);
         let ok = await streamCommand(`picotool load "${uf2}" -f`, "flash", emit);
@@ -301,10 +327,10 @@ async function flashRP2040(projectPath, port, emit) {
         }
     }
 
-    // Fallback: BOOTSEL mount
+    // Last-chance: maybe a BOOTSEL volume mounted between scan and run.
     const mount = findPicoMount();
     if (mount) {
-        emit("flash", "Copying .uf2 to Pico...", 80);
+        emit("flash", "Copying .uf2 to Pico (BOOTSEL detected late)...", 80);
         try {
             fs.copyFileSync(uf2, path.join(mount, "volt-rp2040.uf2"));
             emit("flash", "Firmware copied — Pico rebooting", 95);
@@ -317,10 +343,10 @@ async function flashRP2040(projectPath, port, emit) {
 
     emit(
         "error",
-        "Cannot flash: no Pico in BOOTSEL mode detected. " +
-        "Hold the BOOTSEL button, plug the cable in, wait for the " +
-        "RPI-RP2 disk to mount, then click Run. " +
-        "(Tip: in Finder, the disk should appear under /Volumes/RPI-RP2.)"
+        "Cannot flash: no Pico in BOOTSEL detected, and picotool isn't " +
+        "installed for direct USB flashing. Hold the BOOTSEL button, " +
+        "plug the cable in, wait for RPI-RP2 to appear in the device " +
+        "dropdown, then click Run."
     );
     return false;
 }

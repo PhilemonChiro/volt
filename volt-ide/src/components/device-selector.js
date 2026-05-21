@@ -74,21 +74,24 @@ function updateUI() {
         if (selectedIndex >= devices.length) selectedIndex = 0;
         const d = devices[selectedIndex];
 
-        label.textContent = d.chip;
+        const labelText = d.state === "bootsel" ? `${d.chip} (BOOTSEL)` : d.chip;
+        label.textContent = labelText;
         if (dot) dot.className = "device-dot connected";
         if (dropdownEmpty) dropdownEmpty.style.display = "none";
 
         if (dropdownList) {
-            dropdownList.innerHTML = devices.map((dev, i) => `
+            dropdownList.innerHTML = devices.map((dev, i) => {
+                const chipLabel = dev.state === "bootsel" ? `${dev.chip} (BOOTSEL)` : dev.chip;
+                return `
                 <div class="dropdown-item ${i === selectedIndex ? "selected" : ""}" data-index="${i}">
                     <span class="device-dot ${dev.chip !== "Unknown" ? "connected" : ""}"></span>
                     <div>
-                        <div class="dropdown-chip">${esc(dev.chip)}</div>
+                        <div class="dropdown-chip">${esc(chipLabel)}</div>
                         <div class="dropdown-desc">${esc(dev.desc)}</div>
                     </div>
                     <span class="dropdown-port">${esc(dev.port)}</span>
-                </div>
-            `).join("");
+                </div>`;
+            }).join("");
 
             dropdownList.querySelectorAll(".dropdown-item").forEach(item => {
                 item.onclick = () => {
@@ -106,7 +109,8 @@ function updateUI() {
     if (statusChip) {
         if (devices.length > 0) {
             const d = devices[selectedIndex];
-            statusChip.innerHTML = `<span class="status-dot connected"></span> ${esc(d.chip)} <span class="status-dim">${esc(d.port)}</span>`;
+            const chipLabel = d.state === "bootsel" ? `${d.chip} (BOOTSEL)` : d.chip;
+            statusChip.innerHTML = `<span class="status-dot connected"></span> ${esc(chipLabel)} <span class="status-dim">${esc(d.port)}</span>`;
         } else {
             statusChip.innerHTML = '<span class="status-dot"></span> No device';
         }

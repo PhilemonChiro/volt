@@ -650,28 +650,81 @@ function detectChip(portInfo) {
     return "Unknown";
 }
 
+// A Pico in BOOTSEL mode isn't a serial port — it's a USB mass-storage
+// volume named RPI-RP2 (RP2040) or RP2350 (Pico 2). Find any mounted
+// instance so the IDE can treat it as a real "connected device" instead
+// of falsely reporting "no device" and demanding the user re-plug.
+function findBootselVolumes() {
+    const PICO_LABELS = ["RPI-RP2", "RP2350"];
+    const matches = (name) => PICO_LABELS.some((label) => name.includes(label));
+    const out = [];
+    // macOS: /Volumes/<label>; Linux: /media/<user>/<label> or /mnt/<label>
+    // or /run/media/<user>/<label>.
+    for (const base of ["/Volumes", "/media", "/mnt", "/run/media"]) {
+        if (!fs.existsSync(base)) continue;
+        try {
+            for (const entry of fs.readdirSync(base)) {
+                const p = path.join(base, entry);
+                let stat;
+                try { stat = fs.statSync(p); } catch { continue; }
+                if (!stat.isDirectory()) continue;
+                if (matches(entry)) {
+                    out.push({ mount: p, label: entry });
+                    continue;
+                }
+                // One level deeper for /media/<user>/<label> shape.
+                try {
+                    for (const sub of fs.readdirSync(p)) {
+                        if (matches(sub)) out.push({ mount: path.join(p, sub), label: sub });
+                    }
+                } catch {}
+            }
+        } catch {}
+    }
+    return out;
+}
+
 ipcMain.handle("scan_devices", async () => {
+    // Two presences to merge: serial (running firmware) and BOOTSEL
+    // (bootloader, mounted as a USB MSC volume). Each device entry carries
+    // a `state` field — "running" or "bootsel" — that the renderer uses
+    // for labeling and that the flash path uses to pick the right
+    // mechanism.
+    const out = [];
+
+    // 1. Serial-port devices
     try {
         const ports = await SerialPort.list();
-        return ports
-            .filter(p => {
-                if (!p.vendorId) return false;
-                // Skip Intel motherboard serial (8086)
-                if (p.vendorId.toLowerCase() === "8086") return false;
-                // Skip /dev/ttyS* without a real manufacturer
-                if (/\/dev\/ttyS\d+$/.test(p.path) && !p.manufacturer) return false;
-                return true;
-            })
-            .map(p => ({
+        for (const p of ports) {
+            if (!p.vendorId) continue;
+            if (p.vendorId.toLowerCase() === "8086") continue;
+            if (/\/dev\/ttyS\d+$/.test(p.path) && !p.manufacturer) continue;
+            out.push({
                 port: p.path,
                 chip: detectChip(p),
                 desc: p.manufacturer || p.serialNumber || p.path,
                 vendorId: p.vendorId || "",
                 productId: p.productId || "",
-            }));
-    } catch (e) {
-        return [];
-    }
+                state: "running",
+            });
+        }
+    } catch (_) {}
+
+    // 2. BOOTSEL volumes (RP2040 / RP2350)
+    try {
+        for (const vol of findBootselVolumes()) {
+            out.push({
+                port: vol.mount,                    // "port" is the mount path
+                chip: vol.label === "RP2350" ? "RP2350" : "RP2040",
+                desc: `BOOTSEL mode @ ${vol.mount}`,
+                vendorId: "2e8a",
+                productId: "0003",                  // Pico's BOOTSEL VID/PID
+                state: "bootsel",
+            });
+        }
+    } catch (_) {}
+
+    return out;
 });
 
 ipcMain.handle("start_monitor", (_, port, baud) => {
