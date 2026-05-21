@@ -346,15 +346,15 @@ class DriverEdgeCases(unittest.TestCase):
             "chip esp32\n"
             "hardware {\n"
             "    pin led: Output = 2\n"
-            "    pin sig: Input = 7\n"
-            "    device w: DHT22 on sig at 7\n"
+            "    pin sig: Input = 4\n"
+            "    device w: DHT22 on sig at 4\n"
             "}\n"
             "every 1s {\n  led.toggle()\n  w.humidity()\n}\n"
         )
         errors, c = compile_to_c(src)
         self.assertFalse(errors.has_errors, [e.message for e in errors.errors])
         self.assertIn("static dht_t _w", c, "DHT22 must alias to dht_t (no dht22_* driver exists)")
-        self.assertIn("dht_init(&_w, 7, 22)", c, "DHT22 init must pass (pin=7, type=22)")
+        self.assertIn("dht_init(&_w, 4, 22)", c, "DHT22 init must pass (pin=4, type=22)")
         self.assertNotIn("dht22_init", c, "DHT22 must not emit a dht22_* symbol (driver doesn't exist)")
 
     def test_i2c_init_shape(self):

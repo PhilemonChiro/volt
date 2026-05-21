@@ -49,9 +49,16 @@ def validate_hardware(program: Program, scope: Scope, errors: CompilerErrors, ch
         else:
             _validate_pin_legacy(pin, used_pins, uses_wifi, errors)
 
-    # Validate sensors (I2C address conflicts — chip-independent)
+    # Bus pin reuse: a GPIO declared with `pin` cannot also serve as
+    # sda/scl/mosi/miso/clk/cs of a bus, or vice versa.
+    _validate_bus_pin_conflicts(program, used_pins, errors)
+
+    # Build bus_kinds map for address-range checks
+    bus_kinds = {b.name: b.bus_type.lower() for b in program.hardware.buses}
+
+    # Validate sensors (I2C address conflicts + range — chip-independent)
     for sensor in program.hardware.sensors:
-        _validate_sensor(sensor, used_i2c_addrs, errors)
+        _validate_sensor(sensor, used_i2c_addrs, errors, bus_kinds=bus_kinds)
 
     # Validate buses
     for bus in program.hardware.buses:
@@ -233,11 +240,25 @@ def _validate_pin_legacy(pin: PinDecl, used_pins: dict, uses_wifi: bool,
 # Sensor / I2C Validation
 # ============================================================
 
-def _validate_sensor(sensor: SensorDecl, used_addrs: dict, errors: CompilerErrors):
-    """Validate sensor declaration (I2C address conflicts)."""
+def _validate_sensor(sensor: SensorDecl, used_addrs: dict, errors: CompilerErrors,
+                     bus_kinds: dict | None = None):
+    """Validate sensor declaration (I2C address conflicts + I2C range)."""
 
     bus = sensor.bus_name
     addr = sensor.address
+
+    # I2C 7-bit address range check (only when the sensor is on an I2C bus).
+    # Reserved by the I2C spec: 0x00..0x07 (general call, CBUS, reserved) and
+    # 0x78..0x7F (10-bit prefix, reserved). Devices must live in 0x08..0x77.
+    if bus_kinds is not None and bus_kinds.get(bus) == "i2c":
+        if isinstance(addr, int) and (addr < 0x08 or addr > 0x77):
+            errors.error(sensor.region, "HARDWARE ERROR",
+                         f"I2C address 0x{addr:02X} on bus `{bus}` is outside the "
+                         f"7-bit device range 0x08..0x77.",
+                         hint="0x00..0x07 and 0x78..0x7F are reserved by the I²C spec. "
+                              "Check the device datasheet — most parts have a fixed "
+                              "address or an A0/A1 strap option.")
+            return
 
     if bus not in used_addrs:
         used_addrs[bus] = {}
@@ -257,6 +278,54 @@ def _validate_sensor(sensor: SensorDecl, used_addrs: dict, errors: CompilerError
 # ============================================================
 # Bus Validation
 # ============================================================
+
+def _validate_bus_pin_conflicts(program: Program, used_pins: dict,
+                                errors: CompilerErrors):
+    """A GPIO cannot serve as both a user pin AND a bus signal.
+
+    Example footgun:
+        pin led: Output = 21
+        bus i2c0: I2C(sda: 21, scl: 22)
+    GPIO 21 is now driven by two different subsystems."""
+    BUS_PARAM_NAMES = ("sda", "scl", "mosi", "miso", "clk", "sck", "cs", "tx", "rx")
+    for bus in program.hardware.buses:
+        for pname, pval in bus.params.items():
+            if pname not in BUS_PARAM_NAMES:
+                continue
+            gpio = pval.value if isinstance(pval, IntLiteral) else pval
+            if not isinstance(gpio, int):
+                continue
+            key = str(gpio)
+            if key in used_pins:
+                first = used_pins[key]
+                errors.error(bus.region, "HARDWARE ERROR",
+                             f"GPIO {gpio} is used by bus `{bus.name}` "
+                             f"({pname}) but was already declared as pin "
+                             f"`{first.name}` (line {first.region.start_line}).",
+                             hint="A pin can only belong to one subsystem. "
+                                  "Either remove the `pin` declaration or "
+                                  "move the bus signal to a free GPIO.")
+        # Cross-bus collisions: same GPIO used by two buses.
+        # We track via used_pins by inserting synthetic entries.
+    # Pass 2: cross-bus collisions
+    bus_pin_owner: dict[int, tuple] = {}  # gpio -> (bus_name, role, region)
+    for bus in program.hardware.buses:
+        for pname, pval in bus.params.items():
+            if pname not in BUS_PARAM_NAMES:
+                continue
+            gpio = pval.value if isinstance(pval, IntLiteral) else pval
+            if not isinstance(gpio, int):
+                continue
+            if gpio in bus_pin_owner:
+                prev_bus, prev_role, prev_region = bus_pin_owner[gpio]
+                errors.error(bus.region, "HARDWARE ERROR",
+                             f"GPIO {gpio} is used by bus `{bus.name}` ({pname}) "
+                             f"but is already taken by bus `{prev_bus}` "
+                             f"({prev_role}, line {prev_region.start_line}).",
+                             hint="Two buses cannot share a signal pin.")
+            else:
+                bus_pin_owner[gpio] = (bus.name, pname, bus.region)
+
 
 def _validate_bus(bus: BusDecl, chip, errors: CompilerErrors):
     """Validate bus pin assignments."""

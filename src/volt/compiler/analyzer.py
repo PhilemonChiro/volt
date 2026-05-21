@@ -84,6 +84,23 @@ ISR_MAX_CYCLES = 5000   # ~20 microseconds at 240 MHz — conservative limit
 def analyze(program: Program, scope: Scope, errors: CompilerErrors):
     """Run all analyses on the program."""
 
+    # 0. Hardware validation — pin ranges, strapping pins, bus conflicts,
+    #    I²C address sanity. Previously only voltc.py ran this, so any
+    #    programmatic compile path skipped it. Run it here so every entry
+    #    point gets the same safety checks.
+    try:
+        from .hardware import validate_hardware
+        from ..chips import get_chip
+        chip = None
+        if program.chip:
+            try:
+                chip = get_chip(program.chip.target)
+            except (ValueError, ImportError):
+                pass
+        validate_hardware(program, scope, errors, chip=chip)
+    except Exception:
+        pass
+
     # 1. Classify each task
     for task in program.tasks:
         task.tier = _classify_task(task)
