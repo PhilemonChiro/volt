@@ -466,12 +466,33 @@ async function flashESP32(projectPath, port, chip, emit) {
     const fw = frameworkDir("esp32");
     const idf = toolchain.espIdfPath(chip);
 
+    // Same PATH-prefix dance as buildESP32 — without the bundled Python
+    // on PATH, export.sh fails (macOS system python3 is 3.9, too old for
+    // ESP-IDF 5.4) and idf.py never runs. Without this, flash returned
+    // false in <1s because the && chain bailed at `source export.sh`.
+    const pathPrefix = toolchain.buildPathPrefix();
+    const envPath = pathPrefix ? `${pathPrefix}:` : "";
+
     emit("flash", `Flashing to ${port}...`, 65);
     const ok = await streamCommand(
-        `source "${idf}/export.sh" >/dev/null 2>&1 && cd "${fw}" && idf.py -p "${port}" flash`,
+        `export PATH="${envPath}$PATH" && source "${idf}/export.sh" >/dev/null 2>&1 && cd "${fw}" && idf.py -p "${port}" flash`,
         "flash", emit
     );
-    if (!ok) { emit("error", "Flash failed"); return false; }
+    if (!ok) {
+        // The most common failure shape on macOS USB-serial dev boards is
+        // "Failed to connect to ESP32: No serial data received" — the
+        // auto-reset DTR/RTS pulse doesn't put the chip into download mode,
+        // so esptool sees nothing. Point users at the manual workaround
+        // instead of just saying "Flash failed".
+        emit("error",
+            "Flash failed. If esptool reported \"No serial data received\", " +
+            "your ESP32 board's auto-reset circuit didn't trigger download " +
+            "mode. Hold the BOOT button on the board, click Run, then " +
+            "release BOOT when you see \"Connecting...\" in the log. " +
+            "(Boards without RTS/DTR wired through always need this.)"
+        );
+        return false;
+    }
 
     emit("flash", "Flash complete", 95);
     return true;
