@@ -380,6 +380,21 @@ async function onRun() {
         );
     }
 
+    // Pre-flight: if the ESP32 chip probe came back "silent", flashing will
+    // fail 30 seconds from now with "No serial data received." Abort early
+    // with a clearer hint instead of letting the user wait.
+    if (device.probe === "silent") {
+        bottomPanel.appendOutput(
+            `Cannot flash ${device.chip} on ${device.port} — chip didn't respond to probe. ` +
+            `Possible causes: charge-only USB cable, board not powered, board running ` +
+            `firmware that doesn't enter download mode on RTS/DTR (clone boards). ` +
+            `Hold BOOT, tap RESET, release BOOT, then click Run.`,
+            "error"
+        );
+        statusBar.setBuild("No chip response");
+        return;
+    }
+
     // Show pipeline
     bottomPanel.showPipeline();
     bottomPanel.updatePipelineStage("compile", "Compiling...", 10);

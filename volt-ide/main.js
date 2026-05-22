@@ -650,6 +650,92 @@ function detectChip(portInfo) {
     return "Unknown";
 }
 
+// ESP32 chip probe — verifies the chip behind the USB-serial bridge is
+// actually reachable, not just that a CH340/CP2102 chip enumerated. The
+// `detectChip` function above guesses ESP32 from the bridge's VID:PID,
+// which is true ~95% of the time but tells you nothing about whether the
+// silicon next to it is alive. v2.0.67 and earlier let users build for
+// "ESP32" against a USB-serial adapter that wasn't actually wired to any
+// chip; flashing then failed deep inside esptool with a hostile message.
+//
+// Strategy: when scan sees a USB-serial device that we'd label "ESP32",
+// kick off an async esptool probe with --before no_reset (don't toggle
+// DTR/RTS, just listen for data). 2-second timeout. Cache the result for
+// 30 seconds so the per-3-second scan tick doesn't thrash. Skip the probe
+// entirely if a serial monitor is currently holding the port — we don't
+// want to yank the user's debug stream.
+//
+// Result is one of:
+//   - "verified" — esptool got a chip response; chip is in download mode
+//     (or bootloader-stub). Confident it's reachable. RARE during normal
+//     use because running user firmware doesn't speak esptool.
+//   - "silent"   — port opened cleanly but the chip sent no data within
+//     the timeout window. Could mean: chip is dead, chip is running user
+//     firmware (no esptool support), wrong cable, or chip not wired.
+//   - "running"  — port is held by the serial monitor; we couldn't probe.
+//     Treat as "user knows it's running, don't bother them."
+//   - null       — probe not yet attempted, or no esptool available.
+const probeCache = new Map();          // port → { result, expiresAt }
+const probesInFlight = new Set();      // ports currently being probed
+const PROBE_TTL_MS = 30_000;
+
+function getEsptoolPath() {
+    try {
+        const espIdf = toolchain.espIdfPath("esp32");
+        const p = path.join(espIdf, "components", "esptool_py", "esptool", "esptool.py");
+        return fs.existsSync(p) ? p : null;
+    } catch (_) { return null; }
+}
+
+function probeEspChip(port) {
+    // Read cache, fire background refresh if stale, return current snapshot.
+    const cached = probeCache.get(port);
+    if (cached && cached.expiresAt > Date.now()) return cached.result;
+
+    if (probesInFlight.has(port)) return cached ? cached.result : null;
+    if (activePort && activePort.isOpen && activePort.path === port) {
+        // Serial monitor is holding the port — never probe; record as "running".
+        const snap = { result: "running", expiresAt: Date.now() + PROBE_TTL_MS };
+        probeCache.set(port, snap);
+        return snap.result;
+    }
+
+    const esptool = getEsptoolPath();
+    const pythonBin = toolchain.bundledPythonBin();
+    if (!esptool || !pythonBin) return null; // can't probe without tools
+
+    probesInFlight.add(port);
+    const proc = spawn(pythonBin, [esptool, "-p", port, "--before", "no_reset", "chip_id"], {
+        stdio: ["ignore", "pipe", "pipe"],
+    });
+    let answered = false;
+    let timer = setTimeout(() => {
+        try { proc.kill("SIGTERM"); } catch (_) {}
+    }, 2000);
+    const onData = (d) => {
+        // esptool prints "Chip is …", "Detected …", or "Connecting …"; only
+        // "Chip is" / "Detected" is positive confirmation.
+        const s = d.toString();
+        if (/Chip is|Detected|Crystal is/.test(s)) answered = true;
+    };
+    proc.stdout.on("data", onData);
+    proc.stderr.on("data", onData);
+    proc.on("close", () => {
+        clearTimeout(timer);
+        probesInFlight.delete(port);
+        const result = answered ? "verified" : "silent";
+        probeCache.set(port, { result, expiresAt: Date.now() + PROBE_TTL_MS });
+        // Push an update so the renderer's dropdown refreshes promptly.
+        if (win) win.webContents.send("devices:probe_updated", { port, state: result });
+    });
+    proc.on("error", () => {
+        clearTimeout(timer);
+        probesInFlight.delete(port);
+        // Couldn't even spawn esptool — record null so we'll retry later.
+    });
+    return cached ? cached.result : null;
+}
+
 // A Pico in BOOTSEL mode isn't a serial port — it's a USB mass-storage
 // volume named RPI-RP2 (RP2040) or RP2350 (Pico 2). Find any mounted
 // instance so the IDE can treat it as a real "connected device" instead
@@ -699,14 +785,26 @@ ipcMain.handle("scan_devices", async () => {
             if (!p.vendorId) continue;
             if (p.vendorId.toLowerCase() === "8086") continue;
             if (/\/dev\/ttyS\d+$/.test(p.path) && !p.manufacturer) continue;
-            out.push({
+            const chip = detectChip(p);
+            const entry = {
                 port: p.path,
-                chip: detectChip(p),
+                chip,
                 desc: p.manufacturer || p.serialNumber || p.path,
                 vendorId: p.vendorId || "",
                 productId: p.productId || "",
                 state: "running",
-            });
+            };
+            // For ESP32-family devices (where USB enumeration alone doesn't
+            // prove the chip itself is alive — the bridge can light up
+            // without a working ESP32 on the other side), kick off a probe
+            // and surface the result. RP2040 / STM32 / unknown chips skip
+            // the probe (RP2040's running-state CDC is its own confirmation;
+            // STM32 has no equivalent of esptool chip_id).
+            if (chip.toLowerCase().includes("esp32")) {
+                const probe = probeEspChip(p.path);
+                if (probe) entry.probe = probe;  // "verified" | "silent" | "running"
+            }
+            out.push(entry);
         }
     } catch (_) {}
 

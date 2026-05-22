@@ -11,6 +11,21 @@ function esc(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Produce a human-readable chip label that includes ground-truth state.
+// Detection alone (from USB VID:PID) is unreliable for ESP32 — the CH340 /
+// CP2102 bridge enumerates whether or not the chip behind it is alive.
+// The probe state distinguishes:
+//   verified  → esptool got a chip response (chip is in download mode)
+//   silent    → chip didn't reply (could be running firmware OR dead)
+//   running   → port held by serial monitor (we can't probe; assume alive)
+function labelFor(dev) {
+    if (dev.state === "bootsel") return `${dev.chip} (BOOTSEL)`;
+    if (dev.probe === "verified") return `${dev.chip} ✓`;
+    if (dev.probe === "silent")   return `${dev.chip} (no response)`;
+    if (dev.probe === "running")  return dev.chip;  // monitor active — don't add noise
+    return dev.chip;
+}
+
 export function init(onChange) {
     onDeviceChange = onChange;
 
@@ -74,14 +89,14 @@ function updateUI() {
         if (selectedIndex >= devices.length) selectedIndex = 0;
         const d = devices[selectedIndex];
 
-        const labelText = d.state === "bootsel" ? `${d.chip} (BOOTSEL)` : d.chip;
+        const labelText = labelFor(d);
         label.textContent = labelText;
         if (dot) dot.className = "device-dot connected";
         if (dropdownEmpty) dropdownEmpty.style.display = "none";
 
         if (dropdownList) {
             dropdownList.innerHTML = devices.map((dev, i) => {
-                const chipLabel = dev.state === "bootsel" ? `${dev.chip} (BOOTSEL)` : dev.chip;
+                const chipLabel = labelFor(dev);
                 return `
                 <div class="dropdown-item ${i === selectedIndex ? "selected" : ""}" data-index="${i}">
                     <span class="device-dot ${dev.chip !== "Unknown" ? "connected" : ""}"></span>
@@ -109,7 +124,7 @@ function updateUI() {
     if (statusChip) {
         if (devices.length > 0) {
             const d = devices[selectedIndex];
-            const chipLabel = d.state === "bootsel" ? `${d.chip} (BOOTSEL)` : d.chip;
+            const chipLabel = labelFor(d);
             statusChip.innerHTML = `<span class="status-dot connected"></span> ${esc(chipLabel)} <span class="status-dim">${esc(d.port)}</span>`;
         } else {
             statusChip.innerHTML = '<span class="status-dot"></span> No device';
