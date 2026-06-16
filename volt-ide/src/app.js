@@ -13,12 +13,27 @@ import * as bottomPanel from "./components/bottom-panel.js";
 import * as sidePanel from "./components/side-panel.js";
 import * as settingsDialog from "./components/settings.js";
 import * as settings from "./services/settings.js";
+import * as onboarding from "./components/onboarding.js";
+import { startTour } from "./components/guided-tour.js";
 import { readFile, saveFile } from "./services/projects.js";
 
 // Hydrate the settings cache as early as possible so other components can
 // read get() synchronously by the time they need it.
 settings.init().then(() => {
     applyBodyClassSettings();
+    // First-run onboarding — only if onboarding not yet completed
+    if (onboarding.isFirstRun()) {
+        // Short delay so the welcome screen renders underneath as a gradient base
+        setTimeout(() => {
+            onboarding.show((projectPath, chip) => {
+                loadProject(projectPath);
+                // Start guided tour once the editor is open
+                setTimeout(() => startTour(() => {
+                    console.log("[volt] Guided tour complete");
+                }), 600);
+            });
+        }, 500);
+    }
 });
 
 // Show app version in the status bar (status-bar right side).
@@ -289,6 +304,11 @@ toolbar.init({
     },
     onSave:     () => onSave(),
     onSettings: () => settingsDialog.show(),
+    onHelp:     () => {
+        if (window.volt && window.volt.openExternal) {
+            window.volt.openExternal("https://volt.dev/docs/GETTING_STARTED.md");
+        }
+    },
 });
 
 // ---- Wire welcome ----

@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld("volt", {
     close: () => ipcRenderer.invoke("win_close"),
 
     // Projects
-    createProject: (name, chip) => ipcRenderer.invoke("create_project", name, chip),
+    createProject: (name, chip, template) => ipcRenderer.invoke("create_project", name, chip, template || ""),
     listProjects: () => ipcRenderer.invoke("list_projects"),
     readFile: (path) => ipcRenderer.invoke("read_file", path),
     saveFile: (path, content) => ipcRenderer.invoke("save_file", path, content),

@@ -12,6 +12,10 @@ static const char *level_names[] = {
 
 void volt_log_write(int level, const char *tag, const char *fmt, ...)
 {
+    // Clamp level to valid range to prevent array OOB access
+    if (level < 0) level = 0;
+    if (level > 4) level = 4;
+
     uint32_t ms = to_ms_since_boot(get_absolute_time());
     uint32_t h  = (ms / 3600000) % 24;
     uint32_t m  = (ms / 60000) % 60;

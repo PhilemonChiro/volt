@@ -10,10 +10,10 @@ const BOARDS = [
 ];
 
 const TEMPLATES = [
-    { id: "blink", label: "Blink", desc: "LED toggle every 500ms" },
-    { id: "iot-sensor", label: "IoT Sensor", desc: "WiFi + MQTT + sensor" },
-    { id: "door-lock", label: "Door Lock", desc: "State machine + keypad" },
-    { id: "empty", label: "Empty", desc: "Blank project" },
+    { id: "blink", label: "Blink", desc: "LED toggle every 500ms", code: "every 500ms { led.toggle() }" },
+    { id: "iot-sensor", label: "IoT Sensor", desc: "WiFi + MQTT + sensor", code: "wifi.connect() / mqtt.send()" },
+    { id: "door-lock", label: "Door Lock", desc: "State machine + keypad", code: "machine door_lock { ... }" },
+    { id: "empty", label: "Empty", desc: "Blank project", code: "// start from scratch" },
 ];
 
 const TOTAL_STEPS = 3;
@@ -23,7 +23,7 @@ export function show(onCreated) {
     if (old) old.remove();
 
     const state = { step: 1, chip: "esp32", template: "blink" };
-    let dir = "forward";  // animation direction for body swap
+    let dir = "forward";
 
     const overlay = document.createElement("div");
     overlay.id = "wizardOverlay";
@@ -49,24 +49,30 @@ export function show(onCreated) {
         const titles = { 1: "Select Board", 2: "Choose Template", 3: "Name Your Project" };
         const nextLabel = state.step === TOTAL_STEPS ? "Create Project" : "Continue";
 
-        let cards = "";
+        let body = "";
         if (state.step === 1) {
-            cards = BOARDS.map(b =>
+            const cards = BOARDS.map(b =>
                 `<button class="wiz-card ${b.id === state.chip ? 'active' : ''}" data-val="${b.id}">
                     <strong>${b.label}</strong><small>${b.desc}</small>
                 </button>`
             ).join("");
+            body = `<div class="wiz-grid">${cards}</div>`;
         } else if (state.step === 2) {
-            cards = TEMPLATES.map(t =>
+            const cards = TEMPLATES.map(t =>
                 `<button class="wiz-card ${t.id === state.template ? 'active' : ''}" data-val="${t.id}">
                     <strong>${t.label}</strong><small>${t.desc}</small>
+                    <code class="wiz-card-preview">${t.code}</code>
                 </button>`
             ).join("");
+            body = `<div class="wiz-grid">${cards}</div>`;
+        } else {
+            body = `
+                <div class="wiz-name-info">
+                    Will be created in ~/Volt/<strong>${esc(state.name || "my-project")}</strong>
+                </div>
+                <input type="text" class="wiz-input" id="wizNameInput" placeholder="my-project" autofocus>
+            `;
         }
-
-        const body = state.step <= 2
-            ? `<div class="wiz-grid">${cards}</div>`
-            : `<input type="text" class="wiz-input" id="wizNameInput" placeholder="my-project" autofocus>`;
 
         overlay.innerHTML = `
             <div class="wizard-dialog">
@@ -109,8 +115,9 @@ export function show(onCreated) {
                 const input = overlay.querySelector("#wizNameInput");
                 const name = input ? input.value.trim() : "";
                 if (!name) { if (input) input.focus(); return; }
+                state.name = name;
                 try {
-                    const path = await createProject(name, state.chip);
+                    const path = await createProject(name, state.chip, state.template);
                     close();
                     if (path && onCreated) onCreated(path, state.chip);
                 } catch (e) {
@@ -134,4 +141,8 @@ export function show(onCreated) {
     }
 
     render();
+}
+
+function esc(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

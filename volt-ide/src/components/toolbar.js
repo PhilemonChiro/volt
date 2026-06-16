@@ -2,7 +2,7 @@
 
 const api = window.volt;
 
-export function init({ onNew, onOpen, onClose, onRun, onMonitor, onCheck, onFormat, onSave, onSettings }) {
+export function init({ onNew, onOpen, onClose, onRun, onMonitor, onCheck, onFormat, onSave, onSettings, onHelp }) {
     bind("runBtn", onRun);
     bind("monitorBtn", onMonitor);
     bind("checkBtn", onCheck);
@@ -12,6 +12,7 @@ export function init({ onNew, onOpen, onClose, onRun, onMonitor, onCheck, onForm
     bind("openProjectBtn", onOpen);
     bind("closeProjectBtn", onClose);
     bind("settingsBtn", onSettings);
+    bind("helpBtn", onHelp);
 
     // Window controls
     bind("winMinimize", () => api.minimize());

@@ -242,6 +242,7 @@ volt_error_t mqtt_on_receive(const char *topic, mqtt_handler_t handler)
     }
 
     strncpy(s_subs[s_sub_count].topic, topic, sizeof(s_subs[s_sub_count].topic) - 1);
+    s_subs[s_sub_count].topic[sizeof(s_subs[s_sub_count].topic) - 1] = '\0';
     s_subs[s_sub_count].handler = handler;
     s_sub_count++;
 

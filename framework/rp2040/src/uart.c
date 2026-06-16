@@ -40,6 +40,7 @@ volt_error_t volt_uart_write(uint8_t port_id, const uint8_t *data, uint16_t len)
 
 volt_error_t volt_uart_print(uint8_t port_id, const char *text)
 {
+    if (text == NULL) return VOLT_ERR_INVALID_ARG;
     uart_inst_t *hw = get_uart_hw(port_id);
     while (*text) {
         uart_putc(hw, *text++);

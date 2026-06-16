@@ -28,9 +28,10 @@ void volt_run(volt_task_entry_t *tasks, int count)
         }
 
         // Only sleep when no task ran — keeps timing precise
-        // tight_loop_contents() yields to USB stack without blocking
+        // Sleep 1ms to avoid 100% CPU burn on battery-powered devices.
+        // tight_loop_contents() yields to USB stack but burns CPU.
         if (!any_ran) {
-            tight_loop_contents();
+            sleep_ms(1);
         }
     }
 }

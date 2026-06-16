@@ -57,6 +57,7 @@ volt_error_t volt_uart_write(uint8_t port_id, const uint8_t *data, uint16_t len)
 volt_error_t volt_uart_print(uint8_t port_id, const char *text)
 {
     if (port_id > 2) return VOLT_ERR_INVALID_ARG;
+    if (text == NULL) return VOLT_ERR_INVALID_ARG;
     int len = 0;
     while (text[len]) len++;
     int written = uart_write_bytes(port_id, text, len);

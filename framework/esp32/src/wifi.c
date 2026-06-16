@@ -75,7 +75,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
             s_retry_count++;
 
             // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s max
-            int delay_ms = 1000 * (1 << (s_retry_count > 5 ? 5 : s_retry_count - 1));
+            int shift = s_retry_count > 5 ? 5 : (s_retry_count > 0 ? s_retry_count - 1 : 0);
+            int delay_ms = 1000 * (1 << shift);
             if (delay_ms > MAX_RETRY_DELAY_MS) delay_ms = MAX_RETRY_DELAY_MS;
 
             log_warn("wifi", "disconnected — retry #%d in %dms (total: %lu)",
@@ -126,8 +127,12 @@ volt_error_t wifi_connect(const char *ssid, const char *password)
     if (ssid == NULL) return VOLT_ERR_INVALID_ARG;
 
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1);
+    s_ssid[sizeof(s_ssid) - 1] = '\0';
     if (password) {
         strncpy(s_password, password, sizeof(s_password) - 1);
+        s_password[sizeof(s_password) - 1] = '\0';
+    } else {
+        s_password[0] = '\0';
     }
 
     if (!s_initialized) {
@@ -167,8 +172,10 @@ volt_error_t wifi_connect(const char *ssid, const char *password)
     }
 
     wifi_config_t wifi_config = {0};
-    strncpy((char *)wifi_config.sta.ssid, s_ssid, sizeof(wifi_config.sta.ssid));
-    strncpy((char *)wifi_config.sta.password, s_password, sizeof(wifi_config.sta.password));
+    strncpy((char *)wifi_config.sta.ssid, s_ssid, sizeof(wifi_config.sta.ssid) - 1);
+    wifi_config.sta.ssid[sizeof(wifi_config.sta.ssid) - 1] = '\0';
+    strncpy((char *)wifi_config.sta.password, s_password, sizeof(wifi_config.sta.password) - 1);
+    wifi_config.sta.password[sizeof(wifi_config.sta.password) - 1] = '\0';
     wifi_config.sta.threshold.authmode = password ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
 
     esp_wifi_set_mode(WIFI_MODE_STA);

@@ -163,8 +163,8 @@ static void check_boot_loop(void)
         return;  // never reaches here — factory_reset reboots
     }
 
-    // Increment crash counter
-    crash_count++;
+    // Increment crash counter (cap at MAX_BOOT_CRASHES to prevent overflow bypass)
+    if (crash_count < MAX_BOOT_CRASHES) crash_count++;
     nvs_set_i32(handle, "_crashes", crash_count);
     nvs_commit(handle);
     nvs_close(handle);

@@ -72,8 +72,17 @@ def _parse_duration(raw: str) -> tuple[int, str]:
     for unit in sorted(_DURATION_TO_US.keys(), key=len, reverse=True):
         if raw.endswith(unit):
             num_str = raw[:-len(unit)]
-            number = float(num_str) if '.' in num_str else int(num_str)
+            try:
+                number = float(num_str) if '.' in num_str else int(num_str)
+            except (ValueError, OverflowError):
+                return 0, raw
+            # Cap at reasonable maximum (~1.19 hours in microseconds fits in int32)
+            if number > 4294967295:
+                return _DURATION_TO_US[unit], raw
             us = int(number * _DURATION_TO_US[unit])
+            # Clamp to uint32 max for C compatibility
+            if us > 4294967295:
+                us = 4294967295
             return us, raw
     return 0, raw
 

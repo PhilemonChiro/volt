@@ -7,6 +7,7 @@
 #include "pico/stdlib.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
+#include "hardware/watchdog.h"
 
 // ============================================================
 // RP2040 Flash-based Key-Value Storage
@@ -204,7 +205,7 @@ static bool flash_read_entry(const char *key, dirty_type_t *type,
 static void flash_commit_all(void)
 {
     // Build the new sector image in RAM
-    static uint8_t page_buf[FLASH_SECTOR_SIZE];
+    static uint8_t page_buf[FLASH_SECTOR_SIZE] __attribute__((aligned(256)));
     memset(page_buf, 0xFF, sizeof(page_buf));
 
     // Header
@@ -296,11 +297,19 @@ static void flash_commit_all(void)
     }
 
     // Write to flash — protect against concurrent access from other core
+    // Split erase and program to minimize interrupt-disable time.
+    // Erase (~4ms per 4KB on RP2040) and program (~5ms) each need interrupts OFF.
     uint32_t target = inactive_sector();
     uint32_t ints = save_and_disable_interrupts();
     uint32_t lock_num = spin_lock_get_num(s_flash_lock);
     spin_lock_blocking(s_flash_lock);
     flash_range_erase(target, FLASH_SECTOR_SIZE);
+    spin_unlock(s_flash_lock, lock_num);
+    restore_interrupts(ints);
+
+    // Re-disable for the program step (shorter than erase)
+    ints = save_and_disable_interrupts();
+    spin_lock_blocking(s_flash_lock);
     flash_range_program(target, page_buf, FLASH_SECTOR_SIZE);
     spin_unlock(s_flash_lock, lock_num);
     restore_interrupts(ints);
@@ -687,10 +696,14 @@ volt_error_t storage_factory_reset(void)
 {
     log_warn("storage", "FACTORY RESET — erasing storage sectors");
 
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_erase(SECTOR_A_OFFSET, FLASH_SECTOR_SIZE);
-    flash_range_erase(SECTOR_B_OFFSET, FLASH_SECTOR_SIZE);
-    restore_interrupts(ints);
+    // Erase each sector separately to avoid ~200ms with interrupts disabled.
+    // Each 4KB erase takes ~100ms on RP2040.
+    for (uint32_t off = SECTOR_A_OFFSET; off < FLASH_STORAGE_OFFSET + FLASH_STORAGE_SIZE; off += FLASH_SECTOR_SIZE) {
+        uint32_t ints = save_and_disable_interrupts();
+        flash_range_erase(off, FLASH_SECTOR_SIZE);
+        restore_interrupts(ints);
+        watchdog_update();
+    }
 
     memset(s_dirty, 0, sizeof(s_dirty));
     memset(s_lists, 0, sizeof(s_lists));

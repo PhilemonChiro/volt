@@ -10,7 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · 
+  <strong>New here?</strong>
+  <a href="docs/GETTING_STARTED.md">Getting Started</a> · 
+  <a href="docs/LANGUAGE_QUICK_REFERENCE.md">Quick Reference</a> · 
+  <a href="docs/TROUBLESHOOTING.md">Troubleshooting</a><br>
   <a href="#examples">Examples</a> · 
   <a href="#what-the-compiler-catches">Error Detection</a> · 
   <a href="#architecture">Architecture</a> · 
@@ -29,26 +32,40 @@ Volt is a typed language that transpiles to C for embedded microcontrollers. You
 - **Bidirectional type checking** — full type inference with hardware-aware types
 - **Zero overhead** — compiles to clean C, runs at native speed
 
-## Quick Start
+## Onboarding Path
+
+| Step | What you'll learn | Time |
+|------|-------------------|------|
+| [Getting Started](docs/GETTING_STARTED.md) | Blink an LED from scratch | 5 min |
+| [Language Quick Reference](docs/LANGUAGE_QUICK_REFERENCE.md) | All syntax in one page | 2 min |
+| [Troubleshooting Guide](docs/TROUBLESHOOTING.md) | Fix common errors fast | — |
+| [Examples](#examples) | Real programs to learn from | — |
+| [Full Language Spec](docs/architecture/06-volt-language-design.md) | Deep language reference | 15 min |
+
+## Quick Install
 
 ```bash
-# Install
 pip install volt-lang
-
-# Create a project
-volt new my-sensor
-cd my-sensor
-
-# Check for errors
-volt check
-
-# Build and flash (requires ESP-IDF)
-volt build
-volt flash
-volt monitor
+echo 'hardware { pin led = 2 }\nevery 500ms { led.toggle() }' > main.volt
+voltc main.volt          # should print C code, no errors
 ```
 
 ## Examples
+
+New to Volt? Try the examples in this order:
+
+| Example | Concepts | Difficulty |
+|---------|----------|------------|
+| [01-blink](examples/01-blink/) | Multiple pins, anonymous `every` blocks | Beginner |
+| [03-state-blink](examples/03-state-blink/) | State machines | Beginner |
+| [02-iot-sensor](examples/02-iot-sensor/) | WiFi + MQTT + ADC + PWM | Beginner |
+| [07-safe-boot](examples/07-safe-boot/) | Try blocks, error recovery | Intermediate |
+| [04-multi-state](examples/04-multi-state/) | Multiple state machines + tasks | Intermediate |
+| [06-combined-all](examples/06-combined-all/) | Functions + state machines + storage | Intermediate |
+| [05-stress-machine](examples/05-stress-machine/) | Sequencer + watchdog + ISR tasks | Advanced |
+| [door-lock](examples/door-lock/) | Full product: state machine + MQTT + storage + channels | Advanced |
+| [smart-led](examples/smart-led/) | PWM breathing + button input + shared state | Advanced |
+| [weather-station](examples/weather-station/) | ADC + storage + deep sleep + MQTT telemetry | Advanced |
 
 ### Smart greenhouse — 3 task tiers from one keyword
 

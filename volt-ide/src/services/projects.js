@@ -1,8 +1,8 @@
 // Project service — create, open, save, list
 const api = window.volt;
 
-export async function createProject(name, chip) {
-    return api.createProject(name, chip);
+export async function createProject(name, chip, template) {
+    return api.createProject(name, chip, template);
 }
 
 export async function listProjects() {

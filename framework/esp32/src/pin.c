@@ -440,7 +440,7 @@ void pin_blink_once(uint8_t pin, uint32_t duration_ms)
 
 static uint8_t dac_values[PIN_COUNT];
 
-static dac_channel_t pin_to_dac_channel(uint8_t pin)
+static int8_t pin_to_dac_channel(uint8_t pin)
 {
     if (pin == 25) return DAC_CHANNEL_1;  // ESP-IDF: DAC_CHANNEL_1 = GPIO25
     if (pin == 26) return DAC_CHANNEL_2;  // ESP-IDF: DAC_CHANNEL_2 = GPIO26
@@ -455,7 +455,8 @@ volt_error_t pin_set_dac(uint8_t pin)
     }
     if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
 
-    dac_channel_t ch = pin_to_dac_channel(pin);
+    int8_t ch = pin_to_dac_channel(pin);
+    if (ch < 0) return VOLT_ERR_INTERNAL;
     esp_err_t err = dac_output_enable(ch);
     if (err != ESP_OK) {
         log_error("pin", "DAC enable failed on GPIO %d (esp_err=%d)", pin, err);
@@ -474,7 +475,8 @@ volt_error_t pin_dac_write(uint8_t pin, uint8_t value)
     if (pin >= PIN_COUNT) return VOLT_ERR_INVALID_PIN;
     if (pin_modes[pin] != PIN_MODE_DAC) return VOLT_ERR_WRONG_PIN_MODE;
 
-    dac_channel_t ch = pin_to_dac_channel(pin);
+    int8_t ch = pin_to_dac_channel(pin);
+    if (ch < 0) return VOLT_ERR_INTERNAL;
     dac_output_voltage(ch, value);
     dac_values[pin] = value;
     return VOLT_OK;

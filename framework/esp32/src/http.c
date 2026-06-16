@@ -22,6 +22,8 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
     http_response_t *resp = (http_response_t *)evt->user_data;
 
     if (evt->event_id == HTTP_EVENT_ON_DATA && resp && resp->buf) {
+        if (resp->buf_size == 0) return ESP_OK;
+        if (resp->received >= resp->buf_size - 1) return ESP_OK;
         // Copy received data into our buffer (append)
         size_t space = resp->buf_size - resp->received - 1; // leave room for null
         size_t copy = evt->data_len < space ? evt->data_len : space;

@@ -210,6 +210,11 @@ volt_error_t servo_attach_range(uint8_t pin, uint16_t min_us, uint16_t max_us)
 
     configure_timer_once();
 
+    if (servo_count >= 8) {
+        log_error("servo", "LEDC has only 8 hardware channels — servo %d would exceed limit", servo_count);
+        return VOLT_ERR_NOT_SUPPORTED;
+    }
+
     uint8_t idx = servo_count;
     uint8_t ch = idx;  // 1:1 channel mapping (LEDC has 8 channels)
 

@@ -24,6 +24,10 @@ static const char *level_names[] = {
 
 void volt_log_write(int level, const char *tag, const char *fmt, ...)
 {
+    // Clamp level to valid range to prevent array OOB access
+    if (level < 0) level = 0;
+    if (level > 4) level = 4;
+
     // Get milliseconds since boot from FreeRTOS tick counter
     uint32_t ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
     uint32_t h  = (ms / 3600000) % 24;

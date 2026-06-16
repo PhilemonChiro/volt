@@ -35,11 +35,13 @@ int wifi_get_rssi(void)
 void wifi_on_connect(wifi_callback_t callback)
 {
     (void)callback;
+    log_warn("wifi", "WiFi callbacks not supported on RP2040");
 }
 
 void wifi_on_disconnect(wifi_callback_t callback)
 {
     (void)callback;
+    log_warn("wifi", "WiFi callbacks not supported on RP2040");
 }
 
 wifi_stats_t wifi_get_stats(void)

@@ -430,7 +430,12 @@ BINARY_OP_TYPES = {
 def check_types(program: Program, scope: Scope, errors: CompilerErrors):
     """Run type checking on the entire program."""
 
-    # Load device registry — merge into METHOD_TYPES
+    # Make a fresh copy of METHOD_TYPES for this compilation to prevent
+    # unbounded growth across multiple compile_volt() calls in the IDE worker.
+    global METHOD_TYPES
+    _saved_types = METHOD_TYPES
+    METHOD_TYPES = {**_saved_types}
+
     from .device_registry import get_registry
     registry = get_registry()
     for dev_name, methods in registry.get_method_types().items():
@@ -508,6 +513,8 @@ def check_types(program: Program, scope: Scope, errors: CompilerErrors):
                     f"Storage `{storage.name}` declared as `{storage.type_name}` "
                     f"but default value is `{val_type}`.",
                 )
+
+    METHOD_TYPES = _saved_types
 
 
 # ============================================================
