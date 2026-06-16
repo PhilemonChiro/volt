@@ -316,15 +316,20 @@ function wireEvents(step, state, close, render, overlay, animateOut) {
 
             try {
                 const path = await createProject(name, state.chip, state.template);
-                // Celebration
+                const chipLabel = CHIPS.find(c => c.id === state.chip)?.label || state.chip;
                 overlay.querySelector(".onboarding-content").innerHTML = `
-                    <div class="onboarding-header" style="text-align:center;padding:40px 0">
-                        <div style="font-size:48px;margin-bottom:16px;animation: onboarding-bounce 600ms cubic-bezier(0.34,1.4,0.64,1) both">🎉</div>
-                        <h1 class="onboarding-title">Ready to go!</h1>
-                        <p class="onboarding-subtitle">Project <strong>${name}</strong> created for ${CHIPS.find(c => c.id === state.chip)?.label || state.chip}.</p>
-                        <div style="margin-top:24px;display:flex;gap:12px;justify-content:center">
+                    <div class="onboarding-success">
+                        <div class="onboarding-success-mark">
+                            <svg viewBox="0 0 52 52" width="52" height="52">
+                                <circle class="onboarding-success-ring" cx="26" cy="26" r="24" fill="none" stroke="currentColor" stroke-width="2"/>
+                                <path class="onboarding-success-tick" d="M16 27 L23 34 L37 19" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h1 class="onboarding-title">Project created</h1>
+                        <p class="onboarding-subtitle"><strong>${name}</strong> &middot; ${chipLabel}</p>
+                        <div class="onboarding-footer onboarding-footer-center">
                             <button class="onboarding-btn onboarding-btn-primary" id="onbFinish">
-                                Open Project
+                                Open project
                                 <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-left:4px"><polyline points="6 3 11 8 6 13"/></svg>
                             </button>
                         </div>
@@ -334,8 +339,6 @@ function wireEvents(step, state, close, render, overlay, animateOut) {
                     markComplete();
                     close([path, state.chip]);
                 };
-                // Confetti-like sparkles
-                launchSparkles(overlay);
             } catch (e) {
                 console.error("[onboarding] create failed:", e);
                 if (btnText) btnText.textContent = "Create Project";
@@ -349,29 +352,4 @@ function wireEvents(step, state, close, render, overlay, animateOut) {
     overlay.onkeydown = (e) => {
         if (e.key === "Enter" && nextBtn && !createBtn) nextBtn.click();
     };
-}
-
-function launchSparkles(overlay) {
-    const colors = ["var(--volt)", "#FFD700", "#FF6B6B", "#4ECDC4", "#A78BFA", "#F97316"];
-    const body = overlay.querySelector(".onboarding-body");
-    if (!body) return;
-    const rect = body.getBoundingClientRect();
-    for (let i = 0; i < 24; i++) {
-        const sparkle = document.createElement("div");
-        sparkle.className = "onboarding-sparkle";
-        const x = rect.left + (rect.width * (0.1 + Math.random() * 0.8));
-        const y = rect.top + rect.height * 0.3 + Math.random() * rect.height * 0.4;
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        const size = 3 + Math.random() * 4;
-        sparkle.style.cssText = `
-            left:${x}px; top:${y}px; width:${size}px; height:${size}px;
-            background:${color};
-            --dx:${(Math.random() - 0.5) * 200}px;
-            --dy:${-100 - Math.random() * 150}px;
-            --dr:${Math.random() * 720}deg;
-            animation: sparkle-fly 800ms cubic-bezier(0.22,1,0.36,1) ${i * 30}ms both;
-        `;
-        document.body.appendChild(sparkle);
-        setTimeout(() => sparkle.remove(), 2000);
-    }
 }

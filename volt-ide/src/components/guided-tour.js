@@ -6,7 +6,7 @@ const STEPS = [
     {
         target: "#editorContainer",
         title: "Write your code",
-        body: "This is the editor. Write Volt code here — it's like Python but compiles to C for microcontrollers.",
+        body: "This is the editor. Write Volt here — a typed, hardware-aware language that compiles to C for ESP32, RP2040, and ESP8266.",
         placement: "right",
         highlightPadding: 8,
     },

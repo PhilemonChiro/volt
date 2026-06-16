@@ -3926,23 +3926,44 @@ kbd {
     to { transform: rotate(360deg); }
 }
 
-/* Celebration bounce */
-@keyframes onboarding-bounce {
-    from { opacity: 0; transform: scale(0.3); }
-    50% { transform: scale(1.1); }
-    to { opacity: 1; transform: scale(1); }
+/* Success state — restrained drawn checkmark, no confetti */
+.onboarding-success {
+    text-align: center;
+    padding: 32px 0 8px;
 }
-
-/* Sparkle particles */
-.onboarding-sparkle {
-    position: fixed;
-    z-index: 2001;
-    border-radius: 50%;
-    pointer-events: none;
+.onboarding-success-mark {
+    color: var(--ok);
+    display: inline-flex;
+    margin-bottom: var(--s-4);
+    animation: onboarding-success-in 320ms cubic-bezier(0.22,1,0.36,1) both;
 }
-@keyframes sparkle-fly {
-    from { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
-    to   { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--dr)) scale(0); }
+@keyframes onboarding-success-in {
+    from { opacity: 0; transform: scale(0.94); }
+    to   { opacity: 1; transform: scale(1); }
+}
+/* Draw the ring, then the tick — circumference 2*pi*24 ≈ 151, tick path ≈ 34 */
+.onboarding-success-ring {
+    stroke-dasharray: 151;
+    stroke-dashoffset: 151;
+    animation: onboarding-draw 460ms cubic-bezier(0.65,0,0.35,1) 80ms forwards;
+}
+.onboarding-success-tick {
+    stroke-dasharray: 34;
+    stroke-dashoffset: 34;
+    animation: onboarding-draw 240ms cubic-bezier(0.65,0,0.35,1) 420ms forwards;
+}
+@keyframes onboarding-draw {
+    to { stroke-dashoffset: 0; }
+}
+.onboarding-footer-center {
+    justify-content: center;
+}
+@media (prefers-reduced-motion: reduce) {
+    .onboarding-success-mark,
+    .onboarding-success-ring,
+    .onboarding-success-tick { animation: none; }
+    .onboarding-success-ring,
+    .onboarding-success-tick { stroke-dashoffset: 0; }
 }
 
 /* ==========================================================
