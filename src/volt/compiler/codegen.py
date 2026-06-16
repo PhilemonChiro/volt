@@ -1158,6 +1158,9 @@ class CCodeGen:
                                 else 1000
                             )
                         )
+                        # The ISR timer period is a uint32_t microsecond count.
+                        # Clamp so a day-scale interval can't wrap to garbage.
+                        us = min(us, 4294967295)
                         self._out(
                             f'volt_critical_create("{task.name}", {task.name}_isr, {us}, NULL);'
                         )
