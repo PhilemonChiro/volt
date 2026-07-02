@@ -26,6 +26,22 @@ function labelFor(dev) {
     return dev.chip;
 }
 
+// Start/stop the periodic scan. Polling is paused while the window is hidden
+// or minimized so we don't keep running serial enumeration + esptool probes
+// in the background (CPU/battery on laptops); it resumes on return.
+function startPolling() {
+    if (scanInterval) return;   // already running
+    scan();
+    scanInterval = setInterval(scan, 3000);
+}
+
+function stopPolling() {
+    if (scanInterval) {
+        clearInterval(scanInterval);
+        scanInterval = null;
+    }
+}
+
 export function init(onChange) {
     onDeviceChange = onChange;
 
@@ -48,9 +64,12 @@ export function init(onChange) {
         }
     });
 
-    // Initial scan + periodic scan every 3 seconds
-    scan();
-    scanInterval = setInterval(scan, 3000);
+    // Initial scan + periodic scan every 3 seconds, paused while hidden.
+    startPolling();
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) stopPolling();
+        else startPolling();
+    });
 }
 
 export async function scan() {

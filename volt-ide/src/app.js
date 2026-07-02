@@ -569,17 +569,6 @@ document.addEventListener("keydown", (e) => {
 bottomPanel.init(document.getElementById("bottomPanel"));
 sidePanel.init();
 
-// Drive the build progress bar from the real events main.js emits during
-// compile / cmake configure / ninja / esptool. Per-file build steps and
-// flash percentages are now the source of truth instead of hardcoded
-// stage markers from the renderer.
-window.volt.onBuild("progress", ({ stage, message, percent }) => {
-    bottomPanel.updatePipelineStage(stage, message, percent);
-    if (stage === "build" || stage === "flash" || stage === "compile") {
-        statusBar.setBuild(message);
-    }
-});
-
 // ── Pinout ↔ editor bidirectional sync ──────────────────────────
 // hover a pin on the board → flash its declaration line in the editor
 let _pinoutHoverDecos = null;
@@ -683,9 +672,11 @@ window.volt.onSerial((data) => bottomPanel.appendMonitor(data.line));
 window.volt.onSerialDisconnected(() => bottomPanel.setMonitorConnected(false));
 window.volt.onSerialConnected(() => bottomPanel.setMonitorConnected(true));
 
-// Wire build progress events (registered once, not per-run)
-window.volt.onBuild("progress", (data) => {
-    const { stage, message } = data;
+// Wire build progress events (single handler — registered once, not per-run).
+// main.js is the source of truth for the percent (per-file build steps, real
+// flash percentages); fall back to a coarse per-stage estimate only when it
+// doesn't send one.
+window.volt.onBuild("progress", ({ stage, message, percent }) => {
     if (stage === "error") {
         bottomPanel.updatePipelineStage("error", message, 0);
         bottomPanel.appendOutput(message, "error");
@@ -696,8 +687,9 @@ window.volt.onBuild("progress", (data) => {
         statusBar.setBuild("Ready");
         setTimeout(() => bottomPanel.clearProgress(), 3000);
     } else {
-        const pctMap = { compile: 20, build: 45, flash: 70, connect: 90, verify: 95 };
-        bottomPanel.updatePipelineStage(stage, message, pctMap[stage] || 50);
+        const pctFallback = { compile: 20, build: 45, flash: 70, connect: 90, verify: 95 };
+        const pct = typeof percent === "number" ? percent : (pctFallback[stage] || 50);
+        bottomPanel.updatePipelineStage(stage, message, pct);
         bottomPanel.appendOutput(message, "info");
         statusBar.setBuild(message);
     }

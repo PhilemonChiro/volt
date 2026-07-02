@@ -98,6 +98,21 @@ app.whenReady().then(() => {
 
     win.loadFile("index.html");
 
+    // Surface renderer crashes/hangs. Without these, a dead or non-painting
+    // renderer (e.g. the GPU/sandbox launch failures) fails silently with a
+    // blank window and nothing in the log.
+    win.webContents.on("render-process-gone", (_e, details) => {
+        logger.log("error", "renderer",
+            `render-process-gone reason=${details.reason} exitCode=${details.exitCode}`);
+    });
+    win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+        logger.log("error", "renderer", `did-fail-load ${code} ${desc} ${url}`);
+    });
+    win.webContents.on("unresponsive", () =>
+        logger.log("warn", "window", "renderer became unresponsive"));
+    win.webContents.on("responsive", () =>
+        logger.log("info", "window", "renderer responsive again"));
+
     if (process.argv.includes("--dev")) {
         win.webContents.openDevTools();
     }
