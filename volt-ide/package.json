@@ -13,6 +13,7 @@
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --dev --no-sandbox",
+    "postinstall":    "node scripts/fix-sandbox.js",
     "stage:sdk":      "node scripts/stage-sdk.js",
     "build:icons":    "node scripts/build-icons.js",
     "bundle:python":  "node scripts/bundle-python.js",
