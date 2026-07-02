@@ -635,9 +635,62 @@ export function register() {
     });
 
     // ----------------------------------------------------------------
+    // Quick fixes (code actions) — turn actionable diagnostics into
+    // one-click edits. Handles pin errors whose message lists the valid /
+    // available pins (flash pins, input-only pins, out-of-range), offering to
+    // swap in the first suggested GPIO.
+    // ----------------------------------------------------------------
+    monaco.languages.registerCodeActionProvider("volt", {
+        provideCodeActions: function (model, range, context) {
+            var actions = [];
+            var markers = (context && context.markers) || [];
+            markers.forEach(function (m) {
+                var fix = pinFixFromDiagnostic(m.message || "", model.getLineContent(m.startLineNumber));
+                if (!fix) return;
+                actions.push({
+                    title: "Change to GPIO " + fix.pin,
+                    kind: "quickfix",
+                    diagnostics: [m],
+                    isPreferred: true,
+                    edit: {
+                        edits: [{
+                            resource: model.uri,
+                            textEdit: {
+                                range: new monaco.Range(m.startLineNumber, fix.startCol, m.startLineNumber, fix.endCol),
+                                text: fix.text,
+                            },
+                        }],
+                    },
+                });
+            });
+            return { actions: actions, dispose: function () {} };
+        },
+    });
+
+    // ----------------------------------------------------------------
     // Real-time diagnostics — check as you type
     // ----------------------------------------------------------------
 
     console.log("[volt] language features registered");
+}
+
+// Parse an actionable pin diagnostic into a concrete edit. Given the marker
+// message (which includes the compiler hint, e.g. "Available output pins:
+// 2, 4, 5, ...") and the source line (e.g. "    pin led = 6"), return the GPIO
+// to swap in and the 1-based column span of the number to replace — or null if
+// the diagnostic isn't a pin-list fix. Pure/exported so it can be unit-tested.
+export function pinFixFromDiagnostic(message, lineText) {
+    if (!message || !lineText) return null;
+    var list = message.match(/pins?\s*:\s*([0-9]+(?:\s*,\s*[0-9]+)*)/i);
+    if (!list) return null;
+    var pin = list[1].split(",")[0].trim();
+    if (!pin) return null;
+    var eq = lineText.indexOf("=");
+    if (eq < 0) return null;
+    var after = lineText.slice(eq);
+    var num = after.match(/([0-9]+)/);
+    if (!num) return null;
+    var numStart = eq + after.indexOf(num[1]);
+    return { pin: pin, text: pin, startCol: numStart + 1, endCol: numStart + 1 + num[1].length };
 }
 

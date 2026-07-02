@@ -620,6 +620,8 @@ diagnostics.onResult((diags, result) => {
     bottomPanel.setProblems(diags);
     // Feed AST data to side panel (live update as user types)
     if (result) sidePanel.update(result);
+    // Live-update the "Generated C" view with the transpiler output.
+    if (result && result.c_code) bottomPanel.setGeneratedC(result.c_code);
     const errors = diags.filter(d => d.severity === "error").length;
     const warnings = diags.filter(d => d.severity === "warning").length;
     if (errors > 0) {

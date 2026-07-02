@@ -1276,6 +1276,10 @@ kbd {
 }
 .bp-content.active { display: block; }
 
+/* Generated C view — a read-only Monaco editor manages its own scrolling and
+   layout, so drop the panel padding and let it fill the tab. */
+.bp-content-c { padding: 0; overflow: hidden; }
+
 .bp-line {
     padding: 1px var(--s-1);
     white-space: pre-wrap;

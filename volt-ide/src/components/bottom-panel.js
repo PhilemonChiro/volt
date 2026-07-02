@@ -7,6 +7,7 @@ let showTimestamps = settings.get("serial.showTimestamps", true);
 let autoScroll = settings.get("serial.autoScroll", true);
 let monitorPaused = false;
 let buildProgressEl = null;
+let cEditor = null;   // lazily-created read-only Monaco editor for the Generated C view
 
 // Keep our locals in sync when the user changes them in Settings.
 settings.onChange((key, value) => {
@@ -37,6 +38,7 @@ export function init(container) {
                     <span class="bp-badge bp-badge-err"  id="problemBadgeErr"  style="display:none">0</span>
                     <span class="bp-badge bp-badge-warn" id="problemBadgeWarn" style="display:none">0</span>
                 </button>
+                <button class="bp-tab" data-tab="generatedc">Generated C</button>
             </div>
             <div class="bp-actions">
                 <button class="bp-action" id="bpTimestamp" title="Toggle timestamps" data-for="monitor" style="display:none">
@@ -57,6 +59,7 @@ export function init(container) {
         <div class="bp-content active" id="bpOutput"></div>
         <div class="bp-content" id="bpMonitor"></div>
         <div class="bp-content" id="bpProblems"></div>
+        <div class="bp-content bp-content-c" id="bpGeneratedC"></div>
     `;
 
     // Tab switching
@@ -64,20 +67,23 @@ export function init(container) {
         tab.onclick = () => switchTab(container, tab.dataset.tab);
     });
 
-    // Copy — shows "Copied" feedback
+    // Copy — shows "Copied" feedback. The Generated C tab is a Monaco editor,
+    // so read its model value rather than the rendered DOM text.
     container.querySelector("#bpCopy").onclick = () => {
-        const el = container.querySelector(".bp-content.active");
-        if (el) {
-            navigator.clipboard.writeText(el.innerText).then(() => {
-                const btn = container.querySelector("#bpCopy");
-                btn.style.color = "var(--ok)";
-                setTimeout(() => btn.style.color = "", 1500);
-            }).catch(() => {});
-        }
+        const text = (activeTab === "generatedc" && cEditor)
+            ? cEditor.getValue()
+            : (container.querySelector(".bp-content.active")?.innerText || "");
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = container.querySelector("#bpCopy");
+            btn.style.color = "var(--ok)";
+            setTimeout(() => btn.style.color = "", 1500);
+        }).catch(() => {});
     };
 
     // Clear
     container.querySelector("#bpClear").onclick = () => {
+        if (activeTab === "generatedc") return;   // read-only generated output
         const el = container.querySelector(".bp-content.active");
         if (el) el.innerHTML = "";
         if (activeTab === "output") clearProgress();
@@ -106,12 +112,57 @@ function switchTab(container, tab) {
     container.querySelector("#bpOutput").classList.toggle("active", tab === "output");
     container.querySelector("#bpMonitor").classList.toggle("active", tab === "monitor");
     container.querySelector("#bpProblems").classList.toggle("active", tab === "problems");
+    container.querySelector("#bpGeneratedC").classList.toggle("active", tab === "generatedc");
 
     // Show/hide monitor-specific buttons
     const tsBtn = container.querySelector("#bpTimestamp");
     const pauseBtn = container.querySelector("#bpPause");
     if (tsBtn) tsBtn.style.display = tab === "monitor" ? "" : "none";
     if (pauseBtn) pauseBtn.style.display = tab === "monitor" ? "" : "none";
+
+    // Monaco can't measure while its tab is hidden — lay it out on reveal.
+    if (tab === "generatedc" && cEditor) cEditor.layout();
+}
+
+// ============================================================
+// Generated C view — read-only Monaco editor showing the transpiler output.
+// Populated live from each successful compile (diagnostics.onResult).
+// ============================================================
+
+export function setGeneratedC(code) {
+    if (!code) return;   // keep the last good C on compile errors
+    const el = document.getElementById("bpGeneratedC");
+    if (!el) return;
+
+    // Monaco unavailable (shouldn't happen in the renderer) — plain-text fallback.
+    if (typeof monaco === "undefined") {
+        el.textContent = code;
+        return;
+    }
+
+    if (!cEditor) {
+        cEditor = monaco.editor.create(el, {
+            value: code,
+            language: "c",
+            readOnly: true,
+            automaticLayout: true,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            fontSize: 12,
+            lineNumbers: "on",
+            renderLineHighlight: "none",
+            folding: false,
+            wordWrap: "off",
+        });
+    } else {
+        const model = cEditor.getModel();
+        if (model && model.getValue() !== code) {
+            // Preserve scroll position across live updates while typing.
+            const top = cEditor.getScrollTop();
+            model.setValue(code);
+            cEditor.setScrollTop(top);
+        }
+    }
 }
 
 // ============================================================
