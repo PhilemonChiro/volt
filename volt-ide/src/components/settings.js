@@ -79,7 +79,7 @@ export async function show() {
         pane.innerHTML = `
             <div class="settings-section-title">${esc(group.label)}</div>
             <div class="settings-rows">
-                ${Object.entries(group.items).map(([name, def]) =>
+                ${Object.entries(group.items).filter(([, def]) => !def.hidden).map(([name, def]) =>
                     renderRow(`${activeCategory}.${name}`, def)).join("")}
             </div>
         `;

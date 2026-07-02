@@ -109,6 +109,11 @@ const SCHEMA = {
             reduceMotion:   { type: "bool",   default: false,
                               label: "Reduce motion",
                               hint: "Disable transitions and animations (overrides OS setting too)." },
+            // Internal flag — tracks whether the first-run onboarding has been
+            // seen. Hidden from the Settings UI; persisted so the wizard shows
+            // once only. Must live in the schema or set()/get() reject it.
+            onboardingDone: { type: "bool",   default: false, hidden: true,
+                              label: "Onboarding completed" },
         },
     },
 };

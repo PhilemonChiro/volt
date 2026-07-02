@@ -57,10 +57,20 @@ export function show(onComplete) {
         creating: false,
     };
 
+    // The full entrance animation should play once, on first mount. Step
+    // changes use a light content fade so the modal doesn't appear to close
+    // and reopen on every Next/Back.
+    let firstRender = true;
+
     // Dismiss the overlay. Pass completeArgs (e.g. [path, chip]) to invoke
     // onComplete after the exit animation; omit it for a plain dismiss so we
     // never call onComplete with an undefined project path.
     function close(completeArgs) {
+        // Mark the wizard seen on ANY dismissal — finishing, Escape, or backdrop —
+        // so this first-run onboarding shows once only and never reappears on the
+        // next app launch. (Previously only the "create project" path persisted it,
+        // so dismissing any other way made it come back every start.)
+        markComplete();
         overlay.classList.add("is-closing");
         setTimeout(() => {
             overlay.remove();
@@ -70,13 +80,14 @@ export function show(onComplete) {
     }
 
     function animateOut(cb) {
+        // Light fade between steps — no scale/translate, so it reads as a
+        // content transition rather than the whole modal closing.
         const body = overlay.querySelector(".onboarding-body");
         if (body) {
-            body.style.transition = "opacity 180ms ease, transform 180ms ease";
+            body.style.transition = "opacity 120ms ease";
             body.style.opacity = "0";
-            body.style.transform = "translateY(12px) scale(0.97)";
         }
-        setTimeout(cb, 200);
+        setTimeout(cb, 120);
     }
 
     function render() {
@@ -91,9 +102,14 @@ export function show(onComplete) {
             content = renderStep3(state);
         }
 
+        const bodyAnim = firstRender
+            ? "onboarding-enter 400ms cubic-bezier(0.22,1,0.36,1) both"
+            : "onboarding-step-in 200ms ease both";
+        firstRender = false;
+
         overlay.innerHTML = `
             <div class="onboarding-backdrop"></div>
-            <div class="onboarding-body" style="animation: onboarding-enter 400ms cubic-bezier(0.22,1,0.36,1) both">
+            <div class="onboarding-body" style="animation: ${bodyAnim}">
                 <div class="onboarding-progress">
                     ${renderDots(step)}
                 </div>
@@ -150,7 +166,6 @@ function renderStep1(state) {
     return `
         <div class="onboarding-content">
             <div class="onboarding-header">
-                <div class="onboarding-icon">🪄</div>
                 <h1 class="onboarding-title">Let's build something.</h1>
                 <p class="onboarding-subtitle">First, what chip are you targeting?</p>
             </div>
@@ -179,7 +194,6 @@ function renderStep2(state) {
     return `
         <div class="onboarding-content">
             <div class="onboarding-header">
-                <div class="onboarding-icon">📦</div>
                 <h1 class="onboarding-title">Pick a starting point.</h1>
                 <p class="onboarding-subtitle">We'll generate boilerplate for you.</p>
             </div>
@@ -196,7 +210,6 @@ function renderStep3(state) {
     return `
         <div class="onboarding-content">
             <div class="onboarding-header">
-                <div class="onboarding-icon">🚀</div>
                 <h1 class="onboarding-title">Name your project.</h1>
                 <p class="onboarding-subtitle">It will be created in <strong>~/Volt/<span id="onbNamePreview">my-project</span></strong></p>
             </div>
@@ -336,7 +349,6 @@ function wireEvents(step, state, close, render, overlay, animateOut) {
                     </div>
                 `;
                 overlay.querySelector("#onbFinish").onclick = () => {
-                    markComplete();
                     close([path, state.chip]);
                 };
             } catch (e) {
@@ -344,6 +356,18 @@ function wireEvents(step, state, close, render, overlay, animateOut) {
                 if (btnText) btnText.textContent = "Create Project";
                 if (spinner) spinner.style.display = "none";
                 createBtn.disabled = false;
+                // Surface the failure — previously the button just reset with no
+                // explanation, so a failed create looked like "nothing happened".
+                let err = overlay.querySelector(".onboarding-error");
+                if (!err) {
+                    err = document.createElement("p");
+                    err.className = "onboarding-error";
+                    const wrap = overlay.querySelector(".onboarding-name-wrap")
+                        || overlay.querySelector(".onboarding-content");
+                    if (wrap) wrap.appendChild(err);
+                }
+                if (err) err.textContent = "Couldn't create project: "
+                    + (e && e.message ? e.message : "unknown error");
             }
         };
     }
