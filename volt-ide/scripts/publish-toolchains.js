@@ -33,6 +33,10 @@ const { FALLBACK_MANIFEST, MIRROR_TAG } = mirror;
 const args = process.argv.slice(2);
 const DRY_RUN       = args.includes("--dry-run");
 const MANIFEST_ONLY = args.includes("--manifest-only");
+// --stage-only: skip ALL GitHub (gh) calls. Download + hash upstream tarballs and
+// write the signed manifest + tarballs to STAGING, ready to rsync to a
+// self-hosted mirror (VPS/Dokploy). See deploy/toolchain-mirror/README.md.
+const STAGE_ONLY    = args.includes("--stage-only");
 const ONLY = (args.find(a => a.startsWith("--only=")) || "").slice(7).split(",").filter(Boolean);
 
 // Signing: the manifest is Ed25519-signed before upload so clients can verify
@@ -155,8 +159,12 @@ async function publishOne(key, asset, workingManifest) {
     const sha256 = await sha256OfFile(local);
     log(`  SHA256: ${sha256}`);
 
-    ensureRelease();
-    uploadAsset(MIRROR_TAG, local);
+    if (STAGE_ONLY) {
+        log(`  [stage-only] staged at ${local} — not uploading to GitHub`);
+    } else {
+        ensureRelease();
+        uploadAsset(MIRROR_TAG, local);
+    }
 
     // Patch the working manifest in-memory so the regenerated manifest.json
     // reflects the just-published artifact.
@@ -230,6 +238,16 @@ async function main() {
     }
 
     const manifestPath = writeManifestJson(workingManifest);
+
+    if (STAGE_ONLY) {
+        log("\n[stage-only] Done. Signed manifest + tarballs staged in:");
+        log(`  ${STAGING}`);
+        log("rsync this dir into your mirror volume under the tag subdir, e.g.:");
+        log(`  rsync -av ${STAGING}/ vps:/…/mirror-data/_data/${MIRROR_TAG}/`);
+        log("See deploy/toolchain-mirror/README.md");
+        return;
+    }
+
     ensureRelease();
     uploadAsset(MIRROR_TAG, manifestPath);
 
