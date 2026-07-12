@@ -15,6 +15,7 @@
     "dev": "electron . --dev --no-sandbox",
     "test:vlib": "node test/vlib/gen.js && node test/vlib/run.js",
     "test:trust": "node test/toolchain-trust.test.js",
+    "sign:manifest": "node deploy/toolchain-mirror/sign-manifest.js",
     "postinstall":    "node scripts/fix-sandbox.js",
     "stage:sdk":      "node scripts/stage-sdk.js",
     "build:icons":    "node scripts/build-icons.js",

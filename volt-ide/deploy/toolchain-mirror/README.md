@@ -38,27 +38,45 @@ Optionally add a `mirrors: []` entry per asset (e.g. the direct-VPS URL as a
 backup behind the Cloudflare one) — the client tries `url` → `mirrors[]` →
 `upstream`, SHA256-checking each.
 
-## 3. Publish (sign locally, upload to the volume)
+## 3. Publish
 
-The signing **private key never touches the VPS**. Sign locally, then rsync the
-staged files into the volume.
+Two goals at once: the ~600 MB of upstream downloads must **not** run on a metered
+laptop, and the signing **private key must never touch the VPS**. So: download +
+hash on the VPS, sign on the laptop.
+
+### Recommended — split flow (data-safe + key-safe)
 
 ```bash
-# a) Build + SIGN the manifest and stage tarballs locally (skips GitHub entirely).
-#    --stage-only downloads + hashes upstream tarballs and writes the signed
-#    manifest.json into /tmp/volt-mirror, ready to rsync. Signing key stays local.
-cd volt-ide
-VOLT_TOOLCHAIN_SIGNING_KEY=/secure/volt-signing-private.pem \
-  node scripts/publish-toolchains.js --stage-only
-# -> /tmp/volt-mirror/{*.tar.xz, manifest.json (signed)}
-# (Add --manifest-only to re-sign just manifest.json without re-downloading tarballs.)
+# --- ON THE VPS ---  downloads tarballs (VPS bandwidth), writes an UNSIGNED
+# manifest, and drops the tarballs straight into the mirror volume.
+# Find the volume path first:
+#   docker volume ls | grep mirror-data
+#   docker volume inspect <name> -f '{{.Mountpoint}}'
+git clone https://github.com/PhilemonChiro/volt.git   # or reuse Dokploy's clone
+./volt/volt-ide/deploy/toolchain-mirror/stage-on-vps.sh \
+    ./volt  <volume-_data-path>  toolchains-2026.05
+# -> prints the path of the UNSIGNED manifest.json to fetch next.
 
-# b) rsync the staged dir into the Dokploy volume on the VPS.
-#    Find the volume mountpoint once:
-#      ssh vps 'docker volume inspect toolchain-mirror_mirror-data -f "{{.Mountpoint}}"'
-#    Then push into a per-tag subdir matching MIRROR_TAG:
-rsync -av --chmod=D755,F644 /tmp/volt-mirror/ \
-  vps:/var/lib/docker/volumes/toolchain-mirror_mirror-data/_data/toolchains-2026.05/
+# --- ON YOUR LAPTOP ---  sign the tiny manifest with the key kept in ~/.volt/secrets.
+scp vps:/tmp/…/manifest.json ./unsigned-manifest.json
+VOLT_TOOLCHAIN_SIGNING_KEY=~/.volt/secrets/volt-toolchain-signing.pem \
+  node volt-ide/deploy/toolchain-mirror/sign-manifest.js ./unsigned-manifest.json ./manifest.json
+# self-verifies against the pinned key; refuses to output if the key is wrong.
+
+# --- BACK ON THE VPS ---  drop the signed manifest into the volume.
+scp ./manifest.json vps:<volume-_data-path>/toolchains-2026.05/manifest.json
+```
+
+Until the signed `manifest.json` is in place, clients reject the missing/unsigned
+remote manifest and safely fall back to the baked-in one (→ upstream tarballs).
+
+### Simple — all-in-one (only if the laptop's bandwidth is fine)
+
+```bash
+cd volt-ide
+VOLT_TOOLCHAIN_SIGNING_KEY=~/.volt/secrets/volt-toolchain-signing.pem \
+  node scripts/publish-toolchains.js --stage-only        # downloads+hashes+signs locally
+rsync -av /tmp/volt-mirror/ vps:<volume-_data-path>/toolchains-2026.05/
 ```
 
 Immutability: never overwrite an existing tarball in place — bump `MIRROR_TAG`
