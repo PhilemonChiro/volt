@@ -19,6 +19,68 @@ function projectsDir() {
 }
 let win = null;
 
+// ---- Deep links: volt://install/<prefix>/<version> --------------------------
+// The Spark studio's "Install to Volt IDE" button opens this URL. We register
+// "volt" as our protocol, then route the URL into the SAME grid fetch → verify
+// → consent → install flow the renderer already uses for the registry browser.
+// Nothing is installed without the user confirming the signed-import sheet.
+if (process.defaultApp) {
+    // Dev mode (electron main.js …): the protocol has to carry the script path
+    // so the relaunched instance knows what to run.
+    if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient("volt", process.execPath, [path.resolve(process.argv[1])]);
+    }
+} else {
+    app.setAsDefaultProtocolClient("volt");
+}
+
+// A URL that arrives before the window is ready is parked here and replayed
+// once the renderer has loaded.
+let _pendingDeepLink = null;
+
+function extractDeepLink(argv) {
+    return (argv || []).find((a) => typeof a === "string" && a.startsWith("volt://")) || null;
+}
+
+// Parse volt://install/<prefix>/<version> and hand it to the renderer.
+function handleDeepLink(url) {
+    if (!url) return;
+    let prefix, version;
+    try {
+        const u = new URL(url);
+        if (u.protocol !== "volt:" || u.host !== "install") return;
+        const parts = u.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+        [prefix, version] = parts;
+    } catch (_) { return; }
+    if (!prefix) return;
+
+    const deliver = () => {
+        if (!win || win.isDestroyed()) return;
+        if (win.isMinimized()) win.restore();
+        win.focus();
+        win.webContents.send("deep_link_install", { prefix, version: version || "" });
+    };
+    if (win && win.webContents && !win.webContents.isLoading()) deliver();
+    else _pendingDeepLink = { prefix, version: version || "" };
+}
+
+// Single-instance lock so a second launch (Windows/Linux protocol activation)
+// forwards its URL to the running window instead of opening a second IDE.
+const _gotLock = app.requestSingleInstanceLock();
+if (!_gotLock) {
+    app.quit();
+} else {
+    app.on("second-instance", (_e, argv) => {
+        if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+        handleDeepLink(extractDeepLink(argv));
+    });
+    // macOS delivers protocol activations here (not via argv).
+    app.on("open-url", (event, url) => {
+        event.preventDefault();
+        handleDeepLink(url);
+    });
+}
+
 // ---- Recent projects (cross-platform, any directory) ----
 function loadRecents() {
     try {
@@ -97,6 +159,19 @@ app.whenReady().then(() => {
     });
 
     win.loadFile("index.html");
+
+    // Once the renderer is live, replay a deep link that arrived early — either
+    // parked by open-url before the window existed, or passed in argv on a cold
+    // start (Windows/Linux protocol activation).
+    win.webContents.once("did-finish-load", () => {
+        const url = _pendingDeepLink ? null : extractDeepLink(process.argv);
+        if (_pendingDeepLink) {
+            win.webContents.send("deep_link_install", _pendingDeepLink);
+            _pendingDeepLink = null;
+        } else if (url) {
+            handleDeepLink(url);
+        }
+    });
 
     // Surface renderer crashes/hangs. Without these, a dead or non-painting
     // renderer (e.g. the GPU/sandbox launch failures) fails silently with a

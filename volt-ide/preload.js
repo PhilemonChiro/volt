@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld("volt", {
     vlibUninstall: (prefix) => ipcRenderer.invoke("vlib_uninstall", prefix),
     gridList:      () => ipcRenderer.invoke("grid_list"),
     gridFetch:     (prefix, version) => ipcRenderer.invoke("grid_fetch", prefix, version),
+    // Deep link from the Spark studio: volt://install/<prefix>/<version>.
+    onDeepLinkInstall: (callback) =>
+        ipcRenderer.on("deep_link_install", (_, data) => callback(data)),
     openExternal:  (url) => ipcRenderer.invoke("open_external", url),
     // Logging — fire-and-forget from the renderer; main writes to the
     // rotating log file. The reveal helper opens Finder/Explorer on it.

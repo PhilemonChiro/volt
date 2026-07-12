@@ -243,6 +243,38 @@ export async function renderInto(container) {
     paint("");
 }
 
+// Install a Grid library from a deep link (volt://install/<prefix>/<version>).
+// Standalone — fires whether or not the Library panel is open. Fetches +
+// verifies via the Grid, then shows the same signed-import consent sheet as a
+// file import; the user still confirms before anything is written.
+export async function installFromGrid(prefix, version) {
+    if (!prefix) return;
+    // The deep link may omit the version — resolve the published one.
+    if (!version) {
+        try {
+            const cells = (await api.gridList()) || [];
+            const hit = cells.find((c) => c.prefix === prefix);
+            version = hit && hit.version;
+        } catch (_) {}
+    }
+    if (!version) {
+        return dialog.alert("Cannot install library", {
+            detail: `“${prefix}” isn’t published on the Grid.`,
+        });
+    }
+    let res;
+    try { res = await api.gridFetch(prefix, version); }
+    catch (e) { res = { ok: false, reason: String((e && e.message) || e) }; }
+    if (!res || !res.token) {
+        return dialog.alert("Cannot install library", {
+            detail: res && res.stage === "verify"
+                ? `Signature verification failed: ${res.reason}`
+                : (res && res.reason) || "This library isn’t available on the Grid.",
+        });
+    }
+    installer.showResult(res, { onClose: () => {} });
+}
+
 // ============================================================
 // Context menu
 // ============================================================

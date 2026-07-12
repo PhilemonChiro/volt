@@ -16,6 +16,7 @@ import * as sidePanel from "./components/side-panel.js";
 import * as settingsDialog from "./components/settings.js";
 import * as settings from "./services/settings.js";
 import * as onboarding from "./components/onboarding.js";
+import * as library from "./components/library.js";
 import { startTour } from "./components/guided-tour.js";
 import { readFile, saveFile } from "./services/projects.js";
 
@@ -717,6 +718,10 @@ function checkChipMismatch() {
         el.style.display = "none";
     }
 }
+
+// Deep link from the Spark studio (volt://install/<prefix>/<version>) — open
+// the signed-import consent sheet for the requested library.
+window.volt.onDeepLinkInstall(({ prefix, version }) => library.installFromGrid(prefix, version));
 
 // Wire serial events from main process
 window.volt.onSerial((data) => bottomPanel.appendMonitor(data.line));

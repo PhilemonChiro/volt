@@ -45,6 +45,14 @@
     "productName": "Volt IDE",
     "copyright": "Copyright © 2026 Philemon Chiro",
     "afterPack": "scripts/afterPack.js",
+    "protocols": [
+      {
+        "name": "Volt Library",
+        "schemes": [
+          "volt"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist"
     },
