@@ -105,22 +105,44 @@ Commit `toolchain-keys.json` (public key only) and ship it inside the app.
   an IDE update (revocation reaches clients via the pinned, app-shipped keyfile,
   not the network — so it works even if the mirror is compromised).
 
-## Where to host (GitHub vs your CDN)
+## Where to host — self-hosted VPS (Dokploy)
 
-Signing makes this a **cost/availability decision, not a security one** — a
-tampered mirror just fails verification.
+Hosting is on **our own VPS via Dokploy**. Signing makes this purely an
+availability/latency decision — a tampered origin (or edge cache) just fails
+verification. Self-hosting actually raises the stakes on signing: a single VPS
+is a more concentrated compromise target than GitHub, so **the pinned-key
+signature is what keeps a popped VPS from serving a backdoored compiler.** Never
+run this origin unsigned.
 
-- **Now:** GitHub Releases (`PhilemonChiro/volt-toolchains`) is fine. Two hygiene
-  fixes: **sign the manifest** (done) and **stop `--clobber`ing** — prefer
-  content-addressed, immutable assets (name tarballs with their sha256) so a
-  release asset is never mutated in place.
-- **At commercial volume:** move the origin to object storage + CDN. Cloudflare
-  R2 is the standout because toolchains are ~280 MB each and R2 has **zero egress
-  fees** — verify the numbers against your real usage before committing. Keep
-  GitHub as a fallback mirror.
-- **Design for it today:** each asset supports a `mirrors: []` list. The client
-  tries `url` → `mirrors[]` → `upstream`, SHA256-checking each. Migrating hosts
-  becomes a manifest edit, not a re-architecture.
+**Serving it (Dokploy):**
+- Deploy a static file service (nginx / Caddy container) or **MinIO** (S3-style,
+  good for content-addressed storage) that serves the release directory +
+  `manifest.json`.
+- Point `MIRROR_BASE` in `toolchain-mirror.js` at the service domain, e.g.
+  `https://toolchains.<domain>/<tag>`. No code change beyond that constant.
+- Serve immutable, **content-addressed** assets (tarball named with its sha256)
+  so a file is never mutated in place — the equivalent of dropping GitHub's
+  `--clobber`.
+
+**Egress / latency (the one caveat):** toolchains are ~280 MB each. A VPS has
+finite bandwidth and one region — a distant customer pulling 280 MB direct is
+slow, and an install burst can saturate the uplink. Put **Cloudflare (free tier)
+in front of the Dokploy origin**: it edge-caches the large immutable tarballs
+(zero egress, global speed) and hides the origin IP. The VPS stays source of
+truth; because every byte is SHA256-checked against a signed manifest, the edge
+cache is untrusted anyway — this is free security-wise.
+
+**Failover is built in:** each asset supports a `mirrors: []` list. The client
+tries `url` → `mirrors[]` → `upstream`, SHA256-checking each — so you can list
+the Cloudflare URL, the direct VPS URL, and the original upstream, and clients
+degrade gracefully if one is down. Changing hosts is a manifest edit, not a
+re-architecture.
+
+**Origin hardening (because it's now yours):** lock down the upload path (only
+the publish box / CI can write the release dir), keep the signing **private key
+off the VPS entirely** (sign locally, upload the already-signed manifest), and
+treat the VPS as replaceable — the trust root is the pinned key in the app, not
+the server.
 
 ## Open items (not yet done)
 
