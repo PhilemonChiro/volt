@@ -265,6 +265,47 @@ function run(cmd, log) {
     });
 }
 
+// Upstream SDKs pinned to EXACT commit SHAs. Cloning a moving branch or a
+// re-pointable tag lets a compromised or force-pushed upstream slip unexpected
+// code into the firmware build; pinning + verifying the checked-out commit
+// removes that. To upgrade an SDK, bump its `sha` here (taken from the trusted
+// release tag in `ref`).
+const PINNED_SDK = {
+    "pico-sdk": { url: "https://github.com/raspberrypi/pico-sdk.git",       sha: "95ea6acad131124694cda1c162c52cd30e0aece0", ref: "2.1.0" },
+    "picotool": { url: "https://github.com/raspberrypi/picotool.git",       sha: "df21059f7ca6f1babc7f1f3b92122cacffc85951", ref: "2.1.0" },
+    "esp-idf":  { url: "https://github.com/espressif/esp-idf.git",          sha: "67c1de1eebe095d554d281952fde63c16ee2dca0", ref: "v5.4" },
+    "esp8266":  { url: "https://github.com/espressif/ESP8266_RTOS_SDK.git", sha: "89a3f254b63819035f65d9c5dcdae8864f1a6a8a", ref: "v3.4" },
+};
+
+// Clone a pinned SDK at its exact commit and VERIFY the checkout matches — then
+// (optionally) init submodules, which are pinned transitively by the
+// superproject's recorded gitlinks. Fetch-by-SHA keeps the clone shallow
+// (GitHub serves reachable SHAs). A mismatch aborts and wipes the dir rather
+// than building against unexpected code. Returns { ok }.
+async function cloneAtSha(name, dest, submodules, run, log) {
+    const p = PINNED_SDK[name];
+    if (!p) return { ok: false };
+    const steps = [
+        `git init -q "${dest}"`,
+        `git -C "${dest}" remote add origin ${p.url}`,
+        `git -C "${dest}" fetch -q --depth 1 origin ${p.sha}`,
+        `git -C "${dest}" -c advice.detachedHead=false checkout -q ${p.sha}`,
+    ];
+    if (submodules) steps.push(`git -C "${dest}" submodule update -q --init --recursive --depth 1`);
+    const r = await run(`${steps.join(" && ")} 2>&1`, log);
+    if (!r.ok) return { ok: false };
+
+    const head = await run(`git -C "${dest}" rev-parse HEAD`, log);
+    const got = (head.output || "").trim();
+    if (got !== p.sha) {
+        log(`SECURITY: ${name} HEAD ${got || "unknown"} != pinned ${p.sha} — refusing to use`);
+        try { fs.rmSync(dest, { recursive: true, force: true }); } catch (_) {}
+        return { ok: false };
+    }
+    log(`${name} pinned @ ${p.ref} (${p.sha.slice(0, 12)}…)`);
+    return { ok: true };
+}
+
 // Async streaming extract. Same rationale as run() — tar -xJf on the 280 MB
 // Arm GCC tarball blocks for ~6 s, which is long enough that the dialog
 // timer pauses and any in-flight log lines get queued. Using spawn keeps
@@ -461,10 +502,10 @@ async function ensureRP2040(legacy) {
             log("Partial Pico SDK clone detected — wiping and starting fresh");
             try { fs.rmSync(sdk, { recursive: true, force: true }); } catch (_) {}
         }
-        log("Downloading Raspberry Pi Pico SDK...");
-        const r = await run(`git clone --depth=1 --recurse-submodules --shallow-submodules https://github.com/raspberrypi/pico-sdk.git "${sdk}" 2>&1`, log);
+        log("Downloading Raspberry Pi Pico SDK (pinned)...");
+        const r = await cloneAtSha("pico-sdk", sdk, true, run, log);
         if (!r.ok) {
-            emit.stageError("clone-sdk", "git clone failed (check internet)");
+            emit.stageError("clone-sdk", "pinned SDK clone/verify failed (check internet)");
             return false;
         }
         log("Pico SDK ready");
@@ -525,8 +566,8 @@ async function installPicotool(emit) {
 
     const srcDir = path.join(picotoolDir, "src");
     if (!fs.existsSync(path.join(srcDir, "CMakeLists.txt"))) {
-        log("Downloading picotool source...");
-        const r = await run(`git clone --depth=1 https://github.com/raspberrypi/picotool.git "${srcDir}" 2>&1`, log);
+        log("Downloading picotool source (pinned)...");
+        const r = await cloneAtSha("picotool", srcDir, false, run, log);
         if (!r.ok) return false;
     }
 
@@ -656,13 +697,13 @@ async function ensureEspIdf(chip, legacy) {
             try { fs.rmSync(idf, { recursive: true, force: true }); } catch (_) {}
         }
         if (chip.includes("8266")) {
-            log("Downloading ESP8266 RTOS SDK...");
-            const r = await run(`git clone --depth=1 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/ESP8266_RTOS_SDK.git "${idf}" 2>&1`, log);
-            if (!r.ok) { emit.stageError("clone-idf", "git clone failed"); return false; }
+            log("Downloading ESP8266 RTOS SDK (pinned)...");
+            const r = await cloneAtSha("esp8266", idf, true, run, log);
+            if (!r.ok) { emit.stageError("clone-idf", "pinned SDK clone/verify failed"); return false; }
         } else {
-            log("Downloading ESP-IDF v5.4 (this may take several minutes)...");
-            const r = await run(`git clone --depth=1 -b v5.4 --recurse-submodules --shallow-submodules --progress https://github.com/espressif/esp-idf.git "${idf}" 2>&1`, log);
-            if (!r.ok) { emit.stageError("clone-idf", "git clone failed"); return false; }
+            log("Downloading ESP-IDF v5.4 (pinned; this may take several minutes)...");
+            const r = await cloneAtSha("esp-idf", idf, true, run, log);
+            if (!r.ok) { emit.stageError("clone-idf", "pinned SDK clone/verify failed"); return false; }
         }
     }
     emit.stageDone("clone-idf");

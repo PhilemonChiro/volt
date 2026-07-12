@@ -149,9 +149,9 @@ the server.
 - **App auto-update** (`electron-updater`): required so fixes to the IDE (and to
   bundled `worker.py` / SDK) can actually reach shipped installs. Without it you
   can't patch any of the above in the field.
-- **Pin git-cloned SDKs** (esp-idf, pico-sdk, picotool source in `toolchain.js`)
-  to exact commit SHAs — currently cloned from mutable branches/tags with no
-  integrity check.
+- ~~Pin git-cloned SDKs to exact commit SHAs~~ **DONE** — esp-idf/pico-sdk/
+  picotool/ESP8266 in `toolchain.js` now `cloneAtSha()`: fetch-by-SHA + verify
+  the checkout (`PINNED_SDK` map). Bump a SHA there to upgrade.
 - **Zip-slip / path-traversal** guard on archive extraction.
 - Consider making **compiler/worker updates explicit/opt-in** (lockfile-pinned
   per project); reserve *silent* OTA for signed security patches, so an update
