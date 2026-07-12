@@ -21,7 +21,12 @@ const https = require("https");
 const trust = require("./toolchain-trust");
 
 const MIRROR_TAG     = "toolchains-2026.05";
-const MIRROR_BASE    = `https://github.com/PhilemonChiro/volt-toolchains/releases/download/${MIRROR_TAG}`;
+// Self-hosted mirror. Temporary on sigma.co.zw — SWITCH TO the permanent domain
+// (toolchains.voltembedded.com) BEFORE shipping the IDE to customers, since this
+// URL is baked into installed apps and there's no auto-update yet. Every
+// asset.url below is derived from MIRROR_BASE, so changing this one line moves
+// them all.
+const MIRROR_BASE    = `https://toolchains.sigma.co.zw/${MIRROR_TAG}`;
 const MANIFEST_URL   = `${MIRROR_BASE}/manifest.json`;
 const CACHE_PATH     = path.join(os.homedir(), ".volt", "cache", "manifest.json");
 // Highest manifest_version we've ever accepted — persisted so a later fetch
