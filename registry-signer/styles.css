@@ -1,4 +1,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* The `hidden` attribute must always win — otherwise .modal/.empty.big
+   (display:flex) override it and never actually hide. */
+[hidden] { display: none !important; }
 :root {
   --bg: #0d1117; --panel: #161b22; --panel2: #1c2230; --line: #2a3140;
   --txt: #e6edf3; --dim: #8b949e; --accent: #f0b429; --ok: #3fb950; --danger: #f85149; --blue: #4493f8;

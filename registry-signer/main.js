@@ -48,6 +48,12 @@ function sha256(buf) { return "sha256:" + crypto.createHash("sha256").update(buf
 function base(cfg) { return String(cfg.gridUrl || "").replace(/\/+$/, ""); }
 function adminHeaders(cfg, extra) { return { "X-Admin-Secret": cfg.adminSecret, ...(extra || {}) }; }
 
+// Node's fs does NOT expand ~ — do it ourselves so a "~/.volt/..." key path works.
+function expandHome(p) {
+    if (typeof p === "string" && (p === "~" || p.startsWith("~/"))) return path.join(os.homedir(), p.slice(1));
+    return p;
+}
+
 // ---- IPC ----
 
 ipcMain.handle("config:get", () => loadConfig());
@@ -74,8 +80,9 @@ ipcMain.handle("content:get", async (_e, prefix, version) => {
 // verifies the published envelope against the public key derived from that key.
 ipcMain.handle("sign:publish", async (_e, prefix, version) => {
     const cfg = loadConfig();
-    if (!fs.existsSync(cfg.keyPath)) throw new Error(`signing key not found: ${cfg.keyPath}`);
-    const priv = crypto.createPrivateKey(fs.readFileSync(cfg.keyPath));
+    const keyPath = expandHome(cfg.keyPath);
+    if (!fs.existsSync(keyPath)) throw new Error(`signing key not found: ${keyPath}`);
+    const priv = crypto.createPrivateKey(fs.readFileSync(keyPath));
     if (priv.asymmetricKeyType !== "ed25519") throw new Error("signing key is not Ed25519");
 
     const cr = await fetch(`${base(cfg)}/api/internal/admin/review/${prefix}/${version}/content`, { headers: adminHeaders(cfg) });
@@ -127,6 +134,14 @@ function createWindow() {
             nodeIntegration: false,
         },
     });
+    // Diagnostics: forward renderer console + surface preload failures to stdout.
+    win.webContents.on("console-message", (_e, level, message, line, src) => {
+        console.log(`[renderer:${level}] ${message}  (${(src || "").split("/").pop()}:${line})`);
+    });
+    win.webContents.on("preload-error", (_e, p, err) => console.log(`[preload-error] ${p}: ${err && err.stack || err}`));
+    win.webContents.on("render-process-gone", (_e, d) => console.log(`[render-gone] ${JSON.stringify(d)}`));
+    if (process.argv.includes("--devtools")) win.webContents.openDevTools({ mode: "detach" });
+
     win.loadFile("index.html");
 }
 

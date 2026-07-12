@@ -2,6 +2,12 @@ const $ = (id) => document.getElementById(id);
 let pending = [];
 let selected = null;
 
+// Surface every failure — nothing should fail silently.
+console.log("signer bridge available:", typeof window.signer, window.signer ? Object.keys(window.signer).join(",") : "(MISSING)");
+window.addEventListener("error", (e) => showErr("JS error: " + e.message));
+window.addEventListener("unhandledrejection", (e) => showErr("error: " + (e.reason && e.reason.message || e.reason)));
+function showErr(m) { try { toast(m, "err"); } catch (_) { console.log(m); } }
+
 function toast(msg, kind) {
     const t = $("toast");
     t.textContent = msg;
@@ -107,12 +113,16 @@ async function openSettings() {
     $("settingsModal").hidden = false;
 }
 async function saveSettings() {
-    const cfg = { gridUrl: $("cfgUrl").value.trim(), adminSecret: $("cfgSecret").value, keyPath: $("cfgKey").value.trim() };
-    await window.signer.setConfig(cfg);
-    $("settingsModal").hidden = true;
-    $("gridBadge").textContent = cfg.gridUrl || "not configured";
-    toast("Settings saved", "ok");
-    refresh();
+    try {
+        if (!window.signer) throw new Error("bridge unavailable (preload failed)");
+        const cfg = { gridUrl: $("cfgUrl").value.trim(), adminSecret: $("cfgSecret").value, keyPath: $("cfgKey").value.trim() };
+        const ok = await window.signer.setConfig(cfg);
+        if (!ok) throw new Error("setConfig returned false");
+        $("settingsModal").hidden = true;
+        $("gridBadge").textContent = cfg.gridUrl || "not configured";
+        toast("Settings saved", "ok");
+        refresh();
+    } catch (e) { showErr("save failed: " + e.message); }
 }
 
 $("settingsBtn").onclick = openSettings;
