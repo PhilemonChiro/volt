@@ -22,10 +22,13 @@
     "bundle:python":  "node scripts/bundle-python.js",
     "publish:toolchains": "node scripts/publish-toolchains.js",
     "prepack":        "npm run stage:sdk && npm run build:icons",
-    "pack:linux":     "npm run prepack && npm run bundle:python && electron-builder --linux",
-    "pack:win":       "npm run prepack && npm run bundle:python && electron-builder --win",
-    "pack:mac":       "npm run prepack && npm run bundle:python && electron-builder --mac",
-    "pack:all":       "npm run prepack && npm run bundle:python && electron-builder --linux --win"
+    "bundle:python:mac":   "npm run bundle:python -- --platform=darwin-arm64 && npm run bundle:python -- --platform=darwin-x64",
+    "bundle:python:linux": "npm run bundle:python -- --platform=linux-x64",
+    "bundle:python:win":   "npm run bundle:python -- --platform=win32-x64",
+    "pack:linux":     "npm run prepack && npm run bundle:python:linux && electron-builder --linux",
+    "pack:win":       "npm run prepack && npm run bundle:python:win && electron-builder --win",
+    "pack:mac":       "npm run prepack && npm run bundle:python:mac && electron-builder --mac",
+    "pack:all":       "npm run prepack && npm run bundle:python:linux && npm run bundle:python:win && electron-builder --linux --win"
   },
   "dependencies": {
     "@serialport/parser-readline": "^13.0.0",
