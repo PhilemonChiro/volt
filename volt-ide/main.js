@@ -596,11 +596,25 @@ function startWorker() {
 //      include /usr/local/bin or /opt/homebrew/bin so we check them
 //      directly.
 //   3. Bare "python3" — let spawn's ENOENT fire if not on PATH.
+// The compiler uses PEP 604 (`X | None`), which needs Python >= 3.10. macOS
+// ships 3.9, so a bare "python3" is often too old — every system candidate must
+// be version-checked, not just existence-checked.
+function pythonMeetsMin(bin) {
+    try {
+        const { execFileSync } = require("child_process");
+        const out = execFileSync(bin, ["-c", "import sys;print(sys.version_info[0],sys.version_info[1])"],
+            { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\s+/);
+        const major = parseInt(out[0], 10), minor = parseInt(out[1], 10);
+        return major > 3 || (major === 3 && minor >= 10);
+    } catch (_) { return false; }
+}
+
 function findPython() {
     const platKey = `${process.platform}-${process.arch}`;
     const bundledBin = process.platform === "win32" ? "python.exe" : "bin/python3";
 
     // (1) Bundled Python — check packaged-resources, then the dev sdk/ dir.
+    // Trusted (shipped as 3.12), so no version check.
     const bundledRoots = [
         ...(process.resourcesPath
             ? [path.join(process.resourcesPath, "sdk", "python", platKey)]
@@ -612,29 +626,31 @@ function findPython() {
         if (fs.existsSync(candidate)) return candidate;
     }
 
-    // (2) System Python
+    // (2) System Python — prefer explicit 3.13→3.10 (bare + Homebrew/py.org paths,
+    // since Finder-launched apps lack /opt/homebrew/bin on $PATH), then bare
+    // python3 last. Every candidate is version-checked; anything < 3.10 is skipped.
     const candidates = process.platform === "win32"
         ? [
-            "python",
-            "python3",
-            "C:\\Python312\\python.exe",
-            "C:\\Python311\\python.exe",
+            "python", "python3",
+            "C:\\Python313\\python.exe", "C:\\Python312\\python.exe", "C:\\Python311\\python.exe",
             path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python312", "python.exe"),
         ]
         : [
-            "python3",
-            "/usr/local/bin/python3",
-            "/opt/homebrew/bin/python3",
-            "/usr/bin/python3",
+            "python3.13", "python3.12", "python3.11", "python3.10",
+            "/opt/homebrew/bin/python3.13", "/opt/homebrew/bin/python3.12",
+            "/opt/homebrew/bin/python3.11", "/opt/homebrew/bin/python3.10",
+            "/usr/local/bin/python3.12", "/usr/local/bin/python3.11", "/usr/local/bin/python3.10",
+            "/opt/homebrew/bin/python3", "/usr/local/bin/python3",
             "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+            "python3", "/usr/bin/python3",
         ];
     for (const p of candidates) {
-        if (p.startsWith("/") || /^[A-Z]:\\/.test(p)) {
-            if (fs.existsSync(p)) return p;
-        }
+        const isPath = p.startsWith("/") || /^[A-Z]:\\/.test(p);
+        if (isPath && !fs.existsSync(p)) continue;
+        if (pythonMeetsMin(p)) return p;
     }
 
-    // (3) Fall back to bare name — spawn will surface ENOENT if missing.
+    // (3) Fall back to bare name — the worker will surface a clear "too old" hint.
     return process.platform === "win32" ? "python" : "python3";
 }
 
