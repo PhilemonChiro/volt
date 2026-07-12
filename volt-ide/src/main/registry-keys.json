@@ -1,0 +1,11 @@
+{
+  "_comment": "DEV: local Grid key pinned for testing. For production, replace with the real registry key (or empty = fail-closed).",
+  "keys": [
+    {
+      "id": "local-dev",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAuFOclNT+1tZcQKJ3AsucylKiAuud42NokroANyXs+rI=\n-----END PUBLIC KEY-----\n",
+      "status": "active"
+    }
+  ],
+  "revoked": []
+}

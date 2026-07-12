@@ -342,10 +342,11 @@ body.reduce-motion *::after {
 /* ---- Welcome ---- */
 #welcome {
     flex: 1;
+    min-height: 0;              /* allow this flex child to scroll instead of overflowing the body */
     display: flex;
     align-items: center;
-    justify-content: center;
     flex-direction: column;
+    overflow-y: auto;          /* scroll when Recent + Examples exceed the window height */
     padding: var(--s-8);
     background:
         radial-gradient(ellipse at top, rgba(43,124,179,0.06) 0%, transparent 50%),
@@ -353,8 +354,11 @@ body.reduce-motion *::after {
 }
 
 .welcome-stage {
-    max-width: 480px;
+    max-width: 820px;
     width: 100%;
+    /* auto block margins center the stage when it fits, and collapse to allow
+       full scroll (no top-clipping) when the content is taller than #welcome */
+    margin-block: auto;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -431,7 +435,6 @@ body.reduce-motion *::after {
 }
 
 .welcome-recents {
-    margin-top: var(--s-8);
     width: 100%;
 }
 .welcome-recents-label {
@@ -516,11 +519,6 @@ body.reduce-motion *::after {
     margin-right: var(--s-1);
 }
 
-/* ---- Welcome: quick reference cards (post-onboarding) ---- */
-.welcome-quickstart {
-    margin-top: var(--s-6);
-    width: 100%;
-}
 .welcome-section-label {
     font-size: var(--fs-10);
     color: var(--t3);
@@ -529,51 +527,33 @@ body.reduce-motion *::after {
     margin-bottom: var(--s-3);
     padding: 0 var(--s-2);
 }
-.welcome-onboarding-cards {
-    display: flex;
-    gap: var(--s-3);
-}
-.onboarding-card {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--s-2);
-    padding: var(--s-4) var(--s-3);
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: var(--r-3);
-    text-decoration: none;
-    cursor: pointer;
-    transition: background var(--dur-fast) var(--ease-out),
-                border-color var(--dur-fast) var(--ease-out),
-                transform var(--dur-fast) var(--ease-out);
-}
-.onboarding-card:hover {
-    background: var(--bg-3);
-    border-color: var(--volt);
-    transform: translateY(-2px);
-    box-shadow: var(--elev-2);
-}
-.onboarding-card svg {
-    color: var(--volt);
-}
-.onboarding-card-title {
-    font-size: var(--fs-12);
-    font-weight: 600;
-    color: var(--t1);
-}
-.onboarding-card-desc {
-    font-size: var(--fs-10);
-    color: var(--t3);
-    text-align: center;
-    line-height: var(--lh-snug);
-}
-
 /* ---- Welcome: example projects ---- */
 .welcome-examples {
-    margin-top: var(--s-5);
     width: 100%;
+}
+
+/* ---- Welcome: two-column launcher (Recent | Examples) ---- */
+.welcome-lists {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s-6);
+    width: 100%;
+    margin-top: var(--s-8);
+}
+.welcome-col {
+    flex: 1 1 0;
+    min-width: 0;   /* let long project names/paths ellipsize instead of stretching the column */
+}
+/* When there are no recent projects, drop the empty left column and let
+   Examples span the full width rather than sit beside a blank half. */
+.welcome-lists--solo .welcome-col-recent { display: none; }
+
+/* Narrow windows: stack back into a single column (scroll fallback still on #welcome) */
+@media (max-width: 720px) {
+    .welcome-lists {
+        flex-direction: column;
+        gap: var(--s-6);
+    }
 }
 .welcome-examples-list {
     display: flex;
@@ -794,6 +774,17 @@ kbd {
 }
 .dialog-btn.dialog-btn-primary:hover {
     background: linear-gradient(180deg, hsl(206,62%,55%) 0%, var(--volt-hover) 100%);
+    box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.dialog-btn.dialog-btn-danger {
+    background: linear-gradient(180deg, hsl(0,62%,52%) 0%, hsl(0,64%,44%) 100%);
+    color: white;
+    font-weight: 600;
+    border-color: transparent;
+    box-shadow: var(--elev-1), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.dialog-btn.dialog-btn-danger:hover {
+    background: linear-gradient(180deg, hsl(0,64%,56%) 0%, hsl(0,64%,48%) 100%);
     box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,0.22);
 }
 
@@ -1160,6 +1151,7 @@ kbd {
 
 /* ---- Bottom Panel ---- */
 #bottomPanel {
+    position: relative;        /* anchor the drag handle */
     height: 200px;
     background: var(--bg-1);
     border-top: 1px solid var(--border);
@@ -1168,6 +1160,44 @@ kbd {
     flex-shrink: 0;
     overflow: hidden;
     animation: bottom-panel-in var(--dur-slow) var(--ease-out);
+}
+#bottomPanel.is-resizing {
+    user-select: none;
+    /* NB: do not override `animation` here — toggling it vs the base
+       #bottomPanel rule re-triggers the entrance slide-in on drag-end. */
+}
+
+/* Draggable top edge — resize the panel up/down */
+.bp-resize {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 8px;
+    cursor: ns-resize;
+    z-index: 20;
+    background: transparent;
+    transition: background var(--dur-fast) var(--ease-out);
+}
+/* Visible grip: a centered pill so the edge reads as draggable at rest */
+.bp-resize::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    border-radius: var(--r-pill);
+    background: var(--border-strong);
+    transition: background var(--dur-fast) var(--ease-out),
+                width var(--dur-fast) var(--ease-out);
+}
+.bp-resize:hover { background: var(--volt-dim); }
+.bp-resize:hover::after,
+#bottomPanel.is-resizing .bp-resize::after {
+    background: var(--volt);
+    width: 52px;
 }
 @keyframes bottom-panel-in {
     from { transform: translateY(100%); opacity: 0; }
@@ -1256,12 +1286,18 @@ kbd {
 
 .bp-actions { display: flex; gap: 2px; }
 .bp-action {
-    width: 28px; height: 28px;
-    display: flex; align-items: center; justify-content: center;
+    height: 28px;
+    display: flex; align-items: center; gap: var(--s-1);
+    padding: 0 var(--s-2);
     background: transparent;
     color: var(--t3);
     border-radius: var(--r-2);
+    font-family: var(--sans);
+    font-size: var(--fs-11);
+    letter-spacing: var(--tracking-snug);
+    white-space: nowrap;
 }
+.bp-action svg { flex-shrink: 0; }
 .bp-action:hover { background: var(--bg-3); color: var(--t1); }
 
 .bp-content {
@@ -1279,6 +1315,177 @@ kbd {
 /* Generated C view — a read-only Monaco editor manages its own scrolling and
    layout, so drop the panel padding and let it fill the tab. */
 .bp-content-c { padding: 0; overflow: hidden; }
+
+/* Diagram view — Mermaid state diagrams, themed to the Volt palette */
+.bp-content-diagram {
+    padding: var(--s-4);
+    overflow: auto;
+    font-family: var(--sans);
+}
+.bp-diagram-machine + .bp-diagram-machine {
+    margin-top: var(--s-5);
+    padding-top: var(--s-5);
+    border-top: 1px solid var(--border);
+}
+.bp-diagram-title {
+    font-family: var(--mono);
+    font-size: var(--fs-11);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--t3);
+    margin-bottom: var(--s-3);
+}
+.bp-diagram-graph svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* System map: render the flowchart at natural size and scroll, rather than
+   shrinking to fit (a large graph becomes unreadable when squeezed). */
+.bp-systemmap { overflow: auto; }
+.bp-systemmap svg { max-width: none !important; height: auto; }
+
+/* Floating note (e.g. "no shared state") over a diagram */
+.bp-diagram-note {
+    position: absolute;
+    left: var(--s-2);
+    bottom: var(--s-2);
+    z-index: 4;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    padding: var(--s-1) var(--s-2);
+    font-size: var(--fs-11);
+    color: var(--t3);
+    max-width: 60%;
+    pointer-events: none;
+}
+
+/* Pan / zoom controls overlaid on a diagram */
+.pz-controls {
+    position: absolute;
+    top: var(--s-2);
+    right: var(--s-2);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    padding: 2px;
+    box-shadow: var(--elev-1);
+}
+.pz-btn {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    color: var(--t3);
+    border-radius: var(--r-1, 4px);
+}
+.pz-btn:hover { background: var(--bg-3); color: var(--t1); }
+
+/* ---- Code / Diagrams view tabs (folder tabs in the info bar) ---- */
+.view-tabs {
+    display: flex;
+    align-items: flex-end;      /* tabs sit at the bottom edge and merge with content */
+    gap: 4px;
+    height: 100%;
+    -webkit-app-region: no-drag;
+}
+.view-tab {
+    display: flex; align-items: center; gap: var(--s-1);
+    height: 28px;
+    padding: 0 var(--s-4);
+    position: relative;
+    bottom: -1px;               /* overlap the info-bar bottom border → seamless with content */
+    background: var(--bg-1);
+    color: var(--t3);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: var(--r-3) var(--r-3) 0 0;
+    font-size: var(--fs-11);
+    font-weight: 600;
+    font-family: var(--sans);
+    letter-spacing: var(--tracking-snug);
+    transition: background var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+}
+.view-tab:hover { color: var(--t1); background: var(--bg-2); }
+.view-tab.active {
+    background: var(--volt);
+    border-color: var(--volt);
+    color: #fff;
+    z-index: 1;
+}
+.view-tab.active svg { color: #fff; }
+
+/* ---- Diagrams view (full main area) ---- */
+#diagramsView {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-0);
+}
+.dv-tabs {
+    display: flex;
+    align-items: center;
+    gap: var(--s-1);
+    height: 36px;
+    flex-shrink: 0;
+    padding: 0 var(--s-3);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-1);
+}
+.dv-tab {
+    height: 26px;
+    padding: 0 var(--s-3);
+    background: transparent;
+    color: var(--t3);
+    border-radius: var(--r-2);
+    font-size: var(--fs-12);
+    font-weight: 500;
+    font-family: var(--sans);
+    letter-spacing: var(--tracking-snug);
+}
+.dv-tab:hover { color: var(--t2); background: var(--bg-2); }
+.dv-tab.active { color: var(--t1); background: var(--bg-3); }
+.dv-toolbtn {
+    margin-left: auto;
+    height: 26px;
+    padding: 0 var(--s-3);
+    display: flex; align-items: center;
+    background: transparent;
+    color: var(--t3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    font-size: var(--fs-11);
+    font-weight: 500;
+    font-family: var(--sans);
+}
+.dv-toolbtn:hover { color: var(--t1); background: var(--bg-3); border-color: var(--border-strong); }
+.dv-refresh {
+    margin-left: var(--s-1);
+    width: 28px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    color: var(--t3);
+    border-radius: var(--r-2);
+}
+.dv-refresh:hover { color: var(--t1); background: var(--bg-3); }
+.dv-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+.dv-content {
+    position: absolute;
+    inset: 0;
+    display: none;
+}
+.dv-content.active { display: block; }
 
 .bp-line {
     padding: 1px var(--s-1);
@@ -1502,7 +1709,7 @@ kbd {
 
 /* ---- Info Bar (secondary header — recessed beneath toolbar) ---- */
 #infoBar {
-    height: 30px;
+    height: 34px;
     background: var(--bg-0);
     border-bottom: 1px solid var(--border);
     box-shadow: inset 0 1px 0 rgba(0,0,0,0.18);
@@ -3649,6 +3856,31 @@ kbd {
     transition: width var(--dur-slow) var(--ease-out);
 }
 
+.onboarding-skip {
+    position: absolute;
+    top: var(--s-3);
+    right: var(--s-3);
+    z-index: 2;
+    padding: var(--s-1) var(--s-2);
+    background: transparent;
+    border: none;
+    border-radius: var(--r-2);
+    font-size: var(--fs-12);
+    color: var(--t3);
+    cursor: pointer;
+    letter-spacing: var(--tracking-snug);
+    transition: color var(--dur-base) var(--ease-out),
+                background var(--dur-base) var(--ease-out);
+}
+.onboarding-skip:hover {
+    color: var(--t1);
+    background: var(--bg-3);
+}
+.onboarding-skip:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+}
+
 .onboarding-content {
     padding: var(--s-5) var(--s-6);
     flex: 1;
@@ -4124,3 +4356,385 @@ kbd {
     bottom: -5px; left: 50%; margin-left: -4px;
     border-right: none; border-bottom: none;
 }
+
+/* ---- Diagram node click-menu (Go to source / Highlight / loop toggle) ---- */
+.volt-node-menu {
+    position: fixed; z-index: 4000; min-width: 200px; max-width: 300px;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 6px; box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+    font-size: 13px; animation: vnm-in 120ms var(--ease-out) both;
+}
+@keyframes vnm-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+.vnm-head {
+    display: flex; gap: 9px; align-items: flex-start;
+    padding: 7px 8px 9px; margin-bottom: 5px; border-bottom: 1px solid var(--border);
+}
+.vnm-dot { width: 10px; height: 10px; border-radius: 3px; margin-top: 3px; flex: none; }
+.vnm-title { color: var(--t1); font-weight: 600; line-height: 1.25; word-break: break-word; }
+.vnm-sub { color: var(--t3); font-size: 11.5px; margin-top: 1px; word-break: break-word; }
+.vnm-items { display: flex; flex-direction: column; }
+.vnm-item {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: none; border: none; color: var(--t2); padding: 7px 8px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; font-family: inherit;
+}
+.vnm-item:hover { background: var(--bg-3); color: var(--t1); }
+.vnm-item svg { flex: none; opacity: .8; }
+
+/* Highlight-connections: fade everything that isn't part of the selection */
+.dv-content svg .node, .dv-content svg .edgePaths path, .dv-content svg .edgeLabels > g { transition: opacity .18s ease; }
+.volt-dim { opacity: .1 !important; }
+
+/* Go-to-source: brief line flash in the editor */
+@keyframes volt-line-flash-kf { from { background: rgba(43, 124, 179, .38); } to { background: transparent; } }
+.volt-line-flash { animation: volt-line-flash-kf 1.4s ease-out both; }
+
+/* Freeze button sits next to Expand loops (only the first toolbtn auto-pushes) */
+.dv-toolbtn { gap: 6px; }
+.dv-toolbtn svg { flex: none; }
+#dvFreeze { margin-left: var(--s-2, 8px); }
+.dv-toolbtn.active {
+    color: var(--volt); border-color: var(--volt); background: rgba(43, 124, 179, .14);
+}
+.dv-toolbtn.active:hover { background: rgba(43, 124, 179, .22); color: var(--volt); }
+
+/* ---- Library Creator wizard ---- */
+.lib-search-wrap { display: flex; gap: 6px; align-items: center; }
+.lib-new {
+    flex: none; height: 28px; padding: 0 10px; border-radius: var(--r-2);
+    background: var(--volt); color: #fff; border: none; font-size: var(--fs-12);
+    font-weight: 600; font-family: var(--sans); cursor: pointer; white-space: nowrap;
+}
+.lib-new:hover { filter: brightness(1.08); }
+
+.lc-dialog { width: 560px; max-width: 92vw; }
+.lc-label { display: block; margin: 14px 0 5px; font-size: var(--fs-11); font-weight: 600; color: var(--t2); }
+.lc-label:first-child { margin-top: 2px; }
+.lc-hint { margin-top: 7px; font-size: var(--fs-11); color: var(--t3); line-height: 1.5; }
+.lc-hint code, .lc-review code { background: var(--bg-3); padding: 1px 5px; border-radius: 4px; color: var(--t1); }
+.lc-grid2 { grid-template-columns: 1fr 1fr; }
+
+.lc-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.lc-row .wiz-input { margin: 0; }
+.lc-x {
+    flex: none; width: 30px; border: 1px solid var(--border); background: var(--bg-2);
+    color: var(--t3); border-radius: var(--r-2); cursor: pointer; font-size: 16px; line-height: 1;
+}
+.lc-x:hover { color: var(--err, #d9534f); border-color: var(--err, #d9534f); }
+.lc-add { margin-top: 6px; }
+
+.lc-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-2); overflow: hidden; }
+.lc-seg-btn { padding: 5px 12px; background: var(--bg-2); color: var(--t2); border: none; cursor: pointer; font-size: var(--fs-12); font-family: var(--sans); }
+.lc-seg-btn.active { background: var(--volt); color: #fff; }
+
+.lc-method { display: grid; grid-template-columns: 1.2fr .8fr 1.4fr auto; gap: 6px; margin-bottom: 6px; }
+.lc-method .wiz-input { margin: 0; }
+
+.lc-review { border: 1px solid var(--border); border-radius: var(--r-2); padding: 4px 12px; margin-bottom: 4px; }
+.lc-rrow { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: var(--fs-12); }
+.lc-rrow:last-child { border-bottom: none; }
+.lc-rrow > span { color: var(--t3); }
+.lc-rrow-top { align-items: flex-start; }
+.lc-mlist { margin: 0; padding-left: 0; list-style: none; text-align: right; }
+.lc-mlist li { margin: 2px 0; }
+
+/* ---- Secure .vlib import consent modal ---- */
+.vlib-dialog { width: 620px; max-width: 94vw; }
+.vlib-body { display: flex; flex-direction: column; gap: 10px; }
+.vlib-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; font-size: var(--fs-12); }
+.vlib-meta > div { display: flex; justify-content: space-between; gap: 10px; }
+.vlib-meta span { color: var(--t3); }
+.vlib-meta b { color: var(--t1); font-weight: 600; }
+.vlib-caps { font-size: var(--fs-12); }
+.vlib-caps > span { color: var(--t3); margin-right: 6px; }
+.vlib-cap { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--bg-3); color: var(--t2); font-size: var(--fs-11); }
+.vlib-cap-warn { background: rgba(217, 138, 43, .18); color: #e0a84e; border: 1px solid rgba(217, 138, 43, .4); }
+.vlib-note { font-size: var(--fs-11); border-radius: var(--r-2); padding: 7px 10px; line-height: 1.5; }
+.vlib-err { background: rgba(217, 83, 79, .14); color: #e0776f; border: 1px solid rgba(217, 83, 79, .35); }
+.vlib-warn { background: rgba(217, 138, 43, .12); color: #d9a84e; border: 1px solid rgba(217, 138, 43, .3); }
+.vlib-src-label { font-size: var(--fs-11); color: var(--t3); margin-top: 2px; }
+.vlib-src { max-height: 260px; overflow: auto; background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--r-2); padding: 10px; font-family: var(--mono); font-size: var(--fs-11); color: var(--t2); white-space: pre; margin: 0; }
+.vlib-tier { text-transform: capitalize; }
+.vlib-tier-verified { color: #3aa06a; }
+.vlib-tier-community { color: #d9a84e; }
+.vlib-sig { color: #3aa06a; font-size: var(--fs-11); margin-right: auto; }
+
+/* Installed libraries section + update banner */
+.lib-installed { padding: 0 6px; }
+.lib-installed-hdr { font-size: var(--fs-11); font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: .04em; margin: 8px 4px 4px; }
+.lib-installed-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--r-2); }
+.lib-installed-row:hover { background: var(--bg-2); }
+.lib-installed-name { flex: 1; font-size: var(--fs-12); color: var(--t1); }
+.lib-installed-ver { color: var(--t3); font-size: var(--fs-11); }
+.lib-uninstall { flex: none; width: 22px; height: 22px; border: none; background: none; color: var(--t3); border-radius: 5px; cursor: pointer; font-size: 15px; line-height: 1; }
+.lib-uninstall:hover { background: rgba(217, 83, 79, .15); color: #d9534f; }
+.vlib-update { background: rgba(43, 124, 179, .14); color: #6fb8e0; border: 1px solid rgba(43, 124, 179, .35); }
+
+/* Grid browser (Fuse) */
+.lib-grid { background: var(--bg-3); color: var(--t2); }
+.lib-grid:hover { background: var(--bg-4, var(--bg-3)); color: var(--t1); filter: none; }
+.grid-dialog { width: 560px; max-width: 92vw; }
+.grid-body { max-height: 60vh; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.grid-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-2); }
+.grid-row:hover { border-color: var(--border-strong); }
+.grid-name { flex: 1; font-size: var(--fs-13, 13px); color: var(--t1); }
+.grid-ver { color: var(--t3); font-size: var(--fs-11); }
+.grid-hash { color: var(--t3); font-size: var(--fs-11); }
+.grid-install { flex: none; }
+.grid-empty { color: var(--t3); padding: 16px; text-align: center; }
+
+/* ---- Library panel: Installed + category-grouped Grid marketplace ---- */
+.lib-scroll { flex: 1; overflow-y: auto; padding: 2px 8px 16px; }
+
+/* top-level sections: INSTALLED / GRID */
+.lib-sec { margin-top: 12px; }
+.lib-sec:first-child { margin-top: 2px; }
+.lib-sec-hdr {
+    display: flex; align-items: center; gap: 8px; padding: 6px 6px 4px;
+    font: 700 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--t2);
+}
+.lib-sec-hdr .lib-count { margin-left: 0; }
+.lib-count {
+    font: 600 10px/1 var(--sans); letter-spacing: 0; color: var(--t3);
+    background: var(--bg-3); border-radius: 999px; padding: 3px 7px;
+}
+
+/* collapsible category group — header reads as a tidy index row when collapsed */
+.lib-grp { margin-top: 3px; }
+.lib-grp-hdr {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 9px 8px; border-radius: 8px; cursor: pointer; user-select: none;
+    background: none; border: 0; text-align: left; color: var(--t1);
+    transition: background .12s;
+}
+.lib-grp-hdr:hover { background: var(--bg-2); }
+.lib-grp-chev { flex: none; width: 10px; font-size: 10px; color: var(--t3); transition: transform .16s ease; }
+.lib-grp.collapsed .lib-grp-chev { transform: rotate(-90deg); }
+.lib-grp-label { flex: 1; font: 600 12.5px/1.2 var(--sans); color: var(--t1); }
+.lib-grp-sum { flex: none; display: flex; align-items: center; gap: 4px; }
+.lib-grp:not(.collapsed) .lib-grp-sum { display: none; }   /* dots only summarize a closed group */
+.lib-grp-count { flex: none; font: 600 10.5px/1 var(--sans); color: var(--t3); background: var(--bg-3); border-radius: 999px; padding: 3px 8px; }
+.lib-grp-body { display: flex; flex-direction: column; gap: 1px; padding: 1px 0 4px; }
+.lib-grp.collapsed .lib-grp-body { display: none; }
+.lib-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.lib-dot-i2c { background: #e0b84e; } .lib-dot-gpio { background: #4cc088; }
+.lib-dot-spi { background: #b18ce8; } .lib-dot-uart { background: #6fb0c4; }
+
+/* comfortable 2-line row */
+.lib-row {
+    display: flex; align-items: center; gap: 11px;
+    padding: 7px 8px; border-radius: 8px;
+    border: 1px solid transparent; cursor: default;
+    transition: background .12s ease, border-color .12s ease;
+}
+.lib-row:hover { background: var(--bg-2); border-color: var(--border); }
+
+.lib-ic {
+    flex: none; width: 30px; height: 30px; border-radius: 7px;
+    display: grid; place-items: center; letter-spacing: .04em;
+    font: 700 8.5px/1 var(--mono, ui-monospace, monospace);
+    background: var(--bg-3); color: var(--t2);
+}
+.lib-ic-i2c  { background: rgba(208,168,58,.16);  color: #e0b84e; }
+.lib-ic-gpio { background: rgba(58,160,106,.16);  color: #4cc088; }
+.lib-ic-spi  { background: rgba(138,92,214,.18);  color: #b18ce8; }
+.lib-ic-uart { background: rgba(90,143,160,.18);  color: #6fb0c4; }
+
+.lib-row-body { flex: 1; min-width: 0; }
+.lib-row-name {
+    display: flex; align-items: baseline; gap: 6px; line-height: 1.25;
+    font-size: 13px; font-weight: 600; color: var(--t1);
+}
+.lib-row-nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-row-ver { flex: none; font-size: 10.5px; font-weight: 500; color: var(--t3); }
+.lib-tag {
+    flex: none; font: 600 9px/1 var(--sans); letter-spacing: .03em; text-transform: uppercase;
+    padding: 2px 5px; border-radius: 4px;
+}
+.lib-tag-community { background: rgba(217,138,43,.16); color: #e0a84e; }
+.lib-tag-net { background: rgba(217,138,43,.14); color: #e0a84e; }
+.lib-row-desc {
+    font-size: 11.5px; color: var(--t3); line-height: 1.3; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* action buttons (right) */
+.lib-row-act { flex: none; display: flex; align-items: center; gap: 4px; }
+.lib-btn {
+    font: 600 11.5px/1 var(--sans); white-space: nowrap; cursor: pointer;
+    padding: 5px 12px; border-radius: 6px; border: 1px solid transparent;
+    transition: background .12s, color .12s, border-color .12s, opacity .12s;
+}
+.lib-btn-install { background: transparent; border-color: var(--border-strong, var(--border)); color: var(--t2); }
+.lib-row:hover .lib-btn-install { border-color: var(--volt); color: var(--volt); }
+.lib-btn-install:hover { background: var(--volt); border-color: var(--volt); color: #fff; }
+.lib-btn-update { background: transparent; border-color: var(--volt); color: var(--volt); }
+.lib-btn-update:hover { background: var(--volt); color: #fff; }
+.lib-btn-installed { border: 0; background: none; color: #3aa06a; cursor: default; padding-right: 4px; }
+.lib-btn:disabled { cursor: default; opacity: .7; }
+/* installed-row actions reveal on hover */
+.lib-btn-use { background: transparent; border-color: var(--border); color: var(--t2); opacity: 0; }
+.lib-row:hover .lib-btn-use { opacity: 1; }
+.lib-btn-use:hover { background: var(--bg-3); color: var(--t1); border-color: var(--border-strong, var(--border)); }
+.lib-btn-x {
+    flex: none; width: 24px; height: 24px; padding: 0; border: 0; background: none;
+    color: var(--t3); border-radius: 6px; cursor: pointer; font-size: 15px; line-height: 1; opacity: 0;
+    transition: opacity .12s, background .12s, color .12s;
+}
+.lib-row:hover .lib-btn-x { opacity: 1; }
+.lib-btn-x:hover { background: rgba(217,83,79,.14); color: #d9534f; }
+
+/* notes / empty states */
+.lib-empty { padding: 7px 10px 4px; font-size: 11.5px; color: var(--t3); line-height: 1.5; }
+.lib-note { padding: 10px; font-size: 12px; color: var(--t3); line-height: 1.5; }
+.lib-note-warn {
+    color: #d9a84e; background: rgba(217,138,43,.08);
+    border: 1px solid rgba(217,138,43,.2); border-radius: 8px; margin: 2px 2px;
+}
+
+/* panel: fixed header (search + tabs), only the list scrolls */
+.lib-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; height: 100%; overflow: hidden; }
+.lib-panel .lib-search-wrap,
+.lib-panel .lib-tabs { flex: none; }
+.lib-panel .lib-scroll { flex: 1 1 auto; min-height: 0; }
+
+/* toolbar + search clear */
+.lib-search-wrap { padding: 8px; }
+.lib-search-box { position: relative; flex: 1; display: flex; align-items: center; }
+.lib-search { width: 100%; padding-right: 26px; }
+.lib-search-clear {
+    position: absolute; right: 5px; width: 19px; height: 19px; border: 0; padding: 0;
+    background: none; color: var(--t3); font-size: 15px; line-height: 1; border-radius: 5px;
+    cursor: pointer; display: none; place-items: center;
+}
+.lib-search-box.has-text .lib-search-clear { display: grid; }
+.lib-search-clear:hover { color: var(--t1); background: var(--bg-3); }
+
+/* tabs: Installed | Grid */
+.lib-tabs { display: flex; gap: 2px; padding: 4px 8px 0; border-bottom: 1px solid var(--border); }
+.lib-tab {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 10px; border: 0; background: none; cursor: pointer;
+    font: 600 12px var(--sans); color: var(--t3);
+    border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .12s, border-color .12s;
+}
+.lib-tab:hover { color: var(--t2); }
+.lib-tab.active { color: var(--t1); border-bottom-color: var(--volt); }
+.lib-tab-n { font: 600 10px/1 var(--sans); color: var(--t3); background: var(--bg-3); border-radius: 999px; padding: 2px 6px; }
+.lib-tab.active .lib-tab-n { color: var(--volt); }
+
+/* installed empty-state CTA */
+.lib-empty-cta { text-align: center; padding: 34px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.lib-empty-icon { font-size: 26px; color: var(--t3); opacity: .5; line-height: 1; }
+.lib-link { background: none; border: 0; color: var(--volt); font: 600 12px var(--sans); cursor: pointer; padding: 4px; }
+.lib-link:hover { filter: brightness(1.15); text-decoration: underline; }
+
+/* ---- Import / install consent dialog (redesigned) ---- */
+.vlib2 {
+    width: min(560px, 92vw); max-height: 86vh; display: flex; flex-direction: column;
+    background: var(--bg-1); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.5); overflow: hidden;
+}
+.vlib2-head { display: flex; align-items: center; gap: 12px; padding: 15px 16px; border-bottom: 1px solid var(--border); }
+.vlib2-head .lib-ic { width: 40px; height: 40px; border-radius: 9px; font-size: 11px; }
+.vlib2-head-txt { flex: 1; min-width: 0; }
+.vlib2-title { display: flex; align-items: baseline; gap: 8px; font: 700 16px var(--sans); color: var(--t1); }
+.vlib2-ver { font: 500 12px var(--sans); color: var(--t3); }
+.vlib2-sub { font-size: 12.5px; color: var(--t3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vlib2-x { flex: none; width: 30px; height: 30px; border: 0; background: none; color: var(--t3); font-size: 22px; line-height: 1; border-radius: 7px; cursor: pointer; }
+.vlib2-x:hover { background: var(--bg-3); color: var(--t1); }
+.vlib2-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 13px; }
+.vlib2-trust {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px;
+    background: rgba(58,160,106,.1); border: 1px solid rgba(58,160,106,.25);
+    color: #6ecb96; font: 600 12.5px var(--sans);
+}
+.vlib2-check { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(58,160,106,.22); color: #4cc088; font-size: 12px; }
+.vlib2-trust-sub { color: var(--t3); font-weight: 500; }
+.vlib2-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+.vlib2-meta > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vlib2-meta span { font: 600 10px var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--t3); }
+.vlib2-meta b { font: 600 13px var(--sans); color: var(--t1); }
+.vlib2-caps { display: flex; flex-wrap: wrap; gap: 5px; }
+.vlib2-cap-none { color: var(--t3); font-weight: 500; }
+.vlib2-src { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.vlib2-src > summary {
+    padding: 9px 12px; cursor: pointer; user-select: none; list-style: none;
+    font: 600 12px var(--sans); color: var(--t2); background: var(--bg-2);
+}
+.vlib2-src > summary::-webkit-details-marker { display: none; }
+.vlib2-src > summary::before { content: "▸"; color: var(--t3); margin-right: 7px; display: inline-block; transition: transform .15s; }
+.vlib2-src[open] > summary::before { transform: rotate(90deg); }
+.vlib2-src pre { margin: 0; padding: 12px; max-height: 260px; overflow: auto; border-top: 1px solid var(--border); background: var(--bg-0, var(--bg-1)); font-family: var(--mono); font-size: var(--fs-11); line-height: 1.55; color: var(--t2); white-space: pre; }
+.vlib2-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.vlib-info { background: var(--bg-2); color: var(--t2); border: 1px solid var(--border); }
+
+/* detail sheet: docked to the left of the side panel, non-modal (list stays live) */
+.vlib2-dock { position: fixed; z-index: 40; max-height: none; box-shadow: 0 18px 50px rgba(0,0,0,.55); animation: vlibDockIn .16s ease; }
+@keyframes vlibDockIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+.vlib2-body { flex: 1 1 auto; min-height: 0; }
+
+/* spec-sheet content */
+.vs-lead { font-size: 13px; line-height: 1.5; color: var(--t2); }
+.vs-sec { display: flex; flex-direction: column; gap: 8px; }
+.vs-sec-h { font: 700 10.5px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--t3); }
+.vs-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 16px; }
+.vs-spec { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vs-spec > span { font-size: 10.5px; color: var(--t3); }
+.vs-spec > b { font: 600 12.5px var(--sans); color: var(--t1); }
+.vs-methods { display: flex; flex-direction: column; gap: 8px; }
+.vs-method { margin: 0; }
+.vs-ret { color: #6fb0c4; }
+.vs-mdesc { font-size: 11.5px; color: var(--t3); }
+
+/* code blocks + copy */
+.vs-code { margin: 0; padding: 11px 12px; background: var(--bg-0, #0d0e11); border: 1px solid var(--border); border-radius: 8px; font-family: var(--mono); font-size: var(--fs-11); line-height: 1.55; color: var(--t2); white-space: pre; overflow-x: auto; }
+.vs-codewrap { position: relative; }
+.vs-copy { flex: none; background: none; border: 1px solid var(--border); color: var(--t3); font: 600 10.5px var(--sans); padding: 3px 9px; border-radius: 6px; cursor: pointer; }
+.vs-copy:hover { color: var(--t1); border-color: var(--border-strong, var(--border)); background: var(--bg-3); }
+.vs-copy-blk { position: absolute; top: 7px; right: 7px; z-index: 1; background: var(--bg-2); }
+.vs-alts { display: flex; flex-direction: column; gap: 6px; }
+.vs-alt { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); }
+.vs-alt > b { font: 600 12.5px var(--sans); color: var(--t1); }
+.vs-alt > span { font-size: 11.5px; color: var(--t3); line-height: 1.4; }
+.vs-tips { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.vs-tips li { font-size: 12px; color: var(--t2); line-height: 1.45; }
+.vs-pins { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.vs-pins td { padding: 5px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+.vs-pin-l { font-family: var(--mono); color: var(--t1); font-weight: 600; white-space: nowrap; }
+.vs-pin-t { color: var(--t3); white-space: nowrap; }
+.vs-pin-n { color: var(--t2); }
+.vs-trust { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; padding: 9px 11px; border-radius: 9px; background: var(--bg-2); border: 1px solid var(--border); font-size: 11.5px; color: var(--t3); line-height: 1.5; }
+.vs-trust-check { flex: none; color: #4cc088; font-weight: 700; }
+.vs-trust b { color: var(--t2); }
+.vs-trust-caps { display: flex; gap: 4px; margin-left: auto; }
+.vs-link { flex: none; background: none; border: 1px solid var(--border); color: var(--t2); font: 600 11px var(--sans); padding: 5px 9px; border-radius: 7px; cursor: pointer; }
+.vs-link:hover { border-color: var(--volt); color: var(--volt); }
+.vs-installed-badge { font: 600 9px var(--sans); letter-spacing: .04em; text-transform: uppercase; color: #4cc088; background: rgba(58,160,106,.14); padding: 2px 6px; border-radius: 4px; }
+.vs-tier-badge { font: 600 9px var(--sans); letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); color: var(--t3); }
+.vs-tier-verified { color: #4cc088; border-color: rgba(58,160,106,.35); }
+.vs-tier-community { color: #e0a84e; border-color: rgba(217,138,43,.4); }
+
+/* context accent: installed = using (green), grid = evaluating/install (accent) */
+.vlib2-installed { border-top: 2px solid #3aa06a; }
+.vlib2-installed .vlib2-head { background: rgba(58,160,106,.05); }
+.vlib2-grid { border-top: 2px solid var(--volt); }
+.vlib2-grid .vlib2-head { background: rgba(74,124,247,.05); }
+.vs-details > summary { list-style: none; }
+.vs-details > summary::-webkit-details-marker { display: none; }
+
+/* installed "use in your project" action box */
+.vs-usebox { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-2); gap: 0; }
+.vs-use-main { width: 100%; justify-content: center; }
+.vs-use-row { display: flex; gap: 6px; margin-top: 8px; }
+.vs-act { flex: 1 1 0; background: none; border: 1px solid var(--border); color: var(--t2); font: 600 11px var(--sans); padding: 6px 6px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.vs-act:hover { border-color: var(--border-strong, var(--border)); color: var(--t1); background: var(--bg-3); }
+.vs-foot-gap { flex: 1; }
+.wiz-btn-danger { color: #e0776f; border-color: rgba(217,83,79,.4); }
+.wiz-btn-danger:hover { background: rgba(217,83,79,.14); color: #e0776f; }
+
+/* rows: clickable + affordances */
+.lib-row-click { cursor: pointer; }
+.lib-row-chev { color: var(--t3); font-size: 18px; line-height: 1; padding: 0 4px; opacity: 0; transition: opacity .12s; }
+.lib-row:hover .lib-row-chev { opacity: 1; }
+.lib-tag-update { background: rgba(74,124,247,.16); color: var(--volt); }

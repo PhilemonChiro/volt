@@ -1,0 +1,145 @@
+[
+  {
+    "note": "key sort",
+    "input": {
+      "b": 1,
+      "a": 2,
+      "c": 3
+    },
+    "canonical": "{\"a\":2,\"b\":1,\"c\":3}",
+    "sha256": "e145110e712e3ed0a6b233551b27a90aa39b4c93ed67e111ba2002d16e5ed1fa"
+  },
+  {
+    "note": "nested sort",
+    "input": {
+      "z": {
+        "y": 1,
+        "x": 2
+      },
+      "a": [
+        3,
+        1,
+        2
+      ]
+    },
+    "canonical": "{\"a\":[3,1,2],\"z\":{\"x\":2,\"y\":1}}",
+    "sha256": "20513814c7d2a94369517afc72739669fad4e23057c2771c3ee746263360d2ca"
+  },
+  {
+    "note": "array order preserved",
+    "input": [
+      3,
+      1,
+      2,
+      {
+        "b": 1,
+        "a": 2
+      }
+    ],
+    "canonical": "[3,1,2,{\"a\":2,\"b\":1}]",
+    "sha256": "5e21d54df1a71703f6f25216ff0c5dbd78bca73255f936a50c0128cb5e801c5b"
+  },
+  {
+    "note": "HTML-special chars (must NOT be \\u-escaped)",
+    "input": {
+      "s": "a<b>&c\"d"
+    },
+    "canonical": "{\"s\":\"a<b>&c\\\"d\"}",
+    "sha256": "b611718a722c28a50db60ba0434885667c41676415d0365b316e2bb77fceb44e"
+  },
+  {
+    "note": "unicode kept as UTF-8",
+    "input": {
+      "s": "café — °C ↻"
+    },
+    "canonical": "{\"s\":\"café — °C ↻\"}",
+    "sha256": "62212e35bde15ebff1700581d610361d8dcc4ad7cf06f314735f624718f2fb58"
+  },
+  {
+    "note": "control char escaped",
+    "input": {
+      "s": "tab\tnewline\n"
+    },
+    "canonical": "{\"s\":\"tab\\tnewline\\n\"}",
+    "sha256": "c3f8c266cc546c68676f6b8e13f3a9c94dcaf9ef4b6a98d7628fbbc25ea2057b"
+  },
+  {
+    "note": "scalars",
+    "input": {
+      "i": 42,
+      "z": 0,
+      "t": true,
+      "f": false,
+      "n": null,
+      "s": ""
+    },
+    "canonical": "{\"f\":false,\"i\":42,\"n\":null,\"s\":\"\",\"t\":true,\"z\":0}",
+    "sha256": "e3c27cedba2fd983e90872d3f9b04232325cb2b8fe6ebe75c66dea55a8b6b36a"
+  },
+  {
+    "note": "vlib signed-content shape",
+    "input": {
+      "manifest": {
+        "name": "BMP280",
+        "prefix": "bmp280",
+        "version": "1.2.0",
+        "interface": "i2c",
+        "capabilities": [
+          "i2c"
+        ],
+        "author": "gh:alice",
+        "trustTier": "verified"
+      },
+      "device": {
+        "name": "BMP280",
+        "category": "sensor",
+        "interface": "i2c",
+        "default_address": "0x76",
+        "c_prefix": "bmp280",
+        "c_source": "driver.c",
+        "init_args": "{bus_id}, {addr}",
+        "methods": {
+          "pressure": {
+            "returns": "float",
+            "params": []
+          }
+        }
+      },
+      "driver": {
+        "common": "float bmp280_pressure(bmp280_t*d){return 0;}"
+      },
+      "header": {
+        "struct_name": "bmp280_t",
+        "fields": [
+          [
+            "bus_id",
+            "uint8_t"
+          ],
+          [
+            "addr",
+            "uint8_t"
+          ]
+        ],
+        "init_params": [
+          [
+            "bus_id",
+            "uint8_t"
+          ],
+          [
+            "addr",
+            "uint8_t"
+          ]
+        ],
+        "methods": [
+          {
+            "name": "pressure",
+            "ret": "float",
+            "params": []
+          }
+        ]
+      }
+    },
+    "canonical": "{\"device\":{\"c_prefix\":\"bmp280\",\"c_source\":\"driver.c\",\"category\":\"sensor\",\"default_address\":\"0x76\",\"init_args\":\"{bus_id}, {addr}\",\"interface\":\"i2c\",\"methods\":{\"pressure\":{\"params\":[],\"returns\":\"float\"}},\"name\":\"BMP280\"},\"driver\":{\"common\":\"float bmp280_pressure(bmp280_t*d){return 0;}\"},\"header\":{\"fields\":[[\"bus_id\",\"uint8_t\"],[\"addr\",\"uint8_t\"]],\"init_params\":[[\"bus_id\",\"uint8_t\"],[\"addr\",\"uint8_t\"]],\"methods\":[{\"name\":\"pressure\",\"params\":[],\"ret\":\"float\"}],\"struct_name\":\"bmp280_t\"},\"manifest\":{\"author\":\"gh:alice\",\"capabilities\":[\"i2c\"],\"interface\":\"i2c\",\"name\":\"BMP280\",\"prefix\":\"bmp280\",\"trustTier\":\"verified\",\"version\":\"1.2.0\"}}",
+    "sha256": "675db6259fef038e6700689bcfd7ba2a6ac9a233f9a832d49d4cc35d150c797f"
+  }
+]

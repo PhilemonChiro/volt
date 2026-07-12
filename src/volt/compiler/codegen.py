@@ -25,6 +25,23 @@ from .codegen_utils import (
     find_var_decls_by_name as _find_var_decls_by_name,
     find_calls as _find_calls,
 )
+import re
+
+# SECURITY: safe replacement for str.format on device init_args templates.
+# Substitutes ONLY bare {identifier} placeholders present in `values`. Anything
+# with attribute access / conversions / format specs (`{x.y}`, `{x!r}`, `{x:..}`)
+# never matches the identifier pattern, so it can't reach Python's format
+# machinery — closing the format-string injection vector on third-party
+# device.json templates. An unknown {name} raises KeyError (handled by caller).
+_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+def _safe_fill(template: str, values: dict) -> str:
+    def repl(m):
+        key = m.group(1)
+        if key not in values:
+            raise KeyError(key)
+        return str(values[key])
+    return _PLACEHOLDER_RE.sub(repl, template)
 
 # Volt method → C framework function
 METHOD_MAP = {
@@ -41,7 +58,7 @@ METHOD_MAP = {
     ("PullUpInput", "is_pressed"): "(pin_read({gpio}) == LOW)",
     ("PullDownInput", "read"): "pin_read({gpio})",
     ("PullDownInput", "is_pressed"): "(pin_read({gpio}) == HIGH)",
-    ("Analog", "read"): "pin_read({gpio})",
+    ("Analog", "read"): "pin_read_analog({gpio})",
     # DAC
     ("DAC", "write"): "pin_dac_write({gpio}, {args})",
     ("DAC", "voltage"): "pin_dac_voltage({gpio}, {args})",
@@ -444,7 +461,7 @@ class CCodeGen:
             self._out('#include "volt/ble.h"')
         if program.hardware and program.hardware.buses:
             bus_types = {b.bus_type for b in program.hardware.buses}
-            if "i2c" in bus_types:
+            if "i2c" in bus_types or "softi2c" in bus_types:
                 self._out('#include "volt/i2c.h"')
             if "spi" in bus_types:
                 self._out('#include "volt/spi.h"')
@@ -1033,17 +1050,36 @@ class CCodeGen:
                 "rp2040": ("0", "1"),
                 "stm32": ("2", "3"),
             }
+            # Bus ids: hardware I2C controllers get 0, 1, … so multiple buses on
+            # different pins actually work (previously every bus was forced onto
+            # controller 0, so a second bus reconfigured the first — two devices
+            # at the same address collided). Soft (bit-banged) buses get ids from
+            # VOLT_SOFT_I2C_BASE up, letting the framework's volt_i2c_* route them
+            # to the bit-bang driver transparently — unlimited buses on any pins.
+            SOFT_I2C_BASE = 100
+            i2c_bus_ids = {}   # bus name -> controller/soft id
+            _hw_i2c = 0
+            _soft_i2c = 0
             for bus in program.hardware.buses:
                 params = bus.params
-                if bus.bus_type == "i2c":
+                if bus.bus_type in ("i2c", "softi2c"):
+                    if bus.bus_type == "softi2c":
+                        bus_id = SOFT_I2C_BASE + _soft_i2c
+                        _soft_i2c += 1
+                        kind = "soft/bit-bang"
+                    else:
+                        bus_id = _hw_i2c
+                        _hw_i2c += 1
+                        kind = "hw controller"
+                    i2c_bus_ids[bus.name] = bus_id
                     d_sda, d_scl = i2c_defaults.get(chip, ("21", "22"))
                     sda = self._emit_expr_str(params.get("sda")) if "sda" in params else d_sda
                     scl = self._emit_expr_str(params.get("scl")) if "scl" in params else d_scl
                     speed = (
                         self._emit_expr_str(params.get("speed")) if "speed" in params else "400000"
                     )
-                    self._out(f"// I2C bus: {bus.name}")
-                    self._out(f"volt_i2c_init(0, {sda}, {scl}, {speed});")
+                    self._out(f"// I2C bus: {bus.name} ({kind} {bus_id})")
+                    self._out(f"volt_i2c_init({bus_id}, {sda}, {scl}, {speed});")
                 elif bus.bus_type == "spi":
                     d_mosi, d_miso, d_clk = spi_defaults.get(chip, ("23", "19", "18"))
                     mosi = self._emit_expr_str(params.get("mosi")) if "mosi" in params else d_mosi
@@ -1087,26 +1123,35 @@ class CCodeGen:
                 iface = bus_types.get(sensor.bus_name)
                 if iface is None:
                     iface = (dev_info.interface if dev_info else "i2c").lower()
+                # Controller index of the bus this device sits on (0 if it isn't
+                # on a declared I2C bus, e.g. GPIO/UART devices).
+                dev_bus_id = i2c_bus_ids.get(sensor.bus_name, 0)
                 self._out(f"// Device: {sensor.name} ({sensor.sensor_type})")
                 template = (dev_info.init_args if dev_info else "") or ""
                 if template:
-                    # Device-specific init template — e.g. "{pin}, 22" for DHT22
+                    # Device-specific init template — e.g. "{pin}, 22" for DHT22,
                     # or "{trig}, {echo}" for HCSR04 (named-pins form).
                     fmt_args = {
                         "pin": sensor.address,
                         "addr": sensor.address,
-                        "bus_id": 0,
+                        "bus_id": dev_bus_id,
                     }
                     # Named-pins form: `device d: HCSR04(trig: 5, echo: 6)`
                     # makes {trig} and {echo} available in the template.
                     fmt_args.update(sensor.pin_params or {})
                     try:
-                        args = template.format(**fmt_args)
+                        # SECURITY: never `template.format(**fmt_args)` — Python
+                        # str.format is an injection vector (`{x.__class__…}` can
+                        # read interpreter internals at compile time), and the
+                        # template comes from device.json, which for imported
+                        # libraries is third-party. Substitute ONLY bare
+                        # {identifier} placeholders drawn from fmt_args.
+                        args = _safe_fill(template, fmt_args)
                     except KeyError as e:
                         # Should be unreachable — the analyzer
-                        # (_check_device_pin_params) catches this before
-                        # codegen runs. If somehow reached, emit a comment
-                        # so the failure is visible at the C level.
+                        # (_check_device_pin_params) catches this before codegen
+                        # runs. If somehow reached, emit a comment so the failure
+                        # is visible at the C level.
                         missing = str(e).strip("'")
                         self._out(f"// ERROR: missing {missing} pin for {sensor.sensor_type}")
                         continue
@@ -1121,7 +1166,7 @@ class CCodeGen:
                     self._out(f"{stype}_init(&_{sensor.name}, 0);  // uart bus")
                 else:
                     self._out(
-                        f"{stype}_init(&_{sensor.name}, 0, {sensor.address});  // i2c_addr=0x{sensor.address:02x}"
+                        f"{stype}_init(&_{sensor.name}, {dev_bus_id}, {sensor.address});  // bus {dev_bus_id}, i2c_addr=0x{sensor.address:02x}"
                     )
             if program.hardware.sensors:
                 self._out("")
@@ -1158,9 +1203,6 @@ class CCodeGen:
                                 else 1000
                             )
                         )
-                        # The ISR timer period is a uint32_t microsecond count.
-                        # Clamp so a day-scale interval can't wrap to garbage.
-                        us = min(us, 4294967295)
                         self._out(
                             f'volt_critical_create("{task.name}", {task.name}_isr, {us}, NULL);'
                         )

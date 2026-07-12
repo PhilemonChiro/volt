@@ -2,8 +2,9 @@
 
 const api = window.volt;
 
-export function init({ onNew, onOpen, onClose, onRun, onMonitor, onCheck, onFormat, onSave, onSettings, onHelp }) {
+export function init({ onNew, onOpen, onClose, onRun, onMonitor, onCheck, onFormat, onSave, onExport, onSettings, onHelp }) {
     bind("runBtn", onRun);
+    bind("exportBtn", onExport);
     bind("monitorBtn", onMonitor);
     bind("checkBtn", onCheck);
     bind("formatBtn", onFormat);

@@ -1,70 +1,70 @@
 {
-  "name": "DHT11",
+  "alternatives": [
+    {
+      "name": "DHT22",
+      "note": "Same sensor family, ±0.5°C / ±2% RH — usually worth the small price difference."
+    },
+    {
+      "name": "AHT20",
+      "note": "I²C, smaller, more accurate, cheaper — recommended for new designs."
+    }
+  ],
+  "c_prefix": "dht",
+  "c_source": "driver.c",
   "category": "sensor",
-  "interface": "gpio",
+  "datasheet": "https://www.mouser.com/datasheet/2/758/DHT11-Technical-Data-Sheet-Translated-Version-1143054.pdf",
   "default_address": "",
   "description": "Basic temperature and humidity",
-  "c_prefix": "dht",
-  "c_source": "gpio_dht.c",
   "init_args": "{pin}, 11",
+  "interface": "gpio",
+  "manufacturer": "Aosong",
   "methods": {
-    "temperature": {
-      "returns": "float",
-      "params": [],
-      "description": "Temperature in \u00b0C"
-    },
     "humidity": {
-      "returns": "float",
+      "description": "Humidity %",
       "params": [],
-      "description": "Humidity %"
+      "returns": "float"
+    },
+    "temperature": {
+      "description": "Temperature in °C",
+      "params": [],
+      "returns": "float"
     }
   },
-  "manufacturer": "Aosong",
-  "datasheet": "https://www.mouser.com/datasheet/2/758/DHT11-Technical-Data-Sheet-Translated-Version-1143054.pdf",
+  "name": "DHT11",
   "specs": {
-    "voltage": "3.3V \u2013 5.5V",
-    "current": "0.3 mA measuring, 60 \u03bcA standby",
-    "temp": "0\u00b0C to +50\u00b0C \u00b12\u00b0C",
-    "humidity": "20 \u2013 80% RH \u00b15%",
-    "sample_rate": "Once per second (max)"
+    "current": "0.3 mA measuring, 60 μA standby",
+    "humidity": "20 – 80% RH ±5%",
+    "sample_rate": "Once per second (max)",
+    "temp": "0°C to +50°C ±2°C",
+    "voltage": "3.3V – 5.5V"
   },
+  "tips": [
+    "DHT11 is the cheap variant — wide tolerance, integer resolution.",
+    "Single-wire protocol is timing-critical; can be unreliable on FreeRTOS without disabling interrupts during read.",
+    "If you need accuracy, use DHT22 instead."
+  ],
   "wiring": {
     "pins": [
       {
         "label": "VCC",
-        "type": "power",
-        "note": "3.3V or 5V"
+        "note": "3.3V or 5V",
+        "type": "power"
       },
       {
         "label": "DATA",
-        "type": "data",
-        "note": "Pull-up 4.7k\u03a9\u201310k\u03a9 to VCC"
+        "note": "Pull-up 4.7kΩ–10kΩ to VCC",
+        "type": "data"
       },
       {
         "label": "NC",
-        "type": "data",
-        "note": "Not connected on 3-pin modules; tie to GND on bare-chip 4-pin"
+        "note": "Not connected on 3-pin modules; tie to GND on bare-chip 4-pin",
+        "type": "data"
       },
       {
         "label": "GND",
-        "type": "ground",
-        "note": ""
+        "note": "",
+        "type": "ground"
       }
     ]
-  },
-  "tips": [
-    "DHT11 is the cheap variant \u2014 wide tolerance, integer resolution.",
-    "Single-wire protocol is timing-critical; can be unreliable on FreeRTOS without disabling interrupts during read.",
-    "If you need accuracy, use DHT22 instead."
-  ],
-  "alternatives": [
-    {
-      "name": "DHT22",
-      "note": "Same sensor family, \u00b10.5\u00b0C / \u00b12% RH \u2014 usually worth the small price difference."
-    },
-    {
-      "name": "AHT20",
-      "note": "I\u00b2C, smaller, more accurate, cheaper \u2014 recommended for new designs."
-    }
-  ]
+  }
 }

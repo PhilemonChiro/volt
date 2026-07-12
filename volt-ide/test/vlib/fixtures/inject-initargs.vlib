@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "manifest": {
+    "name": "GoldTest",
+    "prefix": "goldtest",
+    "version": "1.0.0",
+    "interface": "i2c",
+    "capabilities": [
+      "i2c"
+    ],
+    "author": "gh:test",
+    "trustTier": "verified"
+  },
+  "device": {
+    "name": "GoldTest",
+    "category": "sensor",
+    "interface": "i2c",
+    "default_address": "0x40",
+    "description": "golden fixture",
+    "c_prefix": "goldtest",
+    "c_source": "driver.c",
+    "init_args": "{addr.__class__}",
+    "methods": {
+      "read": {
+        "returns": "float",
+        "params": []
+      }
+    }
+  },
+  "driver": {
+    "common": "volt_error_t goldtest_init(goldtest_t*d,uint8_t bus_id,uint8_t addr){d->bus_id=bus_id;d->addr=addr;return VOLT_OK;}\nfloat goldtest_read(goldtest_t*d){return (float)volt_i2c_read_reg16(d->bus_id,d->addr,0);}"
+  },
+  "header": {
+    "struct_name": "goldtest_t",
+    "fields": [
+      [
+        "bus_id",
+        "uint8_t"
+      ],
+      [
+        "addr",
+        "uint8_t"
+      ]
+    ],
+    "init_params": [
+      [
+        "bus_id",
+        "uint8_t"
+      ],
+      [
+        "addr",
+        "uint8_t"
+      ]
+    ],
+    "methods": [
+      {
+        "name": "read",
+        "ret": "float",
+        "params": []
+      }
+    ]
+  },
+  "hash": "sha256:9e464ef243caa2ed4e50584d0271c1da0b86fd0700e2add6e2f64cffec01eb67",
+  "signature": "ed25519:hio6GurUkjHQ4kP3T0yIJ8j+rkY5pAAFYDNw2NBHKRI75cnTBxE0AmOR6Tsc49Qv2fnp8mEACALVtUhB0usLDA=="
+}

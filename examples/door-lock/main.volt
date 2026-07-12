@@ -1,15 +1,15 @@
 /* ============================================================
-   Smart Door Lock — v3
+Smart Door Lock — v3
 
-   WiFi-connected door lock with keypad, buzzer alerts,
-   auto-lock timer, and remote MQTT control.
+WiFi-connected door lock with keypad, buzzer alerts,
+auto-lock timer, and remote MQTT control.
 
-   Hardware:
-     GPIO2  = status LED
-     GPIO4  = lock relay
-     GPIO15 = keypad button
-     GPIO18 = buzzer (PWM)
-   ============================================================ */
+Hardware:
+GPIO2  = status LED
+GPIO4  = lock relay
+GPIO15 = keypad button
+GPIO18 = buzzer (PWM)
+============================================================ */
 
 enum DoorState { locked, unlocked, alert }
 
@@ -25,13 +25,14 @@ storage failed_attempts: int = 0
 
 var door: DoorState = DoorState.locked
 var attempt_count: int = 0
+var unlock_request: int = 0
 
 channel lock_commands: int[4]
 
 /* Startup */
 setup {
-    wifi.connect("HomeNet", "password") or retry(10)
-    mqtt.connect("mqtt://192.168.1.100") or retry(5)
+    // wifi.connect("HomeNet", "password") or retry(10)
+    // mqtt.connect("mqtt://192.168.1.100") or retry(5)
     log("boot", "Smart Door Lock v3")
     log("boot", "press button 3x within 2s to unlock")
     buzzer.beep_startup()
@@ -82,9 +83,10 @@ machine door_lock {
             led.off()
             door = DoorState.locked
             log("lock", "LOCKED")
-            mqtt.send_int("door/status", 0)
+            // mqtt.send_int("door/status", 0)
         }
-        after 1s -> locked
+        on unlock_request == 1 -> unlocked { unlock_request = 0 }
+        on attempt_count >= 3 -> alert
     }
 
     state unlocked {
@@ -94,23 +96,23 @@ machine door_lock {
             door = DoorState.unlocked
             total_unlocks += 1
             log("lock", "UNLOCKED")
-            mqtt.send_int("door/status", 1)
+            // mqtt.send_int("door/status", 1)
             buzzer.beep_success()
         }
-        after 30s -> locked
+        after 10s -> locked
     }
 
     state alert {
         enter {
             buzzer.beep_alarm()
             log("lock", "ALERT — too many failed attempts!")
-            mqtt.send_int("door/alert", 1)
+            // mqtt.send_int("door/alert", 1)
         }
         exit {
             attempt_count = 0
-            mqtt.send_int("door/alert", 0)
+            // mqtt.send_int("door/alert", 0)
         }
-        after 60s -> locked
+        after 20s -> locked
     }
 }
 
@@ -121,6 +123,7 @@ task command_processor {
             let cmd: int = lock_commands.receive()
             if cmd == 1 {
                 attempt_count = 0
+                unlock_request = 1
             } else {
                 attempt_count += 1
                 failed_attempts += 1
@@ -131,9 +134,9 @@ task command_processor {
 }
 
 /* Remote status reporting */
-every 5s when wifi.is_connected() {
-    mqtt.send_int("door/locked", 0) or retry(3)
-}
+// every 5s when wifi.is_connected() {
+//     mqtt.send_int("door/locked", 0) or retry(3)
+// }
 
 /* Health + persistence */
 every 30s {

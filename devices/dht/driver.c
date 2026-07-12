@@ -22,16 +22,15 @@ static int dht_read_raw(dht_t *dev, uint8_t data[5])
 {
     uint8_t gpio = dev->gpio;
 
-    // Send start signal: pull low 18ms, then high 40us
-    pin_set_output(gpio);
+    // Send start signal: pull low 20ms, then release high.
+    pin_set_direction(gpio, true);   // output
     pin_write(gpio, 0);
     volt_delay_ms(20);
     pin_write(gpio, 1);
 
-    // Switch to input and wait for response
-    pin_set_input(gpio);
+    // Switch to input and wait for the response (all loops iteration-bounded).
+    pin_set_direction(gpio, false);  // input
 
-    // Wait for DHT response (low 80us + high 80us)
     int timeout = 10000;
     while (pin_read(gpio) == 1 && --timeout > 0);
     if (timeout == 0) return -1;
@@ -42,12 +41,9 @@ static int dht_read_raw(dht_t *dev, uint8_t data[5])
 
     // Read 40 bits (5 bytes)
     for (int i = 0; i < 40; i++) {
-        // Wait for low→high transition
         while (pin_read(gpio) == 0 && --timeout > 0);
-        // Measure high pulse duration
         int count = 0;
         while (pin_read(gpio) == 1 && --timeout > 0) count++;
-
         data[i / 8] <<= 1;
         if (count > 40) data[i / 8] |= 1;  // >40 cycles = bit 1
     }
@@ -55,9 +51,6 @@ static int dht_read_raw(dht_t *dev, uint8_t data[5])
     // Verify checksum
     uint8_t sum = data[0] + data[1] + data[2] + data[3];
     if (sum != data[4]) return -2;
-
-    // Re-configure as input for next read
-    pin_set_input(gpio);
     return 0;
 }
 

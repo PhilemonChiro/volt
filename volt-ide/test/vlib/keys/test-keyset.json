@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "id": "test-k1",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA1SNleIq0un3Qj3C/nQIynj6NqwtfYiSAS4quXnZIca0=\n-----END PUBLIC KEY-----\n",
+      "status": "active"
+    }
+  ],
+  "revoked": [
+    "sha256:9e0afba11e08214c0c1bf33ae669ce7ae07821509a7db5d1c7c1f9f7dd336960"
+  ]
+}

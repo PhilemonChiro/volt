@@ -40,6 +40,10 @@
                 <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                 <span>Save</span>
             </button>
+            <button class="toolbar-btn toolbar-btn-subtle project-only" id="exportBtn" title="Build + export firmware binary — .bin / .uf2 (Ctrl+E)" style="display:none">
+                <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Export</span>
+            </button>
         </div>
 
         <div class="toolbar-right">
@@ -99,7 +103,17 @@
 
     <!-- SECONDARY HEADER — project info bar (only when project is open) -->
     <div id="infoBar" class="project-only" style="display:none">
-        <div class="info-left">
+        <div class="view-tabs">
+            <button class="view-tab active" data-view="code" id="viewTabCode">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                Code
+            </button>
+            <button class="view-tab" data-view="diagrams" id="viewTabDiagrams">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M6.5 10v4a1 1 0 0 0 1 1H14"/></svg>
+                Diagrams
+            </button>
+        </div>
+        <div class="info-right">
             <span class="info-chip" id="chipBadge" title="Target board">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
                 <span id="chipLabel">ESP32</span>
@@ -107,10 +121,7 @@
             <span class="info-sep"></span>
             <span class="info-project" id="infoProjectName"></span>
             <span class="info-file" id="infoFileName"></span>
-        </div>
-        <div class="info-right">
             <span class="info-mismatch" id="chipMismatch" style="display:none" title="Connected device doesn't match project target"></span>
-
         </div>
     </div>
 
@@ -166,6 +177,23 @@
                 </svg>
                 <span class="activity-label">Pinout</span>
             </button>
+        </div>
+    </div>
+
+    <!-- DIAGRAMS VIEW (full main area — toggled by the Code/Diagrams tabs) -->
+    <div id="diagramsView" style="display:none">
+        <div class="dv-tabs">
+            <button class="dv-tab active" data-dv="systemmap">System Map</button>
+            <button class="dv-tab" data-dv="statemachine" style="display:none">State Machine</button>
+            <button class="dv-toolbtn" id="dvExpandLoops" title="Expand or collapse all loop bodies" style="display:none">Expand loops</button>
+            <button class="dv-toolbtn" id="dvFreeze" title="Freeze or resume the diagram animation" style="display:none"></button>
+            <button class="dv-refresh" id="dvRefresh" title="Refresh diagram">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+        </div>
+        <div class="dv-body">
+            <div class="dv-content bp-systemmap active" id="dgSystemMap"></div>
+            <div class="dv-content bp-systemmap" id="dgStateMachine"></div>
         </div>
     </div>
 

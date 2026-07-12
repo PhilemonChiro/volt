@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "manifest": {
+    "name": "GoldTest",
+    "prefix": "goldtest",
+    "version": "1.0.0",
+    "interface": "gpio",
+    "capabilities": [
+      "gpio"
+    ],
+    "author": "gh:test",
+    "trustTier": "verified"
+  },
+  "device": {
+    "name": "GoldTest",
+    "category": "sensor",
+    "interface": "gpio",
+    "default_address": "",
+    "description": "golden fixture",
+    "c_prefix": "goldtest",
+    "c_source": "driver.c",
+    "init_args": "{trig}, {echo}",
+    "methods": {
+      "distance_cm": {
+        "returns": "float",
+        "params": []
+      }
+    }
+  },
+  "driver": {
+    "common": "volt_error_t goldtest_init(goldtest_t*d,uint8_t trig,uint8_t echo){d->trig_pin=trig;d->echo_pin=echo;pin_set_input(echo);return VOLT_OK;}\nfloat goldtest_distance_cm(goldtest_t*d){return (float)pin_read(d->echo_pin);}"
+  },
+  "header": {
+    "struct_name": "goldtest_t",
+    "fields": [
+      [
+        "trig_pin",
+        "uint8_t"
+      ],
+      [
+        "echo_pin",
+        "uint8_t"
+      ]
+    ],
+    "init_params": [
+      [
+        "trig",
+        "uint8_t"
+      ],
+      [
+        "echo",
+        "uint8_t"
+      ]
+    ],
+    "methods": [
+      {
+        "name": "distance_cm",
+        "ret": "float",
+        "params": []
+      }
+    ]
+  },
+  "hash": "sha256:4038cea47808bf62df0d5a4643a5e11f6cad04679d697e357eea202bf1357ef8",
+  "signature": "ed25519:lpv4YBGUDvbLyZ9BHr1YEOZ6/UjQnNj8CzDe9MkdLWD8bsmAkCYaC2lGknsRiEBnyAr+Vw6W+Tv0SVmZutwHCw=="
+}

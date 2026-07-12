@@ -61,16 +61,30 @@ export function show(onComplete) {
     // changes use a light content fade so the modal doesn't appear to close
     // and reopen on every Next/Back.
     let firstRender = true;
+    let closing = false;
+
+    // Global Escape dismisses the wizard from any step. A per-step handler
+    // can't catch Escape when focus is on the document body (steps 1 and 2
+    // have no focused input), so we listen on document and tear it down in
+    // close().
+    function onKeyDown(e) {
+        if (e.key === "Escape") { e.preventDefault(); close(); }
+    }
+    document.addEventListener("keydown", onKeyDown);
 
     // Dismiss the overlay. Pass completeArgs (e.g. [path, chip]) to invoke
-    // onComplete after the exit animation; omit it for a plain dismiss so we
-    // never call onComplete with an undefined project path.
+    // onComplete after the exit animation; omit it for a plain dismiss/skip so
+    // we never call onComplete with an undefined project path.
     function close(completeArgs) {
-        // Mark the wizard seen on ANY dismissal — finishing, Escape, or backdrop —
-        // so this first-run onboarding shows once only and never reappears on the
-        // next app launch. (Previously only the "create project" path persisted it,
-        // so dismissing any other way made it come back every start.)
+        if (closing) return;   // guard against double-dismiss (e.g. Escape + backdrop click)
+        closing = true;
+        // Mark the wizard seen on ANY dismissal — finishing, Escape, backdrop,
+        // or the Skip control — so this first-run onboarding shows once only and
+        // never reappears on the next app launch. (Previously only the "create
+        // project" path persisted it, so dismissing any other way made it come
+        // back every start.)
         markComplete();
+        document.removeEventListener("keydown", onKeyDown);
         overlay.classList.add("is-closing");
         setTimeout(() => {
             overlay.remove();
@@ -110,6 +124,9 @@ export function show(onComplete) {
         overlay.innerHTML = `
             <div class="onboarding-backdrop"></div>
             <div class="onboarding-body" style="animation: ${bodyAnim}">
+                <button class="onboarding-skip" id="onbSkip" type="button"
+                    aria-label="Skip onboarding"
+                    title="Skip — you can create a project anytime">Skip for now</button>
                 <div class="onboarding-progress">
                     ${renderDots(step)}
                 </div>
@@ -295,7 +312,7 @@ function wireEvents(step, state, close, render, overlay, animateOut) {
             };
             input.onkeydown = (e) => {
                 if (e.key === "Enter") overlay.querySelector("#onbCreate").click();
-                if (e.key === "Escape") close();
+                // Escape is handled globally in show() so it dismisses on every step.
             };
         }
     }
@@ -371,6 +388,15 @@ function wireEvents(step, state, close, render, overlay, animateOut) {
             }
         };
     }
+
+    // Skip / dismiss affordances — the Skip button and a backdrop click both
+    // route through close(), which persists "onboardingDone" so the wizard is
+    // never shown again. (Escape is wired globally in show().)
+    const skipBtn = overlay.querySelector("#onbSkip");
+    if (skipBtn) skipBtn.onclick = () => close();
+
+    const backdrop = overlay.querySelector(".onboarding-backdrop");
+    if (backdrop) backdrop.onclick = () => close();
 
     // Keyboard: Enter to advance
     overlay.onkeydown = (e) => {

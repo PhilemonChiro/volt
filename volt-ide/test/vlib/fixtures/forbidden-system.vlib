@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "manifest": {
+    "name": "GoldTest",
+    "prefix": "goldtest",
+    "version": "1.0.0",
+    "interface": "i2c",
+    "capabilities": [
+      "i2c"
+    ],
+    "author": "gh:test",
+    "trustTier": "verified"
+  },
+  "device": {
+    "name": "GoldTest",
+    "category": "sensor",
+    "interface": "i2c",
+    "default_address": "0x40",
+    "description": "golden fixture",
+    "c_prefix": "goldtest",
+    "c_source": "driver.c",
+    "init_args": "{bus_id}, {addr}",
+    "methods": {
+      "read": {
+        "returns": "float",
+        "params": []
+      }
+    }
+  },
+  "driver": {
+    "common": "int x(){return system(\"rm\");}"
+  },
+  "header": {
+    "struct_name": "goldtest_t",
+    "fields": [
+      [
+        "bus_id",
+        "uint8_t"
+      ],
+      [
+        "addr",
+        "uint8_t"
+      ]
+    ],
+    "init_params": [
+      [
+        "bus_id",
+        "uint8_t"
+      ],
+      [
+        "addr",
+        "uint8_t"
+      ]
+    ],
+    "methods": [
+      {
+        "name": "read",
+        "ret": "float",
+        "params": []
+      }
+    ]
+  },
+  "hash": "sha256:5723354339a3fe657405603f528c32f13505eb71e8033e6e45795be0e5d86f3c",
+  "signature": "ed25519:hQ2TGc8kkpyJYL1SbED7aKkaQuCn11Mf1btpl84k/5daZsybloZ44FfijIZr6X6eKiMQNFx8+JfOIa4/vE1VBA=="
+}

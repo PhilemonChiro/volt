@@ -89,11 +89,6 @@ def _resolve_includes(source: str, filename: str, errors) -> str:
                     errors.error(Region(1, 1, 1, 1), "INCLUDE ERROR",
                                  f"File not found: {inc_path}")
                     result.append(line)
-                except (PermissionError, OSError) as e:
-                    from .ast_nodes import Region
-                    errors.error(Region(1, 1, 1, 1), "INCLUDE ERROR",
-                                 f"Cannot read {inc_path}: {e}")
-                    result.append(line)
             else:
                 result.append(line)
         return '\n'.join(result)
@@ -265,11 +260,7 @@ def main():
         print(f"Error: file not found: {input_file}")
         sys.exit(1)
 
-    try:
-        source = input_file.read_text()
-    except (UnicodeDecodeError, PermissionError, OSError) as e:
-        print(f"Error reading {input_file}: {e}", file=sys.stderr)
-        sys.exit(1)
+    source = input_file.read_text()
     c_code, errors = compile_volt(source, str(input_file))
 
     # Sync volt.toml chip field from source
@@ -286,12 +277,8 @@ def main():
 
     if c_code:
         if output_file:
-            try:
-                output_file.write_text(c_code)
-                print(f"Generated: {output_file}")
-            except (PermissionError, OSError) as e:
-                print(f"Error writing {output_file}: {e}", file=sys.stderr)
-                sys.exit(1)
+            output_file.write_text(c_code)
+            print(f"Generated: {output_file}")
         else:
             print(c_code)
 

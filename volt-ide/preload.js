@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("volt", {
     // Projects
     createProject: (name, chip, template) => ipcRenderer.invoke("create_project", name, chip, template || ""),
     listProjects: () => ipcRenderer.invoke("list_projects"),
+    resolveExample: (name) => ipcRenderer.invoke("resolve_example", name),
     readFile: (path) => ipcRenderer.invoke("read_file", path),
     saveFile: (path, content) => ipcRenderer.invoke("save_file", path, content),
     fileExists: (path) => ipcRenderer.invoke("file_exists", path),
@@ -29,6 +30,8 @@ contextBridge.exposeInMainWorld("volt", {
     checkCode: (source) => ipcRenderer.invoke("check_code", source),
     formatCode: (source) => ipcRenderer.invoke("format_code", source),
     findSymbols: (source) => ipcRenderer.invoke("find_symbols", source),
+    stateDiagram: (source) => ipcRenderer.invoke("state_diagram", source),
+    systemGraph: (source, expanded) => ipcRenderer.invoke("system_graph", source, expanded),
 
     // Serial
     scanDevices: () => ipcRenderer.invoke("scan_devices"),
@@ -55,6 +58,8 @@ contextBridge.exposeInMainWorld("volt", {
         ipcRenderer.invoke("build_only", projectPath, voltFile, chip),
     runProject: (projectPath, voltFile, port, chip) =>
         ipcRenderer.invoke("run_project", projectPath, voltFile, port, chip),
+    exportBinary: (projectPath, voltFile, chip) =>
+        ipcRenderer.invoke("export_binary", projectPath, voltFile, chip),
 
     // Settings
     settingsSchema:    () => ipcRenderer.invoke("settings_schema"),
@@ -67,6 +72,13 @@ contextBridge.exposeInMainWorld("volt", {
 
     // Device library
     devicesList:   () => ipcRenderer.invoke("devices_list"),
+    createDevice:  (spec) => ipcRenderer.invoke("create_device", spec),
+    vlibInspectFile: () => ipcRenderer.invoke("vlib_inspect_file"),
+    vlibInstall:   (token) => ipcRenderer.invoke("vlib_install", token),
+    vlibInstalledList: () => ipcRenderer.invoke("vlib_installed_list"),
+    vlibUninstall: (prefix) => ipcRenderer.invoke("vlib_uninstall", prefix),
+    gridList:      () => ipcRenderer.invoke("grid_list"),
+    gridFetch:     (prefix, version) => ipcRenderer.invoke("grid_fetch", prefix, version),
     openExternal:  (url) => ipcRenderer.invoke("open_external", url),
     // Logging — fire-and-forget from the renderer; main writes to the
     // rotating log file. The reveal helper opens Finder/Explorer on it.

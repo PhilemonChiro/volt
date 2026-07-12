@@ -221,6 +221,19 @@ ipcMain.handle("read_file", (_, filePath) => {
     return fs.readFileSync(filePath, "utf-8");
 });
 
+// Resolve a bundled example to its absolute project directory so the renderer
+// can hand it straight to loadProject(). `name` is a bare folder (e.g.
+// "02-iot-sensor"); path.basename() strips any traversal.
+ipcMain.handle("resolve_example", (_, name) => {
+    const folder = path.basename(String(name || ""));
+    if (!folder) throw new Error("Invalid example name");
+    const dir = path.join(examplesDir(), folder);
+    if (!fs.existsSync(path.join(dir, "main.volt"))) {
+        throw new Error("Example not found: " + folder);
+    }
+    return dir;
+});
+
 ipcMain.handle("save_file", (_, filePath, content) => {
     const ext = path.extname(filePath).toLowerCase();
     if (!SAFE_EXTENSIONS.has(ext)) throw new Error("Access denied: " + filePath);
@@ -327,6 +340,90 @@ ipcMain.handle("devices_list", () => {
     return out;
 });
 
+// Scaffold a new device library from the creator wizard's spec — writes
+// device.json + driver.c + a struct/prototypes block into every catalog copy.
+ipcMain.handle("create_device", (_, spec) => {
+    const { createDevice } = require("./src/main/device-creator");
+    return createDevice(spec, path.join(__dirname, ".."));
+});
+
+// ---- Secure library import (.vlib) ----------------------------------------
+// Two-step so the main process re-verifies the EXACT inspected envelope on
+// install (the renderer only ever sees display data + a token, never the ability
+// to swap the payload after consent).
+const _pendingVlib = new Map();
+
+ipcMain.handle("vlib_inspect_file", async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+        title: "Import Volt Cell",
+        filters: [{ name: "Volt Cell", extensions: ["vcell", "vlib", "json"] }],
+        properties: ["openFile"],
+    });
+    if (canceled || !filePaths || !filePaths[0]) return { canceled: true };
+    let envelope;
+    try { envelope = JSON.parse(fs.readFileSync(filePaths[0], "utf-8")); }
+    catch (_) { return { ok: false, reason: "file is not valid JSON" }; }
+
+    const { inspect } = require("./src/main/vlib-import");
+    const r = inspect(envelope);
+    if (r.stage === "verify" && !r.ok) return { ok: false, stage: "verify", reason: r.reason };
+
+    const token = require("crypto").randomBytes(8).toString("hex");
+    _pendingVlib.set(token, envelope);
+    setTimeout(() => _pendingVlib.delete(token), 5 * 60 * 1000);
+    return {
+        ok: r.ok, token, manifest: r.manifest, device: r.device, capabilities: r.capabilities,
+        warnings: r.warnings, errors: r.errors, driver: r.driver, keyId: r.keyId, hash: r.hash,
+    };
+});
+
+ipcMain.handle("vlib_install", (_, token) => {
+    const envelope = _pendingVlib.get(token);
+    if (!envelope) throw new Error("import expired — re-open the .vlib file");
+    const { install } = require("./src/main/vlib-import");
+    const res = install(envelope, path.join(__dirname, ".."));  // re-verifies internally
+    _pendingVlib.delete(token);
+    return res;
+});
+
+ipcMain.handle("vlib_installed_list", () => require("./src/main/vlib-import").list());
+
+ipcMain.handle("vlib_uninstall", (_, prefix) =>
+    require("./src/main/vlib-import").uninstall(prefix, path.join(__dirname, "..")));
+
+// ---- Grid (registry) browse + install ----
+// Fuse browses the Grid catalog over HTTP and installs signed Cells directly —
+// the SAME verify + hardened import as file import; only the transport differs.
+function gridUrl() {
+    try { return require("./src/main/settings").get("registry.gridUrl") || "http://127.0.0.1:8080"; }
+    catch (_) { return "http://127.0.0.1:8080"; }
+}
+
+ipcMain.handle("grid_list", async () => {
+    const r = await fetch(`${gridUrl()}/api/v1/libraries`);
+    if (!r.ok) throw new Error(`Grid unreachable (${r.status})`);
+    const { data } = await r.json();
+    return data || [];
+});
+
+ipcMain.handle("grid_fetch", async (_, prefix, version) => {
+    const r = await fetch(`${gridUrl()}/api/v1/libraries/${encodeURIComponent(prefix)}/${encodeURIComponent(version)}/download`);
+    if (!r.ok) return { ok: false, reason: `download failed (${r.status})` };
+    let envelope;
+    try { envelope = await r.json(); } catch (_) { return { ok: false, reason: "invalid response" }; }
+    const { inspect } = require("./src/main/vlib-import");
+    const res = inspect(envelope);
+    if (res.stage === "verify" && !res.ok) return { ok: false, stage: "verify", reason: res.reason };
+    const token = require("crypto").randomBytes(8).toString("hex");
+    _pendingVlib.set(token, envelope);
+    setTimeout(() => _pendingVlib.delete(token), 5 * 60 * 1000);
+    return {
+        ok: res.ok, token, manifest: res.manifest, device: res.device, capabilities: res.capabilities,
+        warnings: res.warnings, errors: res.errors, driver: res.driver, keyId: res.keyId,
+        hash: res.hash, update: res.update, alreadyInstalled: res.alreadyInstalled,
+    };
+});
+
 // Read a device driver's C source (read-only viewer). chip is the target
 // platform ("esp32" / "rp2040" / etc.), sourceFile is the c_source field
 // from the device JSON (e.g. "sensor_bme280.c").
@@ -378,6 +475,20 @@ function devicesDir() {
     return path.join(os.homedir(), ".volt", "sdk", "devices");
 }
 
+function examplesDir() {
+    // dev → repo/examples, packaged → resources/sdk/examples.
+    // The renderer references examples by a relative "examples/<name>/main.volt"
+    // path, which would otherwise resolve against the process cwd (= the volt-ide
+    // dir) where no examples/ folder exists — hence the ENOENT on open.
+    const dev = path.join(__dirname, "..", "examples");
+    if (fs.existsSync(dev)) return dev;
+    if (process.resourcesPath) {
+        const bundled = path.join(process.resourcesPath, "sdk", "examples");
+        if (fs.existsSync(bundled)) return bundled;
+    }
+    return dev;
+}
+
 const VOLT_SRC = getVoltSrc();
 
 let worker = null;
@@ -394,6 +505,7 @@ function startWorker() {
         // dev mode this replace is a no-op since __dirname has no "app.asar".
         const script = path.join(__dirname, "scripts", "worker.py")
             .replace(/app\.asar(?![\/\\]?unpacked)/, "app.asar.unpacked");
+       
         // On macOS the IDE may be launched from Finder without a shell PATH,
         // so /usr/local/bin (Homebrew) and similar aren't visible. Search a
         // few common Python locations directly, falling back to "python3".
@@ -407,6 +519,7 @@ function startWorker() {
                 stdio: ["pipe", "pipe", "pipe"],
             });
             logger.log("info", "worker", `spawned ${pythonBin} pid=${worker.pid}`);
+            console.log("info", "worker", `spawned ${pythonBin} pid=${worker.pid}`)
             // Stderr only — stdout is the JSON-RPC channel we own.
             if (worker.stderr) worker.stderr.on("data", b => logger.log("error", "worker", b.toString().trimEnd()));
         } catch (e) {
@@ -557,6 +670,7 @@ function workerCall(op, payload, timeoutMs = 10000, onProgress = null) {
         const req = onProgress ? { id, op, emit_progress: true, ...payload }
                                : { id, op, ...payload };
         try {
+            console.log(req)
             worker.stdin.write(JSON.stringify(req) + "\n");
         } catch (e) {
             pending.delete(id);
@@ -627,6 +741,22 @@ ipcMain.handle("find_symbols", async (_, source) => {
         return await workerCall("find_symbols", { source }, 5000);
     } catch (_) {
         return [];
+    }
+});
+
+ipcMain.handle("state_diagram", async (_, source) => {
+    try {
+        return await workerCall("state_diagram", { source }, 5000);
+    } catch (_) {
+        return { machines: [] };
+    }
+});
+
+ipcMain.handle("system_graph", async (_, source, expanded) => {
+    try {
+        return await workerCall("system_graph", { source, expanded: expanded || [] }, 5000);
+    } catch (_) {
+        return { mermaid: "", units: [], loops: [] };
     }
 });
 
@@ -1034,6 +1164,41 @@ ipcMain.handle("build_only", async (_, projectPath, voltFile, chip) => {
 
     buildEmit("done", "Build successful", 100);
     return { ok: true };
+});
+
+ipcMain.handle("export_binary", async (_, projectPath, voltFile, chip) => {
+    // Build first so the exported image matches the current source (the framework
+    // build dir is shared across projects, so a stale artifact is possible).
+    const result = await compileStep(projectPath, voltFile);
+    if (!result) return { ok: false, error: "Compile failed — fix errors first." };
+
+    const c = chip.toLowerCase();
+    const built = (c.includes("rp2040") || c.includes("pico"))
+        ? await builder.buildRP2040(projectPath, buildEmit)
+        : await builder.buildESP32(projectPath, c, buildEmit);
+    if (!built) return { ok: false, error: "Build failed." };
+
+    const art = builder.artifactPath(chip);
+    if (!art) return { ok: false, error: "No firmware artifact was produced." };
+
+    const projName = path.basename(projectPath);
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+        title: "Export firmware binary",
+        defaultPath: `${projName}.${art.ext}`,
+        filters: [{ name: `Firmware (*.${art.ext})`, extensions: [art.ext] }],
+    });
+    if (canceled || !filePath) {
+        buildEmit("done", "Export cancelled", 100);
+        return { ok: false, cancelled: true };
+    }
+
+    try {
+        fs.copyFileSync(art.path, filePath);
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+    buildEmit("done", `Exported firmware → ${filePath}`, 100);
+    return { ok: true, path: filePath, ext: art.ext };
 });
 
 ipcMain.handle("run_project", async (_, projectPath, voltFile, port, chip) => {

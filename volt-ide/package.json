@@ -13,6 +13,7 @@
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --dev --no-sandbox",
+    "test:vlib": "node test/vlib/gen.js && node test/vlib/run.js",
     "postinstall":    "node scripts/fix-sandbox.js",
     "stage:sdk":      "node scripts/stage-sdk.js",
     "build:icons":    "node scripts/build-icons.js",

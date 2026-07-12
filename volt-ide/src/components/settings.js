@@ -5,6 +5,7 @@
 // subscribers in editor.js, diagnostics.js, etc.).
 
 import * as settings from "../services/settings.js";
+import * as dialog from "./dialog.js";
 
 const api = window.volt;
 
@@ -25,7 +26,9 @@ export async function show() {
     }
 
     const schema = settings.getSchema();
-    const categories = Object.keys(schema);
+    // "advanced" schema items are surfaced in the custom Advanced pane below
+    // (the __advanced nav item), so don't also render it as its own nav entry.
+    const categories = Object.keys(schema).filter(c => c !== "advanced");
     let activeCategory = categories[0] || "editor";
 
     function render() {
@@ -221,6 +224,9 @@ export async function show() {
             </div>
             <div class="settings-section-title" style="margin-top:24px">Advanced</div>
             <div class="settings-rows">
+                ${schema.advanced?.items?.showGeneratedC
+                    ? renderRow("advanced.showGeneratedC", schema.advanced.items.showGeneratedC)
+                    : ""}
                 <div class="settings-row">
                     <div class="settings-row-label">
                         <div class="settings-row-title">Open settings file</div>
@@ -253,6 +259,10 @@ export async function show() {
     }
 
     function bindAdvanced(pane) {
+        // Wire any schema-driven inputs rendered in this pane (e.g. the
+        // "Show Generated C tab" toggle).
+        bindRows(pane);
+
         const openBtn = pane.querySelector("#settingsOpenFileBtn");
         if (openBtn) openBtn.onclick = () => settings.openFile();
 
@@ -267,7 +277,12 @@ export async function show() {
 
         const resetBtn = pane.querySelector("#settingsResetBtn");
         if (resetBtn) resetBtn.onclick = async () => {
-            if (!confirm("Reset all settings to their defaults?")) return;
+            const ok = await dialog.confirm("Reset all settings?", {
+                detail: "This restores every setting to its default value.",
+                okLabel: "Reset",
+                danger: true,
+            });
+            if (!ok) return;
             await settings.reset();
             render();
         };
@@ -298,7 +313,12 @@ export async function show() {
         if (repairBtn) repairBtn.onclick = async () => {
             if (!chipSel) return;
             const chip = chipSel.value;
-            if (!confirm(`Wipe ${chip} toolchain? The install dialog will reinstall it next time you build.`)) return;
+            const ok = await dialog.confirm(`Wipe the ${chip} toolchain?`, {
+                detail: "The install dialog will reinstall it next time you build.",
+                okLabel: "Wipe",
+                danger: true,
+            });
+            if (!ok) return;
             repairBtn.disabled = true;
             repairBtn.textContent = "Repairing…";
             try {

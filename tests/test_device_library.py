@@ -47,16 +47,7 @@ def build_declaration(device: dict, name: str) -> str:
         return f"device {name}: {device['name']} on {bus} at 5"
     if iface == "uart" and bus:
         return f"device {name}: {device['name']} on {bus} at 0"
-    # GPIO devices — single-pin form by default. Multi-pin devices
-    # (whose init_args template names extra pins, e.g. HCSR04's
-    # `{trig}, {echo}`) must use the named-pins syntax instead.
-    import re
-    init_args = device.get("init_args", "") or ""
-    placeholders = set(re.findall(r"\{(\w+)\}", init_args))
-    named_keys = sorted(placeholders - {"pin", "addr", "bus_id"})
-    if named_keys:
-        params = ", ".join(f"{k}: {5 + i}" for i, k in enumerate(named_keys))
-        return f"device {name}: {device['name']}({params})"
+    # GPIO devices — pin must be declared inline
     return f"device {name}: {device['name']} on gpio_pin at 4"
 
 
@@ -181,21 +172,14 @@ class DeviceLibraryCompiles(unittest.TestCase):
             line = build_bus_decl(by_folder[folder]).strip()
             self.assertEqual(line, expected_bus, f"{folder}: bus decl drift")
 
-    def test_device_decl_form_is_valid(self):
-        """Each device decl uses one of the two valid forms:
-          - Single-anchor: `device X: T on Y at N`
-          - Named-pins:    `device X: T(p1: v1, p2: v2)`  (HCSR04 etc.)
-        Both forms must be parseable; neither uses `=...(...)`."""
+    def test_device_decl_uses_on_at(self):
+        """Every device decl must use 'on <bus> at <addr>' — never '=...(...)'."""
         for folder, device in all_devices():
             name = suggest_name(device)
             decl = build_declaration(device, name)
-            named_form = "(" in decl and ")" in decl and " on " not in decl
-            legacy_form = " on " in decl and " at " in decl
-            self.assertTrue(
-                named_form or legacy_form,
-                f"{folder}: '{decl}' matches neither form",
-            )
-            self.assertNotIn("=", decl, f"{folder}: '{decl}' uses '=' (wrong syntax)")
+            self.assertIn(" on ", decl, f"{folder}: '{decl}' missing 'on'")
+            self.assertIn(" at ", decl, f"{folder}: '{decl}' missing 'at'")
+            self.assertNotIn("=", decl,  f"{folder}: '{decl}' uses '=' (wrong syntax)")
 
 
 if __name__ == "__main__":

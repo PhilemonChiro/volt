@@ -10,6 +10,8 @@ import * as projectPicker from "./components/project-picker.js";
 import * as deviceSelector from "./components/device-selector.js";
 import * as chipSelector from "./components/chip-selector.js";
 import * as bottomPanel from "./components/bottom-panel.js";
+import * as diagramsView from "./components/diagrams-view.js";
+import * as dialog from "./components/dialog.js";
 import * as sidePanel from "./components/side-panel.js";
 import * as settingsDialog from "./components/settings.js";
 import * as settings from "./services/settings.js";
@@ -165,6 +167,8 @@ async function loadProject(projectPath) {
     currentProject = projectPath;
     const voltFile = joinPath(projectPath, "main.volt");
     currentFile = voltFile;
+    // Drop the previous project's diagrams so a stale one never lingers.
+    diagramsView.reset();
 
     try {
         // Track in recents (persists across sessions, any directory)
@@ -303,6 +307,7 @@ toolbar.init({
         if (editors.length > 0) editors[0].getAction("editor.action.formatDocument")?.run();
     },
     onSave:     () => onSave(),
+    onExport:   () => onExport(),
     onSettings: () => settingsDialog.show(),
     onHelp:     () => {
         if (window.volt && window.volt.openExternal) {
@@ -318,15 +323,23 @@ welcome.init(document.getElementById("welcome"), {
     onOpenRecent: (path) => loadProject(path),
 });
 
-function closeProject() {
+async function closeProject() {
     if (!currentProject) return;
     const projName = basename(currentProject);
-    const msg = _fileModified
-        ? `Unsaved changes in ${projName} will be lost. Close project anyway?`
-        : `Close project ${projName}?`;
-    if (!confirm(msg)) return;
+    const ok = await dialog.confirm(
+        _fileModified ? "Discard unsaved changes?" : `Close ${projName}?`,
+        {
+            detail: _fileModified
+                ? `Unsaved changes in ${projName} will be lost.`
+                : "",
+            okLabel: _fileModified ? "Discard & Close" : "Close project",
+            danger: _fileModified,
+        },
+    );
+    if (!ok) return;
     currentProject = null;
     currentFile = null;
+    diagramsView.reset();
     showWelcome();
     toolbar.setProjectOpen(false);
     // Refresh recent projects list
@@ -366,6 +379,36 @@ async function ensureToolchainWithDialog(chip) {
     });
     if (ok) bottomPanel.appendOutput("Toolchain ready", "success");
     return ok;
+}
+
+async function onExport() {
+    if (!currentFile) {
+        bottomPanel.appendOutput("No file open. Open or create a project first.", "warn");
+        return;
+    }
+    await onSave();
+    const targetChip = chipSelector.getChip() || "esp32";
+
+    bottomPanel.showPipeline();
+    bottomPanel.updatePipelineStage("compile", `Building ${targetChip.toUpperCase()} firmware for export…`, 5);
+    statusBar.setBuild("Building for export…");
+    try {
+        const r = await window.volt.exportBinary(currentProject, currentFile, targetChip);
+        if (r && r.ok) {
+            bottomPanel.appendOutput(`Exported firmware → ${r.path}`, "success");
+            statusBar.setBuild("Exported");
+            dialog.alert("Firmware exported", { detail: r.path });
+        } else if (r && r.cancelled) {
+            bottomPanel.appendOutput("Export cancelled.", "info");
+            statusBar.setBuild("Ready");
+        } else {
+            bottomPanel.appendOutput("Export failed: " + ((r && r.error) || "unknown error"), "error");
+            statusBar.setBuild("Export failed");
+        }
+    } catch (e) {
+        bottomPanel.appendOutput("Export failed: " + e, "error");
+        statusBar.setBuild("Export failed");
+    }
 }
 
 async function onRun() {
@@ -557,6 +600,7 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "o") { e.preventDefault(); openProject(); }
     if (e.ctrlKey && e.key === "b") { e.preventDefault(); onCheck(); }
     if (e.ctrlKey && e.key === "s") { e.preventDefault(); onSave(); }
+    if (e.ctrlKey && e.key === "e") { e.preventDefault(); onExport(); }
     if (e.ctrlKey && e.key === "w") { e.preventDefault(); closeProject(); }
     if (e.ctrlKey && e.key === "1") { e.preventDefault(); sidePanel.toggle("hardware"); }
     if (e.ctrlKey && e.key === "2") { e.preventDefault(); sidePanel.toggle("tasks"); }
@@ -567,6 +611,7 @@ document.addEventListener("keydown", (e) => {
 
 // Init panels
 bottomPanel.init(document.getElementById("bottomPanel"));
+diagramsView.init();
 sidePanel.init();
 
 // ── Pinout ↔ editor bidirectional sync ──────────────────────────
@@ -622,6 +667,10 @@ diagnostics.onResult((diags, result) => {
     if (result) sidePanel.update(result);
     // Live-update the "Generated C" view with the transpiler output.
     if (result && result.c_code) bottomPanel.setGeneratedC(result.c_code);
+    // Show the State Machine tab only when this file defines a machine.
+    diagramsView.setMachinePresence(!!(result && result.machines && result.machines.length));
+    // Keep the open diagram current (skips when unchanged — preserves pan/zoom).
+    diagramsView.refresh(false);
     const errors = diags.filter(d => d.severity === "error").length;
     const warnings = diags.filter(d => d.severity === "warning").length;
     if (errors > 0) {

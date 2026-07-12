@@ -39,6 +39,13 @@ const SCHEMA = {
                               label: "Format on save", hint: "Run the Volt formatter when you save." },
         },
     },
+    registry: {
+        label: "Registry (Grid)",
+        items: {
+            gridUrl: { type: "string", default: "http://127.0.0.1:8080",
+                       label: "Grid URL", hint: "Base URL of the Volt library registry (Grid) that Fuse installs signed Cells from." },
+        },
+    },
     build: {
         label: "Build & Toolchain",
         items: {
@@ -114,6 +121,14 @@ const SCHEMA = {
             // once only. Must live in the schema or set()/get() reject it.
             onboardingDone: { type: "bool",   default: false, hidden: true,
                               label: "Onboarding completed" },
+        },
+    },
+    advanced: {
+        label: "Advanced",
+        items: {
+            showGeneratedC: { type: "bool",   default: false,
+                              label: "Show Generated C tab",
+                              hint: "Show the transpiled C output tab in the bottom panel." },
         },
     },
 };

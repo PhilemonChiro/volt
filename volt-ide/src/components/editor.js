@@ -278,3 +278,18 @@ export function markSaved() {
 export function focus() {
     if (editor) editor.focus();
 }
+
+// Reveal a 1-based line, place the cursor there, and briefly flash it — used by
+// the diagram click-menu's "Go to source".
+export function gotoLine(line) {
+    if (!editor || !line || line < 1) return;
+    const ln = line | 0;
+    editor.revealLineInCenter(ln);
+    editor.setPosition({ lineNumber: ln, column: 1 });
+    editor.focus();
+    const ids = editor.deltaDecorations([], [{
+        range: new monaco.Range(ln, 1, ln, 1),
+        options: { isWholeLine: true, className: "volt-line-flash" },
+    }]);
+    setTimeout(() => { if (editor) editor.deltaDecorations(ids, []); }, 1400);
+}

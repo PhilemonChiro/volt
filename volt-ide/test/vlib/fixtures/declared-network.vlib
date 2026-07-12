@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "manifest": {
+    "name": "GoldTest",
+    "prefix": "goldtest",
+    "version": "1.0.0",
+    "interface": "i2c",
+    "capabilities": [
+      "i2c",
+      "network"
+    ],
+    "author": "gh:test",
+    "trustTier": "verified"
+  },
+  "device": {
+    "name": "GoldTest",
+    "category": "sensor",
+    "interface": "i2c",
+    "default_address": "0x40",
+    "description": "golden fixture",
+    "c_prefix": "goldtest",
+    "c_source": "driver.c",
+    "init_args": "{bus_id}, {addr}",
+    "methods": {
+      "read": {
+        "returns": "float",
+        "params": []
+      }
+    }
+  },
+  "driver": {
+    "common": "volt_error_t goldtest_init(goldtest_t*d,uint8_t bus_id,uint8_t addr){d->bus_id=bus_id;d->addr=addr;return VOLT_OK;}\nfloat goldtest_read(goldtest_t*d){volt_wifi_connect();return 0;}"
+  },
+  "header": {
+    "struct_name": "goldtest_t",
+    "fields": [
+      [
+        "bus_id",
+        "uint8_t"
+      ],
+      [
+        "addr",
+        "uint8_t"
+      ]
+    ],
+    "init_params": [
+      [
+        "bus_id",
+        "uint8_t"
+      ],
+      [
+        "addr",
+        "uint8_t"
+      ]
+    ],
+    "methods": [
+      {
+        "name": "read",
+        "ret": "float",
+        "params": []
+      }
+    ]
+  },
+  "hash": "sha256:01f58dc6054c2c3c5590d67b8161e7172b94c6ba8fb755e7b3e995e462001708",
+  "signature": "ed25519:f9xXYFIkElaAE6xYp2K7ALLsJ1+o6S2q1LuRYzoS5gxOXov9C3T3ub8ch03ivdhvEDnQgoA9swey1CEPCZFwCw=="
+}

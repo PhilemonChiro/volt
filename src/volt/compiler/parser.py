@@ -68,27 +68,12 @@ _DURATION_TO_US = {
 }
 
 def _parse_duration(raw: str) -> tuple[int, str]:
-    """Parse '500ms' into (microseconds, original_string).
-
-    Durations are stored in microseconds, but the C runtime represents every
-    millisecond-based delay/timer (volt_delay_ms, volt_tick_ms) as uint32_t.
-    So the real ceiling is UINT32_MAX *milliseconds* (~49.7 days) — large
-    enough for day-scale intervals like 24hours, which the old microsecond
-    clamp (~71 minutes) silently corrupted.
-    """
-    MAX_US = 4294967295 * 1000  # UINT32_MAX milliseconds, expressed in microseconds
+    """Parse '500ms' into (microseconds, original_string)."""
     for unit in sorted(_DURATION_TO_US.keys(), key=len, reverse=True):
         if raw.endswith(unit):
             num_str = raw[:-len(unit)]
-            try:
-                number = float(num_str) if '.' in num_str else int(num_str)
-            except (ValueError, OverflowError):
-                return 0, raw
+            number = float(num_str) if '.' in num_str else int(num_str)
             us = int(number * _DURATION_TO_US[unit])
-            # Clamp positive overflow to the representable maximum; negative
-            # values flow through so the checker can reject them with a clear error.
-            if us > MAX_US:
-                us = MAX_US
             return us, raw
     return 0, raw
 

@@ -14,6 +14,8 @@
 //   - Log is append-only into a <pre>, flushed via rAF; when the log is
 //     hidden we keep lines in state.log but skip DOM work entirely.
 
+import * as dialog from "./dialog.js";
+
 const api = window.volt;
 
 // Stages are platform-dependent — macOS uses portable tarballs (no apt),
@@ -560,9 +562,15 @@ function updateMiniProgress(pct) {
     if (text) text.textContent = clamped + "%";
 }
 
-function confirmCancel(state) {
+async function confirmCancel(state) {
     if (state.cancelling || state.finished) return;
-    if (!confirm("Cancel the install? Any partial download will need to start over.")) return;
+    const ok = await dialog.confirm("Cancel the install?", {
+        detail: "Any partial download will need to start over.",
+        okLabel: "Cancel install",
+        cancelLabel: "Keep installing",
+        danger: true,
+    });
+    if (!ok || state.cancelling || state.finished) return;
     state.cancelling = true;
     renderFooter(activeDialog.overlay, state);
     api.cancelToolchain?.();

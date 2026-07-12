@@ -533,8 +533,29 @@ function readChipFromToml(projectPath) {
     return m ? m[1] : "esp32";
 }
 
+// Path to the built firmware artifact for a chip (null if not built yet).
+//   RP2040 → build/volt-rp2040.uf2  (single drag-to-BOOTSEL file)
+//   ESP32  → the app .bin at the top of build/ (bootloader/partition-table live
+//            in subdirs, so the top-level *.bin is the application image).
+// Returns { path, ext } or null.
+function artifactPath(chip) {
+    const c = (chip || "").toLowerCase();
+    const buildDir = path.join(frameworkDir(chip), "build");
+    if (c.includes("rp2040") || c.includes("pico")) {
+        const uf2 = path.join(buildDir, "volt-rp2040.uf2");
+        return fs.existsSync(uf2) ? { path: uf2, ext: "uf2" } : null;
+    }
+    try {
+        const bins = fs.readdirSync(buildDir)
+            .filter(f => f.endsWith(".bin") && !/bootloader|partition/i.test(f));
+        return bins.length ? { path: path.join(buildDir, bins[0]), ext: "bin" } : null;
+    } catch (_) {
+        return null;
+    }
+}
+
 module.exports = {
     buildRP2040, flashRP2040,
     buildESP32, flashESP32,
-    frameworkDir, readChipFromToml, waitForPort,
+    frameworkDir, readChipFromToml, waitForPort, artifactPath,
 };

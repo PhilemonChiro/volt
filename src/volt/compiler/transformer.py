@@ -403,34 +403,15 @@ def _assign_try_ids(stmts: list, counter, lift_when_yields: bool):
 
 _inline_counter = 0
 
-def _inline_yielding_calls(stmts: list, func_map: dict,
-                           inlining_stack: set | None = None) -> list:
-    """Replace calls to yielding functions with their inlined body.
-    
-    `inlining_stack` tracks the set of function names currently being inlined
-    to detect and prevent infinite recursion from mutual yielding calls.
-    """
+def _inline_yielding_calls(stmts: list, func_map: dict) -> list:
+    """Replace calls to yielding functions with their inlined body."""
     global _inline_counter
-    if inlining_stack is None:
-        inlining_stack = set()
     result = []
 
     for stmt in stmts:
         if isinstance(stmt, ExprStmt) and isinstance(stmt.expr, FuncCall):
             func = func_map.get(stmt.expr.name)
             if func and func.contains_yield:
-                if stmt.expr.name in inlining_stack:
-                    from .errors import CompilerErrors
-                    from .ast_nodes import Region
-                    errs = CompilerErrors()
-                    errs.error(stmt.region, "INLINE CYCLE",
-                               f"Function '{stmt.expr.name}' contains a yield and is "
-                               f"called recursively (directly or indirectly). "
-                               f"Recursive yielding functions cannot be inlined.",
-                               hint="Remove the recursive call or restructure the function.")
-                    result.append(stmt)
-                    continue
-
                 _inline_counter += 1
                 prefix = f"_inl{_inline_counter}"
 
@@ -450,10 +431,8 @@ def _inline_yielding_calls(stmts: list, func_map: dict,
                     rename_map[v.name] = f"{prefix}_{v.name}"
 
                 inlined = _rename_vars_in_stmts(func.body, rename_map)
-                # Recursively inline any nested yielding calls with cycle guard
-                inlining_stack.add(stmt.expr.name)
-                inlined = _inline_yielding_calls(inlined, func_map, inlining_stack)
-                inlining_stack.discard(stmt.expr.name)
+                # Recursively inline any nested yielding calls
+                inlined = _inline_yielding_calls(inlined, func_map)
                 result.extend(inlined)
                 continue
 

@@ -1,0 +1,43 @@
+{
+  "valid-i2c": {
+    "ok": true
+  },
+  "valid-gpio-named": {
+    "ok": true
+  },
+  "declared-network": {
+    "ok": true
+  },
+  "tampered": {
+    "ok": false,
+    "stage": "verify"
+  },
+  "forged": {
+    "ok": false,
+    "stage": "verify"
+  },
+  "wrong-schema": {
+    "ok": false,
+    "stage": "verify"
+  },
+  "revoked": {
+    "ok": false,
+    "stage": "verify"
+  },
+  "inject-initargs": {
+    "ok": false,
+    "stage": "validate"
+  },
+  "forbidden-system": {
+    "ok": false,
+    "stage": "validate"
+  },
+  "traversal-name": {
+    "ok": false,
+    "stage": "validate"
+  },
+  "undeclared-network": {
+    "ok": false,
+    "stage": "validate"
+  }
+}
