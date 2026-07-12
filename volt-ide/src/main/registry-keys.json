@@ -1,9 +1,9 @@
 {
-  "_comment": "DEV: local Grid key pinned for testing. For production, replace with the real registry key (or empty = fail-closed).",
+  "_comment": "Pinned Ed25519 PUBLIC keys that may sign .vlib libraries. The matching PRIVATE key is grid's VLIB_SIGNING_KEY (kept in ~/.volt/secrets/vlib-signing.pem, never committed). Empty keys = fail-closed. To rotate: add the new public key 'active', ship the IDE, then mark the old one 'revoked'. Libraries signed by a removed key stop verifying.",
   "keys": [
     {
-      "id": "local-dev",
-      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAuFOclNT+1tZcQKJ3AsucylKiAuud42NokroANyXs+rI=\n-----END PUBLIC KEY-----\n",
+      "id": "volt-prod-2026",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAXULrZDvyg8ydrMBua/3Gqd7GzCM6AZJVTBnadNexGgQ=\n-----END PUBLIC KEY-----\n",
       "status": "active"
     }
   ],

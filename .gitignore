@@ -49,6 +49,10 @@ framework/main/config.h
 signing-key*
 volt-signing*
 
+# Production env files — real secrets, never committed.
+prod.env
+*.prod.env
+
 # Temporary test files
 /tmp/
 *.tmp
