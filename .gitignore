@@ -42,6 +42,13 @@ Thumbs.db
 # Credentials — NEVER commit
 framework/main/config.h
 
+# Signing keys — private keys must NEVER be committed (public keys live inline
+# in toolchain-keys.json / registry-keys.json, which ARE committed).
+*.pem
+*-private.key
+signing-key*
+volt-signing*
+
 # Temporary test files
 /tmp/
 *.tmp

@@ -27,12 +27,22 @@ const https = require("https");
 const crypto = require("crypto");
 
 const mirror = require("../src/main/toolchain-mirror");
+const trust  = require("../src/main/toolchain-trust");
 const { FALLBACK_MANIFEST, MIRROR_TAG } = mirror;
 
 const args = process.argv.slice(2);
 const DRY_RUN       = args.includes("--dry-run");
 const MANIFEST_ONLY = args.includes("--manifest-only");
 const ONLY = (args.find(a => a.startsWith("--only=")) || "").slice(7).split(",").filter(Boolean);
+
+// Signing: the manifest is Ed25519-signed before upload so clients can verify
+// it against a pinned key (see toolchain-trust.js). The private key is read from
+// --key=<path> or $VOLT_TOOLCHAIN_SIGNING_KEY and must NEVER live in the repo.
+// Publishing unsigned requires the explicit --allow-unsigned escape hatch (such
+// a manifest is rejected by any client that has pinned a key).
+const KEY_PATH = (args.find(a => a.startsWith("--key=")) || "").slice(6)
+    || process.env.VOLT_TOOLCHAIN_SIGNING_KEY || "";
+const ALLOW_UNSIGNED = args.includes("--allow-unsigned");
 
 const STAGING = path.join("/tmp", "volt-mirror");
 const REPO    = "PhilemonChiro/volt-toolchains";
@@ -158,15 +168,45 @@ async function publishOne(key, asset, workingManifest) {
     log(`  Patched manifest entry for ${key}`);
 }
 
+// Sign the manifest before it is written/uploaded. Fails closed: no key and no
+// --allow-unsigned => refuse to publish, rather than ship something clients will
+// silently reject.
+function signManifest(workingManifest) {
+    if (!KEY_PATH) {
+        if (ALLOW_UNSIGNED) {
+            log("WARNING: publishing an UNSIGNED manifest (--allow-unsigned). Any client");
+            log("         that has pinned a signing key WILL REJECT it and fall back to");
+            log("         its baked-in manifest. Use only for a keyless bootstrap.");
+            return workingManifest;
+        }
+        throw new Error("No signing key. Pass --key=<path> or set VOLT_TOOLCHAIN_SIGNING_KEY "
+            + "(or --allow-unsigned to deliberately publish unsigned). See docs/toolchain-distribution.md");
+    }
+    const pem = fs.readFileSync(KEY_PATH, "utf-8");
+    const signed = trust.sign(workingManifest, pem);
+    log(`Signed manifest (manifest_version=${signed.manifest_version}, key=${path.basename(KEY_PATH)})`);
+    return signed;
+}
+
 function writeManifestJson(workingManifest) {
     const out = path.join(STAGING, "manifest.json");
     fs.mkdirSync(STAGING, { recursive: true });
-    fs.writeFileSync(out, JSON.stringify(workingManifest, null, 2));
+    fs.writeFileSync(out, JSON.stringify(signManifest(workingManifest), null, 2));
     log(`\nWrote manifest.json: ${out}`);
     return out;
 }
 
 async function main() {
+    // Fail fast on a missing signing key — BEFORE downloading/uploading any
+    // 280 MB tarball — rather than doing all the work then refusing at write time.
+    if (!KEY_PATH && !ALLOW_UNSIGNED) {
+        throw new Error("No signing key. Pass --key=<path> or set VOLT_TOOLCHAIN_SIGNING_KEY "
+            + "(or --allow-unsigned to deliberately publish unsigned). See docs/toolchain-distribution.md");
+    }
+    if (KEY_PATH && !fs.existsSync(KEY_PATH)) {
+        throw new Error(`Signing key not found at: ${KEY_PATH}`);
+    }
+
     // Deep-clone the baked-in manifest so per-asset updates don't mutate
     // the imported FALLBACK_MANIFEST (which would leak into manifestIsCompatible
     // checks etc. while this script is running).

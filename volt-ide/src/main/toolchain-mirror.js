@@ -18,11 +18,15 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 const https = require("https");
+const trust = require("./toolchain-trust");
 
 const MIRROR_TAG     = "toolchains-2026.05";
 const MIRROR_BASE    = `https://github.com/PhilemonChiro/volt-toolchains/releases/download/${MIRROR_TAG}`;
 const MANIFEST_URL   = `${MIRROR_BASE}/manifest.json`;
 const CACHE_PATH     = path.join(os.homedir(), ".volt", "cache", "manifest.json");
+// Highest manifest_version we've ever accepted — persisted so a later fetch
+// can't silently roll us back to an older (signed-but-vulnerable) manifest.
+const VERSION_PATH   = path.join(os.homedir(), ".volt", "cache", "manifest-version");
 const CACHE_TTL_MS   = 24 * 60 * 60 * 1000; // 24h
 
 // Baked-in default — used when the remote fetch fails (first run offline,
@@ -43,6 +47,10 @@ const CACHE_TTL_MS   = 24 * 60 * 60 * 1000; // 24h
 const FALLBACK_MANIFEST = {
     schema_version: 1,
     tag: MIRROR_TAG,
+    // Monotonic counter, bumped on every publish. The client refuses any
+    // fetched manifest whose version is below the highest it has accepted, so a
+    // replay of an older signed manifest can't downgrade the pinned toolchains.
+    manifest_version: 1,
     min_ide_version: "2.0.10",
     assets: {
         "arm-gnu-toolchain-13.2-darwin-arm64": {
@@ -273,6 +281,31 @@ function manifestIsCompatible(m) {
     return true;
 }
 
+// Rollback floor: the highest manifest_version we've ever accepted. Persisted
+// so a replayed older (signed-but-vulnerable) manifest can't downgrade us.
+function rollbackFloor() {
+    try { return parseInt(fs.readFileSync(VERSION_PATH, "utf-8"), 10) || 0; }
+    catch (_) { return 0; }
+}
+function recordVersion(n) {
+    try {
+        fs.mkdirSync(path.dirname(VERSION_PATH), { recursive: true });
+        if (n > rollbackFloor()) fs.writeFileSync(VERSION_PATH, String(n));
+    } catch (_) {}
+}
+
+// A manifest that did NOT ship inside the signed app (i.e. anything from the
+// network or the on-disk cache) must be Ed25519-verified against a pinned key
+// AND be at or above the rollback floor. Fails closed. Returns { ok, reason }.
+function isTrusted(m) {
+    const v = trust.verify(m);
+    if (!v.ok) return { ok: false, reason: v.reason };
+    const ver = Number(m.manifest_version || 0);
+    const floor = rollbackFloor();
+    if (ver < floor) return { ok: false, reason: `rollback: v${ver} < accepted v${floor}` };
+    return { ok: true };
+}
+
 // Cached manifest in-memory for the duration of the process so we don't
 // re-fetch on every download.
 let _manifestPromise = null;
@@ -280,34 +313,40 @@ let _manifestPromise = null;
 function loadManifest(opts = {}) {
     if (_manifestPromise && !opts.force) return _manifestPromise;
     _manifestPromise = (async () => {
-        // 1. Try in-memory cache via disk (within TTL)
+        // 1. Fresh disk cache (within TTL). Only ever written after a successful
+        //    verify, but re-verify anyway — cheap, and defends on-disk tampering.
         try {
             const st = fs.statSync(CACHE_PATH);
             if (Date.now() - st.mtimeMs < CACHE_TTL_MS) {
                 const m = JSON.parse(fs.readFileSync(CACHE_PATH, "utf-8"));
-                if (manifestIsCompatible(m)) return { manifest: m, source: "cache" };
+                if (manifestIsCompatible(m) && isTrusted(m).ok) return { manifest: m, source: "cache" };
             }
         } catch (_) {}
 
-        // 2. Try remote fetch
+        // 2. Remote fetch — must be signature-verified before we trust or cache it.
         try {
             const m = await httpGetJson(MANIFEST_URL);
-            if (manifestIsCompatible(m)) {
+            if (manifestIsCompatible(m) && isTrusted(m).ok) {
                 try {
                     fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
                     fs.writeFileSync(CACHE_PATH, JSON.stringify(m, null, 2));
+                    recordVersion(Number(m.manifest_version || 0));
                 } catch (_) {}
                 return { manifest: m, source: "remote" };
             }
+            // Fetched but untrusted (unsigned / bad sig / rolled back) => discard
+            // and fall through to fallback. The caller logs the source so the
+            // user still sees the toolchains install from the baked-in manifest.
         } catch (_) {}
 
-        // 3. Last resort: stale cache (TTL expired but still valid)
+        // 3. Stale cache (TTL expired) — still must verify.
         try {
             const m = JSON.parse(fs.readFileSync(CACHE_PATH, "utf-8"));
-            if (manifestIsCompatible(m)) return { manifest: m, source: "cache-stale" };
+            if (manifestIsCompatible(m) && isTrusted(m).ok) return { manifest: m, source: "cache-stale" };
         } catch (_) {}
 
-        // 4. Hard fallback: baked-in
+        // 4. Hard fallback: baked-in. Trusted implicitly — it shipped inside the
+        //    code-signed app bundle, so it carries and needs no signature.
         return { manifest: FALLBACK_MANIFEST, source: "fallback" };
     })();
     return _manifestPromise;
@@ -316,13 +355,21 @@ function loadManifest(opts = {}) {
 // ============================================================
 // Asset download with source preference + SHA256 verification
 // ============================================================
+// Build the ordered list of URLs to try for an asset. Because every downloaded
+// tarball is SHA256-checked against the (now signed) manifest, every mirror is
+// equally untrusted — so failover between them is free and safe. Optional
+// asset.mirrors[] (extra CDN URLs) are tried after the primary Volt mirror and
+// before the original upstream.
 function sourcesFor(asset, preference) {
-    if (preference === "upstream") return [{ url: asset.upstream, label: "upstream" }];
-    if (preference === "mirror")   return [{ url: asset.url,      label: "Volt mirror" }];
-    return [
-        { url: asset.url,      label: "Volt mirror" },
-        { url: asset.upstream, label: "upstream" },
-    ];
+    const primary  = asset.url      ? [{ url: asset.url, label: "Volt mirror" }] : [];
+    const mirrors  = Array.isArray(asset.mirrors)
+        ? asset.mirrors.filter(Boolean).map((u, i) => ({ url: u, label: `mirror ${i + 1}` }))
+        : [];
+    const upstream = asset.upstream ? [{ url: asset.upstream, label: "upstream" }] : [];
+
+    if (preference === "upstream") return upstream;
+    if (preference === "mirror")   return [...primary, ...mirrors];
+    return [...primary, ...mirrors, ...upstream];
 }
 
 // Download an asset by key. Returns true on success.
