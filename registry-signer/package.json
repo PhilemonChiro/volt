@@ -1,0 +1,26 @@
+{
+  "name": "volt-registry-signer",
+  "version": "1.0.0",
+  "description": "Volt Registry Signer — the maintainer's offline .vlib signing tool. The private key never leaves this machine.",
+  "main": "main.js",
+  "author": { "name": "Philemon Chiro", "email": "pchiro29@gmail.com" },
+  "license": "MIT",
+  "scripts": {
+    "start": "../volt-ide/node_modules/.bin/electron . --no-sandbox",
+    "pack:mac": "electron-builder --mac",
+    "pack:linux": "electron-builder --linux",
+    "pack:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "dev.volt.registry-signer",
+    "productName": "Volt Registry Signer",
+    "files": ["main.js", "preload.js", "index.html", "renderer.js", "styles.css"],
+    "mac": { "target": "dmg", "category": "public.app-category.developer-tools" },
+    "linux": { "target": "AppImage", "category": "Development" },
+    "win": { "target": "nsis" }
+  }
+}
