@@ -32,7 +32,6 @@ def _read_chip_from_toml(filename: str) -> str | None:
 from .parser import parse
 from .resolver import resolve
 from .checker import check_types
-from .hardware import validate_hardware
 from .analyzer import analyze
 from .transformer import transform
 from .codegen import generate
@@ -172,23 +171,12 @@ def compile_volt(
         return None, errors
     _emit("check", 60)
 
-    # Load chip spec (if chip declaration exists)
-    chip = None
-    if program.chip:
-        try:
-            from volt.chips import get_chip
-            chip = get_chip(program.chip.target)
-        except (ValueError, ImportError):
-            pass  # fall back to legacy ESP32 validation
-
-    # Pass 4: Hardware validation
-    validate_hardware(program, scope, errors, chip=chip)
-    # Continue even with hardware warnings (only stop on errors)
-    if errors.has_errors:
-        return None, errors
     _emit("hardware", 70)
 
-    # Pass 5: Analyze (task classification, yield analysis, ISR safety)
+    # Pass 4 + 5: Analyze — hardware validation (pin ranges, strapping pins,
+    # bus conflicts) now runs as analyze()'s first step, so every entry point
+    # (including programmatic ones) gets it. Calling validate_hardware here too
+    # would duplicate every hardware warning, so it lives only in analyze().
     analyze(program, scope, errors)
     if errors.has_errors:
         return None, errors
