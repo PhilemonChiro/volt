@@ -398,21 +398,27 @@ ipcMain.handle("open_external", (_, url) => {
 // (devicesDir() defined above, near getVoltSrc())
 // ============================================================
 ipcMain.handle("devices_list", () => {
-    const root = devicesDir();
-    if (!fs.existsSync(root)) return [];
-    const out = [];
-    for (const entry of fs.readdirSync(root)) {
-        const dir = path.join(root, entry);
-        if (!fs.statSync(dir).isDirectory()) continue;
-        for (const f of fs.readdirSync(dir)) {
-            if (!f.endsWith(".json")) continue;
-            try {
-                const data = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8"));
-                out.push(data);
-            } catch (_) {}
+    // Read from ALL device roots, not just the first that exists: built-ins ship
+    // in resources/sdk/devices, but user-installed libraries (incl. private ones)
+    // land in ~/.volt/sdk/devices. Reading only one root hid installed devices
+    // from the catalog + detail view. Later roots win on c_prefix collision so an
+    // installed override shadows a built-in of the same name.
+    const byPrefix = new Map();
+    for (const root of deviceReadRoots()) {
+        for (const entry of fs.readdirSync(root)) {
+            const dir = path.join(root, entry);
+            try { if (!fs.statSync(dir).isDirectory()) continue; } catch (_) { continue; }
+            for (const f of fs.readdirSync(dir)) {
+                if (!f.endsWith(".json")) continue;
+                try {
+                    const data = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8"));
+                    const key = (data.c_prefix || entry).toLowerCase();
+                    byPrefix.set(key, data);
+                } catch (_) {}
+            }
         }
     }
-    return out;
+    return [...byPrefix.values()];
 });
 
 // Scaffold a new device library from the creator wizard's spec — writes
@@ -633,6 +639,18 @@ function devicesDir() {
         if (fs.existsSync(bundled)) return bundled;
     }
     return path.join(os.homedir(), ".volt", "sdk", "devices");
+}
+
+// Every device root that may hold catalog entries — the built-ins AND the
+// user-installed tree. devices_list reads all of them so installed libraries
+// (public or private) show up in the catalog and detail view.
+function deviceReadRoots() {
+    const roots = [
+        path.join(__dirname, "..", "devices"),
+        process.resourcesPath ? path.join(process.resourcesPath, "sdk", "devices") : null,
+        path.join(os.homedir(), ".volt", "sdk", "devices"),
+    ].filter(Boolean);
+    return roots.filter((r, i, a) => a.indexOf(r) === i && fs.existsSync(r));
 }
 
 function examplesDir() {
