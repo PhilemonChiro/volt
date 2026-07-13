@@ -1,6 +1,6 @@
 {
   "name": "volt-ide",
-  "version": "2.0.71",
+  "version": "2.0.72",
   "description": "Volt IDE — declare hardware. Write logic. Flash.",
   "main": "main.js",
   "homepage": "https://github.com/PhilemonChiro/volt",
@@ -16,19 +16,19 @@
     "test:vlib": "node test/vlib/gen.js && node test/vlib/run.js",
     "test:trust": "node test/toolchain-trust.test.js",
     "sign:manifest": "node deploy/toolchain-mirror/sign-manifest.js",
-    "postinstall":    "node scripts/fix-sandbox.js",
-    "stage:sdk":      "node scripts/stage-sdk.js",
-    "build:icons":    "node scripts/build-icons.js",
-    "bundle:python":  "node scripts/bundle-python.js",
+    "postinstall": "node scripts/fix-sandbox.js",
+    "stage:sdk": "node scripts/stage-sdk.js",
+    "build:icons": "node scripts/build-icons.js",
+    "bundle:python": "node scripts/bundle-python.js",
     "publish:toolchains": "node scripts/publish-toolchains.js",
-    "prepack":        "npm run stage:sdk && npm run build:icons",
-    "bundle:python:mac":   "npm run bundle:python -- --platform=darwin-arm64 && npm run bundle:python -- --platform=darwin-x64",
+    "prepack": "npm run stage:sdk && npm run build:icons",
+    "bundle:python:mac": "npm run bundle:python -- --platform=darwin-arm64 && npm run bundle:python -- --platform=darwin-x64",
     "bundle:python:linux": "npm run bundle:python -- --platform=linux-x64",
-    "bundle:python:win":   "npm run bundle:python -- --platform=win32-x64",
-    "pack:linux":     "npm run prepack && npm run bundle:python:linux && electron-builder --linux",
-    "pack:win":       "npm run prepack && npm run bundle:python:win && electron-builder --win",
-    "pack:mac":       "npm run prepack && npm run bundle:python:mac && electron-builder --mac",
-    "pack:all":       "npm run prepack && npm run bundle:python:linux && npm run bundle:python:win && electron-builder --linux --win"
+    "bundle:python:win": "npm run bundle:python -- --platform=win32-x64",
+    "pack:linux": "npm run prepack && npm run bundle:python:linux && electron-builder --linux",
+    "pack:win": "npm run prepack && npm run bundle:python:win && electron-builder --win",
+    "pack:mac": "npm run prepack && npm run bundle:python:mac && electron-builder --mac",
+    "pack:all": "npm run prepack && npm run bundle:python:linux && npm run bundle:python:win && electron-builder --linux --win"
   },
   "dependencies": {
     "@serialport/parser-readline": "^13.0.0",
@@ -114,7 +114,12 @@
     },
     "win": {
       "target": [
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
