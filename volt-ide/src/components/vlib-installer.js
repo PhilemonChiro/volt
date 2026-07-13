@@ -140,7 +140,15 @@ export function showResult(res, opts) {
     const tipsSec = section("Tips", tipsHtml ? `<ul class="vs-tips">${tipsHtml}</ul>` : "");
     const hwSec = section("In your hardware block", `<div class="vs-codewrap"><button class="vs-copy vs-copy-blk" data-copy="hw" title="Copy">Copy</button><pre class="vs-code" data-colorize="volt">${esc(hwCode)}</pre></div>`);
     const pinsSec = pinsHtml ? `<details class="vlib2-src vs-details"><summary>Wiring · pinout</summary><table class="vs-pins">${pinsHtml}</table></details>` : "";
-    const trustSec = `<div class="vs-trust">
+    // Private (collection) libs are trusted by your login, not a registry
+    // signature — say so honestly rather than claiming "Signature verified".
+    const trustSec = res.private
+        ? `<div class="vs-trust vs-trust-private">
+                    <span class="vs-trust-check">◇</span>
+                    <span>Private library · <b>unsigned</b> — your own, not registry-verified · <b class="vlib-tier vlib-tier-community">private</b></span>
+                    <span class="vs-trust-caps">${capsHtml}</span>
+                </div>`
+        : `<div class="vs-trust">
                     <span class="vs-trust-check">&#10003;</span>
                     <span>Signature verified · signed by <b>${esc(res.keyId || "—")}</b> · author <b>${esc(m.author || "—")}</b> · <b class="vlib-tier vlib-tier-${esc(tier)}">${esc(tier)}</b></span>
                     <span class="vs-trust-caps">${capsHtml}</span>

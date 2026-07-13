@@ -175,7 +175,7 @@ export async function renderInto(container) {
         const uninstall = inst
             ? `<button class="lib-btn lib-btn-install lib-coll-uninstall" data-prefix="${esc(c.prefix)}" title="Remove the installed driver from this project">Uninstall</button>`
             : "";
-        return `<div class="lib-row lib-row-click" data-collopen="1" data-prefix="${esc(c.prefix)}">
+        return `<div class="lib-row">
             ${icon(c.interface)}
             <div class="lib-row-body">
                 <div class="lib-row-name"><span class="lib-row-nm">${esc(c.name || c.prefix)}</span><span class="lib-tag lib-tag-private">private</span><span class="lib-row-ver">v${esc(c.version || "?")}</span></div>
@@ -188,40 +188,56 @@ export async function renderInto(container) {
     // Open the detail sheet for a library (Grid or Installed). Downloads + verifies
     // via the Grid, then hands the verified result to the sheet, which decides the
     // actions (Install / Update / Add to project / Uninstall).
+    // Build the shape gridFetch returns, from locally-installed data, so a
+    // private (or Grid-offline) library opens the SAME docked side card as
+    // everything else. No token → the card renders in manage mode (Add / Uninstall).
+    function localCardResult(prefix, inst, desc) {
+        if (!inst) return null;
+        const priv = inst.tier === "private";
+        return {
+            ok: true,
+            alreadyInstalled: true,
+            private: priv,
+            manifest: {
+                name: (desc && desc.name) || inst.name || prefix,
+                prefix,
+                interface: (desc && desc.interface) || inst.interface,
+                trustTier: inst.tier || "community",
+            },
+            device: desc || { name: inst.name || prefix, interface: inst.interface },
+            capabilities: inst.capabilities || [],
+            keyId: inst.keyId || (priv ? "local" : ""),
+            driver: "",
+        };
+    }
+
     async function openDetail(prefix, version) {
-        // Installed libraries (public OR private) show a consistent LOCAL detail
-        // sheet built from their device.json — no Grid fetch, so it can't 404 and
-        // looks the same everywhere, with Add / Uninstall right there. The Grid
-        // consent sheet below is only for INSTALLING a lib you don't have yet.
         const inst = installedByPrefix[prefix];
-        if (inst) {
-            const desc = descByPrefix[(prefix || "").toLowerCase()];
-            if (desc) {
-                return openDetailDialog(desc, {
-                    onAdd: () => addDevice(desc, { withSample: true }),
-                    onUninstall: () => doUninstall(prefix),
-                });
-            }
-            return dialog.alert("Details unavailable", {
-                detail: "This installed library’s device.json couldn’t be read. Reinstall it to restore the details.",
-            });
+        // Public libs come from the Grid (verified card). Private/local libs aren't
+        // on the Grid — so don't gridFetch them (it 404s); build the same card from
+        // the installed device.json instead.
+        let res = null;
+        if (!inst || inst.tier !== "private") {
+            try { res = await api.gridFetch(prefix, version); } catch (_) { res = null; }
         }
-        let res;
-        try { res = await api.gridFetch(prefix, version); }
-        catch (e) { res = { ok: false, reason: String((e && e.message) || e) }; }
-        if (!res || !res.token) {
+        if ((!res || !res.token) && inst) {
+            res = localCardResult(prefix, inst, descByPrefix[(prefix || "").toLowerCase()]);
+        }
+        if (!res || (!res.token && !res.alreadyInstalled)) {
             return dialog.alert("Cannot open library", {
                 detail: res && res.stage === "verify"
                     ? `Signature verification failed: ${res.reason}`
                     : (res && res.reason) || "This library isn’t available on the Grid.",
             });
         }
-        // Not installed → show the SAME spec card, built from the Grid envelope's
-        // device data. Install routes through the verify/capability consent sheet
-        // (installer.showResult) so the trust step for third-party libs is kept.
-        const device = res.device || { name: prefix, interface: (res.manifest || {}).interface };
-        openDetailDialog(device, {
-            onInstall: () => installer.showResult(res, { onClose: refresh }),
+        installer.showResult(res, {
+            onClose: refresh,
+            onUse: () => {
+                const desc = descByPrefix[(prefix || "").toLowerCase()];
+                if (desc) addDevice(desc, { withSample: true });
+                else dialog.alert("Descriptor unavailable", { detail: "Reinstall the library to use it in code." });
+            },
+            onUninstall: () => doUninstall(prefix),
         });
     }
 
@@ -231,34 +247,6 @@ export async function renderInto(container) {
         try { await api.vlibUninstall(prefix); }
         catch (e) { return dialog.alert("Remove failed", { detail: String((e && e.message) || e) }); }
         refresh();
-    }
-
-    async function installFromCollection(prefix, version) {
-        const r = await api.collectionInstall(prefix, version);
-        if (r && r.ok) return refresh();
-        dialog.alert("Cannot install", { detail: (r && r.reason) || "unknown error" });
-    }
-
-    // Mine tab uses the SAME detail sheet as everywhere else. If the private lib
-    // is installed, show its full local detail (+ Add / Uninstall); if it's only
-    // in the collection, show what the collection knows (+ Install).
-    function openMineDetail(prefix) {
-        const inst = installedByPrefix[prefix];
-        if (inst) {
-            const desc = descByPrefix[(prefix || "").toLowerCase()];
-            if (desc) return openDetailDialog(desc, {
-                onAdd: () => addDevice(desc, { withSample: true }),
-                onUninstall: () => doUninstall(prefix),
-            });
-        }
-        const c = collection.find(x => x.prefix === prefix) || {};
-        openDetailDialog({
-            name: c.name || prefix,
-            interface: c.interface,
-            category: c.category,
-            description: c.description,
-            default_address: c.default_address,
-        }, { onInstall: () => installFromCollection(prefix, c.version) });
     }
 
     function paint(filter) {
@@ -284,9 +272,6 @@ export async function renderInto(container) {
                 scroll.innerHTML = collection.length
                     ? (mine.map(collRow).join("") || `<div class="lib-empty">No private libraries match “${esc(f)}”.</div>`)
                     : `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>No private libraries yet.</div><div class="lib-note">Generate one in the studio and choose “Save to my collection”.</div></div>`;
-                // Whole row opens the shared detail sheet; the buttons stop
-                // propagation so a quick Install/Uninstall doesn't also open it.
-                scroll.querySelectorAll("[data-collopen]").forEach(r => r.onclick = () => openMineDetail(r.dataset.prefix));
                 scroll.querySelectorAll(".lib-coll-install").forEach(b => b.onclick = async (e) => {
                     e.stopPropagation();
                     const label = b.textContent;
@@ -1089,10 +1074,9 @@ function openDetailDialog(device, actions = {}) {
                 ${tipsHtml ? `<div class="device-detail-section-title">Tips & gotchas</div>${tipsHtml}` : ""}
                 ${altsHtml ? `<div class="device-detail-section-title">Alternatives</div>${altsHtml}` : ""}
             </div>
-            ${(actions.onAdd || actions.onUninstall || actions.onInstall) ? `
+            ${(actions.onAdd || actions.onUninstall) ? `
             <div class="device-detail-footer">
                 ${actions.onUninstall ? `<button class="device-detail-btn device-detail-btn-danger" id="deviceDetailUninstall">Uninstall</button>` : ""}
-                ${actions.onInstall ? `<button class="device-detail-btn device-detail-btn-primary" id="deviceDetailInstall">Install</button>` : ""}
                 ${actions.onAdd ? `<button class="device-detail-btn device-detail-btn-primary" id="deviceDetailAdd">Add to project</button>` : ""}
             </div>` : ""}
         </div>
@@ -1116,8 +1100,6 @@ function openDetailDialog(device, actions = {}) {
     overlay.querySelector("#deviceDetailClose").onclick = close;
     const addBtn = overlay.querySelector("#deviceDetailAdd");
     if (addBtn) addBtn.onclick = () => { close(); actions.onAdd(); };
-    const instBtn = overlay.querySelector("#deviceDetailInstall");
-    if (instBtn) instBtn.onclick = () => { close(); actions.onInstall(); };
     const unBtn = overlay.querySelector("#deviceDetailUninstall");
     if (unBtn) unBtn.onclick = () => { close(); actions.onUninstall(); };
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
