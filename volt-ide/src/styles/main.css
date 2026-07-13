@@ -2858,6 +2858,28 @@ kbd {
     justify-content: center;
 }
 .device-detail-close:hover { color: var(--t1); background: var(--bg-3); }
+/* Footer actions on the installed-library detail sheet (Add / Uninstall) */
+.device-detail-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+}
+.device-detail-btn {
+    font: 600 12.5px/1 var(--sans);
+    cursor: pointer;
+    padding: 8px 14px;
+    border-radius: var(--r-2);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--t2);
+    transition: background .12s, color .12s, border-color .12s;
+}
+.device-detail-btn:hover { color: var(--t1); border-color: var(--t3); }
+.device-detail-btn-primary { background: var(--volt); border-color: var(--volt); color: #fff; }
+.device-detail-btn-primary:hover { color: #fff; filter: brightness(1.08); }
+.device-detail-btn-danger:hover { color: #ff6b6b; border-color: #ff6b6b; }
 
 /* Byline — manufacturer + datasheet link sit just below the title */
 .device-byline {

@@ -189,15 +189,21 @@ export async function renderInto(container) {
     // via the Grid, then hands the verified result to the sheet, which decides the
     // actions (Install / Update / Add to project / Uninstall).
     async function openDetail(prefix, version) {
-        // Private libraries live only in the user's own collection, never on the
-        // public Grid — so gridFetch would 404. Show the read-only detail from the
-        // locally-installed device.json instead.
+        // Installed libraries (public OR private) show a consistent LOCAL detail
+        // sheet built from their device.json — no Grid fetch, so it can't 404 and
+        // looks the same everywhere, with Add / Uninstall right there. The Grid
+        // consent sheet below is only for INSTALLING a lib you don't have yet.
         const inst = installedByPrefix[prefix];
-        if (inst && inst.tier === "private") {
+        if (inst) {
             const desc = descByPrefix[(prefix || "").toLowerCase()];
-            if (desc) return openDetailDialog(desc);
-            return dialog.alert("Private library", {
-                detail: "Installed from your collection. Its local details are unavailable — reinstall to restore them.",
+            if (desc) {
+                return openDetailDialog(desc, {
+                    onAdd: () => addDevice(desc, { withSample: true }),
+                    onUninstall: () => doUninstall(prefix),
+                });
+            }
+            return dialog.alert("Details unavailable", {
+                detail: "This installed library’s device.json couldn’t be read. Reinstall it to restore the details.",
             });
         }
         let res;
@@ -935,7 +941,10 @@ function addDevice(device, { withSample }) {
 //   alternatives  [{ name, note }]
 //   methods       { name: { returns, params: [{name, type}], description } }
 // ============================================================
-function openDetailDialog(device) {
+// actions (optional): { onAdd, onUninstall } — when provided, a footer with
+// "Add to project" / "Uninstall" is shown. Used for installed libraries so the
+// detail view is the same whether the lib came from the Grid or a collection.
+function openDetailDialog(device, actions = {}) {
     const existing = document.getElementById("deviceDetailOverlay");
     if (existing) existing.remove();
 
@@ -1051,6 +1060,11 @@ function openDetailDialog(device) {
                 ${tipsHtml ? `<div class="device-detail-section-title">Tips & gotchas</div>${tipsHtml}` : ""}
                 ${altsHtml ? `<div class="device-detail-section-title">Alternatives</div>${altsHtml}` : ""}
             </div>
+            ${(actions.onAdd || actions.onUninstall) ? `
+            <div class="device-detail-footer">
+                ${actions.onUninstall ? `<button class="device-detail-btn device-detail-btn-danger" id="deviceDetailUninstall">Uninstall</button>` : ""}
+                ${actions.onAdd ? `<button class="device-detail-btn device-detail-btn-primary" id="deviceDetailAdd">Add to project</button>` : ""}
+            </div>` : ""}
         </div>
     `;
     document.body.appendChild(overlay);
@@ -1070,6 +1084,10 @@ function openDetailDialog(device) {
         setTimeout(() => overlay.remove(), 200);
     };
     overlay.querySelector("#deviceDetailClose").onclick = close;
+    const addBtn = overlay.querySelector("#deviceDetailAdd");
+    if (addBtn) addBtn.onclick = () => { close(); actions.onAdd(); };
+    const unBtn = overlay.querySelector("#deviceDetailUninstall");
+    if (unBtn) unBtn.onclick = () => { close(); actions.onUninstall(); };
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
     document.addEventListener("keydown", function esc(e) {
         if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
