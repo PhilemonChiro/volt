@@ -127,13 +127,23 @@ function validate(envelope) {
     return { errors, warnings, prefix, name: d.name || prefix, driverC, caps };
 }
 
+// Normalize a field/param entry to { name, type, size }. Envelopes carry these
+// in two shapes: array tuples [name, type, size?] (public/signed libs) and
+// objects { name, type } (private-collection libs). Accept both so install
+// never throws "object is not iterable" destructuring one as the other.
+function nt(x) {
+    if (Array.isArray(x)) return { name: x[0], type: x[1], size: x[2] };
+    if (x && typeof x === "object") return { name: x.name, type: x.type, size: x.size };
+    return { name: "", type: "" };
+}
+
 // Regenerate the header block from the STRUCTURED spec — never trust raw C.
 function buildHeader(prefix, h) {
-    const fields = (h.fields || []).map(([n, t, size]) => size ? `${t} ${n}[${size}];` : `${t} ${n};`).join(" ");
-    const initP = (h.init_params || []).map(([n, t]) => `${t} ${n}`).join(", ");
+    const fields = (h.fields || []).map(nt).map(({ name, type, size }) => size ? `${type} ${name}[${size}];` : `${type} ${name};`).join(" ");
+    const initP = (h.init_params || []).map(nt).map(({ name, type }) => `${type} ${name}`).join(", ");
     const methodDecls = (h.methods || []).map(mm => {
         const ret = RET_MAP[mm.ret] || RET_TYPES.has(mm.ret) ? (RET_MAP[mm.ret] || mm.ret) : "int32_t";
-        const ps = (mm.params || []).map(([n, t]) => `${t} ${n}`);
+        const ps = (mm.params || []).map(nt).map(({ name, type }) => `${type} ${name}`);
         return `${ret} ${prefix}_${mm.name}(${[`${prefix}_t *dev`, ...ps].join(", ")});`;
     });
     return [
