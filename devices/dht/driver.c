@@ -23,13 +23,13 @@ static int dht_read_raw(dht_t *dev, uint8_t data[5])
     uint8_t gpio = dev->gpio;
 
     // Send start signal: pull low 20ms, then release high.
-    pin_set_direction(gpio, true);   // output
+    pin_set_output(gpio);            // output
     pin_write(gpio, 0);
     volt_delay_ms(20);
     pin_write(gpio, 1);
 
     // Switch to input and wait for the response (all loops iteration-bounded).
-    pin_set_direction(gpio, false);  // input
+    pin_set_input(gpio);             // input
 
     int timeout = 10000;
     while (pin_read(gpio) == 1 && --timeout > 0);
