@@ -50,7 +50,9 @@ static bool is_valid_pin(uint8_t pin)
 volt_error_t pin_set_output(uint8_t pin)
 {
     if (!is_valid_pin(pin)) return VOLT_ERR_INVALID_PIN;
-    if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
+    // Allow GPIO direction switches (bit-banged DHT/1-Wire); only block stealing
+    // a pin held by a peripheral. Pin conflicts are caught at compile time.
+    if (pin_modes[pin] == PIN_MODE_PWM) return VOLT_ERR_PIN_IN_USE;
 
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_OUT);
@@ -61,7 +63,7 @@ volt_error_t pin_set_output(uint8_t pin)
 volt_error_t pin_set_input(uint8_t pin)
 {
     if (!is_valid_pin(pin)) return VOLT_ERR_INVALID_PIN;
-    if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
+    if (pin_modes[pin] == PIN_MODE_PWM) return VOLT_ERR_PIN_IN_USE;
 
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_IN);
@@ -73,7 +75,7 @@ volt_error_t pin_set_input(uint8_t pin)
 volt_error_t pin_set_input_pullup(uint8_t pin)
 {
     if (!is_valid_pin(pin)) return VOLT_ERR_INVALID_PIN;
-    if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
+    if (pin_modes[pin] == PIN_MODE_PWM) return VOLT_ERR_PIN_IN_USE;
 
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_IN);
@@ -85,7 +87,7 @@ volt_error_t pin_set_input_pullup(uint8_t pin)
 volt_error_t pin_set_input_pulldown(uint8_t pin)
 {
     if (!is_valid_pin(pin)) return VOLT_ERR_INVALID_PIN;
-    if (pin_modes[pin] != PIN_MODE_UNUSED) return VOLT_ERR_PIN_IN_USE;
+    if (pin_modes[pin] == PIN_MODE_PWM) return VOLT_ERR_PIN_IN_USE;
 
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_IN);

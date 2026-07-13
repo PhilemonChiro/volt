@@ -83,8 +83,13 @@ static volt_error_t pin_configure(uint8_t pin, gpio_mode_t mode,
         return VOLT_ERR_INVALID_PIN;
     }
 
-    if (pin_modes[pin] != PIN_MODE_UNUSED) {
-        log_error("pin", "GPIO %d is already in use", pin);
+    // Allow switching among GPIO directions at runtime: bit-banged protocols
+    // (DHT, 1-Wire, ultrasonic) legitimately toggle a pin between output and
+    // input. Two-device-on-one-pin conflicts are caught at compile time by the
+    // hardware validator, so the only thing to guard here is silently stealing a
+    // pin already held by a peripheral (PWM/DAC) — release it first.
+    if (pin_modes[pin] == PIN_MODE_PWM || pin_modes[pin] == PIN_MODE_DAC) {
+        log_error("pin", "GPIO %d is in use by a peripheral (PWM/DAC) — release it first", pin);
         return VOLT_ERR_PIN_IN_USE;
     }
 
