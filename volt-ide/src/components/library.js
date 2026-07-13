@@ -175,7 +175,7 @@ export async function renderInto(container) {
         const uninstall = inst
             ? `<button class="lib-btn lib-btn-install lib-coll-uninstall" data-prefix="${esc(c.prefix)}" title="Remove the installed driver from this project">Uninstall</button>`
             : "";
-        return `<div class="lib-row">
+        return `<div class="lib-row lib-row-click" data-collopen="1" data-prefix="${esc(c.prefix)}">
             ${icon(c.interface)}
             <div class="lib-row-body">
                 <div class="lib-row-name"><span class="lib-row-nm">${esc(c.name || c.prefix)}</span><span class="lib-tag lib-tag-private">private</span><span class="lib-row-ver">v${esc(c.version || "?")}</span></div>
@@ -235,6 +235,34 @@ export async function renderInto(container) {
         refresh();
     }
 
+    async function installFromCollection(prefix, version) {
+        const r = await api.collectionInstall(prefix, version);
+        if (r && r.ok) return refresh();
+        dialog.alert("Cannot install", { detail: (r && r.reason) || "unknown error" });
+    }
+
+    // Mine tab uses the SAME detail sheet as everywhere else. If the private lib
+    // is installed, show its full local detail (+ Add / Uninstall); if it's only
+    // in the collection, show what the collection knows (+ Install).
+    function openMineDetail(prefix) {
+        const inst = installedByPrefix[prefix];
+        if (inst) {
+            const desc = descByPrefix[(prefix || "").toLowerCase()];
+            if (desc) return openDetailDialog(desc, {
+                onAdd: () => addDevice(desc, { withSample: true }),
+                onUninstall: () => doUninstall(prefix),
+            });
+        }
+        const c = collection.find(x => x.prefix === prefix) || {};
+        openDetailDialog({
+            name: c.name || prefix,
+            interface: c.interface,
+            category: c.category,
+            description: c.description,
+            default_address: c.default_address,
+        }, { onInstall: () => installFromCollection(prefix, c.version) });
+    }
+
     function paint(filter) {
         const f = (filter || "").toLowerCase().trim();
         const searching = !!f;
@@ -258,6 +286,9 @@ export async function renderInto(container) {
                 scroll.innerHTML = collection.length
                     ? (mine.map(collRow).join("") || `<div class="lib-empty">No private libraries match “${esc(f)}”.</div>`)
                     : `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>No private libraries yet.</div><div class="lib-note">Generate one in the studio and choose “Save to my collection”.</div></div>`;
+                // Whole row opens the shared detail sheet; the buttons stop
+                // propagation so a quick Install/Uninstall doesn't also open it.
+                scroll.querySelectorAll("[data-collopen]").forEach(r => r.onclick = () => openMineDetail(r.dataset.prefix));
                 scroll.querySelectorAll(".lib-coll-install").forEach(b => b.onclick = async (e) => {
                     e.stopPropagation();
                     const label = b.textContent;
@@ -1060,9 +1091,10 @@ function openDetailDialog(device, actions = {}) {
                 ${tipsHtml ? `<div class="device-detail-section-title">Tips & gotchas</div>${tipsHtml}` : ""}
                 ${altsHtml ? `<div class="device-detail-section-title">Alternatives</div>${altsHtml}` : ""}
             </div>
-            ${(actions.onAdd || actions.onUninstall) ? `
+            ${(actions.onAdd || actions.onUninstall || actions.onInstall) ? `
             <div class="device-detail-footer">
                 ${actions.onUninstall ? `<button class="device-detail-btn device-detail-btn-danger" id="deviceDetailUninstall">Uninstall</button>` : ""}
+                ${actions.onInstall ? `<button class="device-detail-btn device-detail-btn-primary" id="deviceDetailInstall">Install</button>` : ""}
                 ${actions.onAdd ? `<button class="device-detail-btn device-detail-btn-primary" id="deviceDetailAdd">Add to project</button>` : ""}
             </div>` : ""}
         </div>
@@ -1086,6 +1118,8 @@ function openDetailDialog(device, actions = {}) {
     overlay.querySelector("#deviceDetailClose").onclick = close;
     const addBtn = overlay.querySelector("#deviceDetailAdd");
     if (addBtn) addBtn.onclick = () => { close(); actions.onAdd(); };
+    const instBtn = overlay.querySelector("#deviceDetailInstall");
+    if (instBtn) instBtn.onclick = () => { close(); actions.onInstall(); };
     const unBtn = overlay.querySelector("#deviceDetailUninstall");
     if (unBtn) unBtn.onclick = () => { close(); actions.onUninstall(); };
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
