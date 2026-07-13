@@ -216,14 +216,12 @@ export async function renderInto(container) {
                     : (res && res.reason) || "This library isn’t available on the Grid.",
             });
         }
-        installer.showResult(res, {
-            onClose: refresh,
-            onUse: () => {
-                const desc = descByPrefix[prefix];
-                if (desc) addDevice(desc, { withSample: true });
-                else dialog.alert("Descriptor unavailable", { detail: "Reinstall the library to use it in code." });
-            },
-            onUninstall: () => doUninstall(prefix),
+        // Not installed → show the SAME spec card, built from the Grid envelope's
+        // device data. Install routes through the verify/capability consent sheet
+        // (installer.showResult) so the trust step for third-party libs is kept.
+        const device = res.device || { name: prefix, interface: (res.manifest || {}).interface };
+        openDetailDialog(device, {
+            onInstall: () => installer.showResult(res, { onClose: refresh }),
         });
     }
 
