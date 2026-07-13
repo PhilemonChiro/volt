@@ -8,8 +8,27 @@ set(CMAKE_C_STANDARD 11)
 
 pico_sdk_init()
 
-# Auto-discover all device drivers from devices/*/driver.c
-file(GLOB DEVICE_DRIVERS "${CMAKE_CURRENT_SOURCE_DIR}/../../devices/*/driver.c")
+# Discover device drivers, then compile ONLY the ones this program uses (see the
+# esp32 CMakeLists for the rationale): a driver whose <prefix>_ never appears in
+# main.c isn't needed and must not be compiled, so one unused/broken installed
+# driver can't break an unrelated build.
+file(GLOB ALL_DEVICE_DRIVERS "${CMAKE_CURRENT_SOURCE_DIR}/../../devices/*/driver.c")
+set(DEVICE_DRIVERS "")
+set(_MAIN_C "${CMAKE_CURRENT_SOURCE_DIR}/main/main.c")
+if(EXISTS "${_MAIN_C}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_MAIN_C}")
+    file(READ "${_MAIN_C}" _MAIN_C_TEXT)
+    foreach(_drv ${ALL_DEVICE_DRIVERS})
+        get_filename_component(_dir "${_drv}" DIRECTORY)
+        get_filename_component(_prefix "${_dir}" NAME)
+        string(FIND "${_MAIN_C_TEXT}" "${_prefix}_" _idx)
+        if(NOT _idx EQUAL -1)
+            list(APPEND DEVICE_DRIVERS "${_drv}")
+        endif()
+    endforeach()
+else()
+    set(DEVICE_DRIVERS ${ALL_DEVICE_DRIVERS})
+endif()
 
 add_executable(volt-rp2040
     main/main.c
