@@ -44,7 +44,11 @@ function deviceRoots(repoRoot) {
     ].filter((r, i, a) => a.indexOf(r) === i && fs.existsSync(r));
 }
 function includeRoots(repoRoot) {
+    // Must mirror deviceRoots one-for-one: the generated struct header has to
+    // land in the SAME tree as the driver, or the build compiles the driver
+    // (from devices/) against a sensor.h that lacks its <prefix>_t struct.
     return [
+        path.join(repoRoot, "framework", "include", "volt"),
         path.join(repoRoot, "volt-ide", "sdk", "framework", "include", "volt"),
         path.join(os.homedir(), ".volt", "sdk", "framework", "include", "volt"),
     ].filter((r, i, a) => a.indexOf(r) === i && fs.existsSync(r));
@@ -137,6 +141,36 @@ function nt(x) {
     return { name: "", type: "" };
 }
 
+// The HAL header for each interface (where volt_i2c_*/volt_spi_*/volt_uart_*/
+// pin_* live). gpio devices talk to pins via volt/pin.h.
+const BUS_HEADER = { i2c: "i2c", spi: "spi", uart: "uart", gpio: "pin" };
+
+// Prepend the framework includes a standalone driver.c needs to compile in a
+// real build: its struct header (which also chains in volt_error_t via
+// error.h), the interface HAL, task/log, and the C stdlib bits drivers use.
+// Existing quoted / <volt/...> includes in the body are dropped first so the
+// canonical set is authoritative and never doubled with a stale path.
+function withFrameworkIncludes(driverC, prefix, iface, headerFile) {
+    const bus = BUS_HEADER[iface];
+    const preamble = [
+        `// ${prefix} driver — framework includes added on install`,
+        `#include <stdint.h>`,
+        `#include <stdbool.h>`,
+        `#include <stddef.h>`,
+        `#include <string.h>`,
+        `#include <stdio.h>`,
+        `#include "volt/${headerFile}"`,
+        bus ? `#include "volt/${bus}.h"` : null,
+        `#include "volt/task.h"`,
+        `#include "volt/log.h"`,
+    ].filter(Boolean).join("\n") + "\n\n";
+    const body = (driverC || "")
+        .replace(/^[ \t]*#\s*include\s+"[^"]*".*\n?/gm, "")        // quoted includes
+        .replace(/^[ \t]*#\s*include\s+<volt\/[^>]*>.*\n?/gm, "")  // <volt/...>
+        .replace(/^\n+/, "");
+    return preamble + body;
+}
+
 // Regenerate the header block from the STRUCTURED spec — never trust raw C.
 function buildHeader(prefix, h) {
     const fields = (h.fields || []).map(nt).map(({ name, type, size }) => size ? `${type} ${name}[${size}];` : `${type} ${name};`).join(" ");
@@ -217,9 +251,14 @@ function install(envelope, repoRoot, opts = {}) {
     const prefix = val.prefix;
     if (!NAME_RE.test(prefix)) throw new Error("unsafe device name");
     const deviceJson = JSON.stringify(envelope.device, null, 2) + "\n";
-    const driverC = val.driverC;
     const headerBlock = buildHeader(prefix, envelope.header || {});
     const headerFile = HEADER_BY_IFACE[envelope.device.interface] || "gpio_devices.h";
+    // The studio stores drivers with framework includes stripped (its syntax
+    // check re-adds them via a preamble). For a real firmware build each
+    // driver.c is its own translation unit, so it must include the framework
+    // headers that declare its <prefix>_t struct, volt_error_t, and the HAL it
+    // calls — otherwise the ESP-IDF build fails with "unknown type name".
+    const driverC = withFrameworkIncludes(val.driverC, prefix, envelope.device.interface, headerFile);
 
     const written = [];
     // path safety: join + confirm the resolved dir stays under the root

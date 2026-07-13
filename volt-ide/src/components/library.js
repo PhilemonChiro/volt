@@ -164,17 +164,24 @@ export async function renderInto(container) {
     // signature). The row action installs straight from their collection.
     const collRow = (c) => {
         const inst = installedByPrefix[c.prefix];
-        const isInstalled = inst && inst.version === c.version;
-        const action = isInstalled
-            ? `<span class="lib-btn lib-btn-installed">&#10003; Installed</span>`
-            : `<button class="lib-btn lib-btn-install lib-coll-install" data-prefix="${esc(c.prefix)}" data-version="${esc(c.version)}">Install</button>`;
+        const sameVer = inst && inst.version === c.version;
+        // Installed (this or another version) → let them remove it; a stale/broken
+        // installed driver breaks every firmware build, so uninstall must be handy.
+        const primary = !inst
+            ? `<button class="lib-btn lib-btn-install lib-coll-install" data-prefix="${esc(c.prefix)}" data-version="${esc(c.version)}">Install</button>`
+            : sameVer
+                ? `<span class="lib-btn lib-btn-installed">&#10003; Installed</span>`
+                : `<button class="lib-btn lib-btn-update lib-coll-install" data-prefix="${esc(c.prefix)}" data-version="${esc(c.version)}">Update</button>`;
+        const uninstall = inst
+            ? `<button class="lib-btn lib-btn-install lib-coll-uninstall" data-prefix="${esc(c.prefix)}" title="Remove the installed driver from this project">Uninstall</button>`
+            : "";
         return `<div class="lib-row">
             ${icon(c.interface)}
             <div class="lib-row-body">
                 <div class="lib-row-name"><span class="lib-row-nm">${esc(c.name || c.prefix)}</span><span class="lib-tag lib-tag-private">private</span><span class="lib-row-ver">v${esc(c.version || "?")}</span></div>
                 <div class="lib-row-desc">${esc(c.description || c.interface || "")} · unreviewed, yours only</div>
             </div>
-            <div class="lib-row-act">${action}</div>
+            <div class="lib-row-act">${primary}${uninstall}</div>
         </div>`;
     };
 
@@ -236,10 +243,15 @@ export async function renderInto(container) {
                     : `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>No private libraries yet.</div><div class="lib-note">Generate one in the studio and choose “Save to my collection”.</div></div>`;
                 scroll.querySelectorAll(".lib-coll-install").forEach(b => b.onclick = async (e) => {
                     e.stopPropagation();
+                    const label = b.textContent;
                     b.disabled = true; b.textContent = "Installing…";
                     const r = await api.collectionInstall(b.dataset.prefix, b.dataset.version);
                     if (r && r.ok) refresh();
-                    else { b.disabled = false; b.textContent = "Install"; dialog.alert("Cannot install", { detail: (r && r.reason) || "unknown error" }); }
+                    else { b.disabled = false; b.textContent = label; dialog.alert("Cannot install", { detail: (r && r.reason) || "unknown error" }); }
+                });
+                scroll.querySelectorAll(".lib-coll-uninstall").forEach(b => b.onclick = (e) => {
+                    e.stopPropagation();
+                    doUninstall(b.dataset.prefix); // shared confirm + remove + refresh
                 });
             }
         } else {
