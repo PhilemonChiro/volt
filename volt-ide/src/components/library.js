@@ -189,6 +189,17 @@ export async function renderInto(container) {
     // via the Grid, then hands the verified result to the sheet, which decides the
     // actions (Install / Update / Add to project / Uninstall).
     async function openDetail(prefix, version) {
+        // Private libraries live only in the user's own collection, never on the
+        // public Grid — so gridFetch would 404. Show the read-only detail from the
+        // locally-installed device.json instead.
+        const inst = installedByPrefix[prefix];
+        if (inst && inst.tier === "private") {
+            const desc = descByPrefix[(prefix || "").toLowerCase()];
+            if (desc) return openDetailDialog(desc);
+            return dialog.alert("Private library", {
+                detail: "Installed from your collection. Its local details are unavailable — reinstall to restore them.",
+            });
+        }
         let res;
         try { res = await api.gridFetch(prefix, version); }
         catch (e) { res = { ok: false, reason: String((e && e.message) || e) }; }
