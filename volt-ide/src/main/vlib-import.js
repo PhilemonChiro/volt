@@ -187,8 +187,20 @@ function inspect(envelope, opts = {}) {
 // Verify + validate + write. Re-verifies in the main process (never trusts a
 // renderer's "it's fine"). Writes ONLY devices/<prefix>/ + the header block.
 function install(envelope, repoRoot, opts = {}) {
-    const v = verify(envelope, opts);
-    if (!v.ok) throw new Error(`signature: ${v.reason}`);
+    // opts.local: a PRIVATE library from the user's own authenticated collection.
+    // Trust is the authenticated session (fetched over TLS from /me/collection),
+    // not the registry signature — so we skip signature verification. The SAME
+    // hardened static validation still runs (a private lib still can't use
+    // forbidden constructs), and it's marked "private" so the UI flags it.
+    let v, tier;
+    if (opts.local) {
+        v = { hash: "", keyId: "local" };
+        tier = "private";
+    } else {
+        v = verify(envelope, opts);
+        if (!v.ok) throw new Error(`signature: ${v.reason}`);
+        tier = envelope.manifest.trustTier;
+    }
     const val = validate(envelope);
     if (val.errors.length) throw new Error(`validation: ${val.errors[0]}`);
 
@@ -224,7 +236,7 @@ function install(envelope, repoRoot, opts = {}) {
     const db = readLock();
     db[prefix] = {
         name: envelope.manifest.name, version: envelope.manifest.version,
-        hash: v.hash, keyId: v.keyId, tier: envelope.manifest.trustTier,
+        hash: v.hash, keyId: v.keyId, tier,
         interface: envelope.device.interface, capabilities: val.caps,
         installedAt: new Date().toISOString(),
     };

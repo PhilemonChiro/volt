@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, screen } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, screen, session } = require("electron");
 const logger = require("./src/main/logger");
 const path = require("path");
 const fs = require("fs");
@@ -497,6 +497,91 @@ ipcMain.handle("grid_fetch", async (_, prefix, version) => {
         warnings: res.warnings, errors: res.errors, driver: res.driver, keyId: res.keyId,
         hash: res.hash, update: res.update, alreadyInstalled: res.alreadyInstalled,
     };
+});
+
+// ---- GitHub sign-in + private collection ----
+// The user signs in with GitHub (same Grid OAuth as the studio). We reuse the
+// resulting volt_session cookie as a bearer token for the /me/* endpoints, so
+// the IDE can list + install the user's OWN private libraries. These are NOT
+// signature-verified — the trust is the authenticated session over TLS — but
+// they still pass the hardened static validation and are marked "private".
+let sessionToken = null;
+
+async function getSessionToken() {
+    if (sessionToken) return sessionToken;
+    try {
+        const cs = await session.defaultSession.cookies.get({ name: "volt_session" });
+        if (cs && cs[0] && cs[0].value) sessionToken = cs[0].value;
+    } catch (_) {}
+    return sessionToken;
+}
+
+// Open a modal window to the Grid's GitHub OAuth; when it lands back on the web
+// app the session cookie is set — grab it and close.
+ipcMain.handle("auth_login", async () => {
+    return await new Promise((resolve) => {
+        const authWin = new BrowserWindow({
+            width: 520, height: 720, parent: win, modal: true, show: true, title: "Sign in to VoltGrid",
+            webPreferences: { nodeIntegration: false, contextIsolation: true },
+        });
+        let done = false;
+        const grab = async () => {
+            try {
+                const cs = await authWin.webContents.session.cookies.get({ name: "volt_session" });
+                if (cs && cs[0] && cs[0].value) { sessionToken = cs[0].value; return true; }
+            } catch (_) {}
+            return false;
+        };
+        authWin.webContents.on("did-navigate", async () => {
+            if (await grab()) { done = true; authWin.close(); }
+        });
+        authWin.on("closed", async () => { if (!done) await grab(); resolve({ ok: !!sessionToken }); });
+        authWin.loadURL(`${gridUrl()}/auth/github/login`);
+    });
+});
+
+ipcMain.handle("auth_status", async () => {
+    const tok = await getSessionToken();
+    if (!tok) return { signedIn: false };
+    try {
+        const r = await fetch(`${gridUrl()}/api/v1/me`, { headers: { Authorization: `Bearer ${tok}` } });
+        if (!r.ok) { sessionToken = null; return { signedIn: false }; }
+        const { data } = await r.json();
+        return { signedIn: true, user: data && data.user };
+    } catch (_) { return { signedIn: false }; }
+});
+
+ipcMain.handle("auth_logout", async () => {
+    sessionToken = null;
+    try { await session.defaultSession.cookies.remove(`${gridUrl()}`, "volt_session"); } catch (_) {}
+    return { ok: true };
+});
+
+ipcMain.handle("collection_list", async () => {
+    const tok = await getSessionToken();
+    if (!tok) return { ok: false, reason: "not signed in" };
+    try {
+        const r = await fetch(`${gridUrl()}/api/v1/me/collection`, { headers: { Authorization: `Bearer ${tok}` } });
+        if (r.status === 401) { sessionToken = null; return { ok: false, reason: "not signed in" }; }
+        if (!r.ok) return { ok: false, reason: `list failed (${r.status})` };
+        const { data } = await r.json();
+        return { ok: true, libraries: data || [] };
+    } catch (e) { return { ok: false, reason: String((e && e.message) || e) }; }
+});
+
+// Install a private library from the user's own collection (unsigned, local).
+ipcMain.handle("collection_install", async (_, prefix, version) => {
+    const tok = await getSessionToken();
+    if (!tok) return { ok: false, reason: "not signed in" };
+    try {
+        const url = `${gridUrl()}/api/v1/me/collection/${encodeURIComponent(prefix)}/${encodeURIComponent(version)}/download`;
+        const r = await fetch(url, { headers: { Authorization: `Bearer ${tok}` } });
+        if (!r.ok) return { ok: false, reason: `download failed (${r.status})` };
+        const envelope = await r.json();
+        const { install } = require("./src/main/vlib-import");
+        const res = install(envelope, path.join(__dirname, ".."), { local: true });
+        return { ok: true, ...res };
+    } catch (e) { return { ok: false, reason: String((e && e.message) || e) }; }
 });
 
 // Read a device driver's C source (read-only viewer). chip is the target

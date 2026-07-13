@@ -59,12 +59,16 @@ export async function renderInto(container) {
 
     // Load in parallel: installed libraries (lockfile), the Grid marketplace, and
     // device descriptors (to map an installed prefix → its device.json for "Use").
-    const [installed, gridRes, descriptors] = await Promise.all([
+    const [installed, gridRes, descriptors, collRes] = await Promise.all([
         api.vlibInstalledList().then(x => x || []).catch(() => []),
         api.gridList().then(cells => ({ ok: true, cells: cells || [] })).catch(err => ({ ok: false, err })),
         loadDevices().catch(() => []),
+        (api.collectionList ? api.collectionList() : Promise.resolve({ ok: false })).then(x => x || { ok: false }).catch(() => ({ ok: false })),
     ]);
     const grid = gridRes.ok ? gridRes.cells : [];
+    // Private collection — the user's own libraries (only present when signed in).
+    const collection = collRes && collRes.ok ? (collRes.libraries || []) : [];
+    const signedIn = !!(collRes && collRes.ok);
     const gridOffline = !gridRes.ok;
     const descByPrefix = {};
     for (const d of descriptors) descByPrefix[(d.c_prefix || "").toLowerCase()] = d;
@@ -85,6 +89,7 @@ export async function renderInto(container) {
         <div class="lib-tabs" id="libTabs">
             <button class="lib-tab" data-tab="installed">Installed <span class="lib-tab-n">${installed.length}</span></button>
             <button class="lib-tab" data-tab="grid">Grid <span class="lib-tab-n">${grid.length}</span></button>
+            <button class="lib-tab" data-tab="mine">Mine <span class="lib-tab-n">${collection.length}</span></button>
         </div>
         <div class="lib-scroll" id="libScroll"></div>
     `;
@@ -154,6 +159,24 @@ export async function renderInto(container) {
             <div class="lib-row-act">${right}</div>
         </div>`;
     };
+    // Private-collection rows carry a clear provenance cue: these are the user's
+    // own unsigned, unreviewed libraries (trusted by their login, not a registry
+    // signature). The row action installs straight from their collection.
+    const collRow = (c) => {
+        const inst = installedByPrefix[c.prefix];
+        const isInstalled = inst && inst.version === c.version;
+        const action = isInstalled
+            ? `<span class="lib-btn lib-btn-installed">&#10003; Installed</span>`
+            : `<button class="lib-btn lib-btn-install lib-coll-install" data-prefix="${esc(c.prefix)}" data-version="${esc(c.version)}">Install</button>`;
+        return `<div class="lib-row">
+            ${icon(c.interface)}
+            <div class="lib-row-body">
+                <div class="lib-row-name"><span class="lib-row-nm">${esc(c.name || c.prefix)}</span><span class="lib-tag lib-tag-private">private</span><span class="lib-row-ver">v${esc(c.version || "?")}</span></div>
+                <div class="lib-row-desc">${esc(c.description || c.interface || "")} · unreviewed, yours only</div>
+            </div>
+            <div class="lib-row-act">${action}</div>
+        </div>`;
+    };
 
     // Open the detail sheet for a library (Grid or Installed). Downloads + verifies
     // via the Grid, then hands the verified result to the sheet, which decides the
@@ -201,6 +224,24 @@ export async function renderInto(container) {
                 : `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>No libraries installed yet.</div><button class="lib-link" id="libGoGrid">Browse the Grid →</button></div>`;
             const go = scroll.querySelector("#libGoGrid");
             if (go) go.onclick = () => { tab = "grid"; saveTab(); paint(input.value); };
+        } else if (tab === "mine") {
+            if (!signedIn) {
+                scroll.innerHTML = `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>Your private library.</div><div class="lib-note">Sign in with GitHub to install the libraries you saved in the studio.</div><button class="lib-link" id="libSignIn">Sign in with GitHub →</button></div>`;
+                const s = scroll.querySelector("#libSignIn");
+                if (s) s.onclick = async () => { const r = await api.authLogin(); if (r && r.ok) refresh(); };
+            } else {
+                const mine = collection.filter(match);
+                scroll.innerHTML = collection.length
+                    ? (mine.map(collRow).join("") || `<div class="lib-empty">No private libraries match “${esc(f)}”.</div>`)
+                    : `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>No private libraries yet.</div><div class="lib-note">Generate one in the studio and choose “Save to my collection”.</div></div>`;
+                scroll.querySelectorAll(".lib-coll-install").forEach(b => b.onclick = async (e) => {
+                    e.stopPropagation();
+                    b.disabled = true; b.textContent = "Installing…";
+                    const r = await api.collectionInstall(b.dataset.prefix, b.dataset.version);
+                    if (r && r.ok) refresh();
+                    else { b.disabled = false; b.textContent = "Install"; dialog.alert("Cannot install", { detail: (r && r.reason) || "unknown error" }); }
+                });
+            }
         } else {
             const gcells = grid.filter(match);
             const buckets = {};

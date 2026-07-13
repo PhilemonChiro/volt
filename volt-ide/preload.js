@@ -79,6 +79,12 @@ contextBridge.exposeInMainWorld("volt", {
     vlibUninstall: (prefix) => ipcRenderer.invoke("vlib_uninstall", prefix),
     gridList:      () => ipcRenderer.invoke("grid_list"),
     gridFetch:     (prefix, version) => ipcRenderer.invoke("grid_fetch", prefix, version),
+    // GitHub sign-in + private collection (personal, unsigned, auth-scoped)
+    authLogin:     () => ipcRenderer.invoke("auth_login"),
+    authStatus:    () => ipcRenderer.invoke("auth_status"),
+    authLogout:    () => ipcRenderer.invoke("auth_logout"),
+    collectionList:    () => ipcRenderer.invoke("collection_list"),
+    collectionInstall: (prefix, version) => ipcRenderer.invoke("collection_install", prefix, version),
     // Deep link from the Spark studio: volt://install/<prefix>/<version>.
     onDeepLinkInstall: (callback) =>
         ipcRenderer.on("deep_link_install", (_, data) => callback(data)),

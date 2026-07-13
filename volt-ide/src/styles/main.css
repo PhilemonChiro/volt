@@ -4553,6 +4553,7 @@ kbd {
 }
 .lib-tag-community { background: rgba(217,138,43,.16); color: #e0a84e; }
 .lib-tag-net { background: rgba(217,138,43,.14); color: #e0a84e; }
+.lib-tag-private { background: rgba(59,157,214,.16); color: #5ab6e6; }
 .lib-row-desc {
     font-size: 11.5px; color: var(--t3); line-height: 1.3; margin-top: 2px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
