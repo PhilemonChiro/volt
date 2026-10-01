@@ -24,8 +24,24 @@ services:
       timeout: 5s
       retries: 3
 
+  toolchain-files:
+    image: filebrowser/filebrowser:v2.32.0
+    restart: unless-stopped
+    command: ["--root", "/srv/toolchains", "--address", "0.0.0.0", "--port", "8080", "--database", "/database/filebrowser.db"]
+    volumes:
+      - mirror-data:/srv/toolchains
+      - filebrowser-data:/database
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   mirror-data:
+  filebrowser-data:
 
 networks:
   dokploy-network:

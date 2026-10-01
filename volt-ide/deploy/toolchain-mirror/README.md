@@ -21,21 +21,30 @@ deploy/toolchain-mirror/
 2. **Domains** → add `toolchains.<your-domain>` → port **80**, enable HTTPS
    (Let's Encrypt). Dokploy injects the Traefik labels; the service is already on
    `dokploy-network`.
-3. **Deploy.** Verify: `curl https://toolchains.<your-domain>/healthz` → `ok`.
+3. Optional admin browser: add a private domain such as
+   `toolchains-admin.<your-domain>` → service `toolchain-files` → port **8080**.
+   Put Dokploy/Traefik auth or another access control in front of this domain.
+4. **Deploy.** Verify: `curl https://toolchains.<your-domain>/healthz` → `ok`.
 
 The `mirror-data` volume persists the tarballs + manifest across redeploys.
 
-### Human file browser
+### Private admin file manager
 
-The same nginx service exposes a read-only browser at:
+The compose file includes a separate File Browser service:
 
-```text
-https://toolchains.<your-domain>/browse/
-```
+- Service: `toolchain-files`
+- Port: `8080`
+- Root: `/srv/toolchains`
+- Data volume: `filebrowser-data`
 
-It uses nginx `autoindex` over the public mirror volume. This is intentionally
-download-only: the server still rejects non-`GET`/`HEAD` methods, and uploads
-still happen out-of-band through rsync/SSH or the staging scripts.
+It mounts the same `mirror-data` volume as the public nginx mirror. Use it for
+private/admin browsing and manual file inspection. Do **not** put it on the same
+public `toolchains.<domain>` route. Use a separate admin domain and protect it
+with Dokploy/Traefik auth, VPN access, or another private ingress control.
+
+On first deploy, File Browser uses its default initial login. Sign in
+immediately and change it before exposing the admin domain beyond your private
+network.
 
 ## 2. Point the IDE at it
 
