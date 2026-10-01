@@ -5,7 +5,8 @@
 //   node scripts/publish-toolchains.js [--dry-run] [--only=key1,key2] [--manifest-only]
 //
 // For each asset in FALLBACK_MANIFEST.assets (filtered by --only):
-//   1. Download the upstream tarball into /tmp/volt-mirror/<filename>
+//   1. Download the upstream tarball into /tmp/volt-mirror/<filename>, or copy
+//      asset.source_file for generated/local artifacts such as compiler caches.
 //   2. Compute SHA256 + size
 //   3. Patch the in-memory manifest with computed values
 //   4. Upload to GitHub release <MIRROR_TAG> on PhilemonChiro/volt-toolchains
@@ -143,11 +144,23 @@ async function publishOne(key, asset, workingManifest) {
     const local = path.join(STAGING, filename);
 
     log(`\n=== ${key} ===`);
-    log(`  upstream: ${asset.upstream}`);
+    if (asset.source_file) {
+        log(`  source_file: ${asset.source_file}`);
+    } else {
+        log(`  upstream: ${asset.upstream}`);
+    }
 
     if (!fs.existsSync(local)) {
-        log(`  Downloading…`);
-        await downloadFile(asset.upstream, local);
+        if (asset.source_file) {
+            const src = path.resolve(asset.source_file);
+            if (!fs.existsSync(src)) throw new Error(`source_file not found: ${src}`);
+            log(`  Copying local artifact…`);
+            fs.copyFileSync(src, local);
+        } else {
+            if (!asset.upstream) throw new Error("asset has no upstream or source_file");
+            log(`  Downloading…`);
+            await downloadFile(asset.upstream, local);
+        }
     } else {
         log(`  Using cached: ${local}`);
     }

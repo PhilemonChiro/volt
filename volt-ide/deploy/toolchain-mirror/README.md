@@ -25,6 +25,18 @@ deploy/toolchain-mirror/
 
 The `mirror-data` volume persists the tarballs + manifest across redeploys.
 
+### Human file browser
+
+The same nginx service exposes a read-only browser at:
+
+```text
+https://toolchains.<your-domain>/browse/
+```
+
+It uses nginx `autoindex` over the public mirror volume. This is intentionally
+download-only: the server still rejects non-`GET`/`HEAD` methods, and uploads
+still happen out-of-band through rsync/SSH or the staging scripts.
+
 ## 2. Point the IDE at it
 
 In `src/main/toolchain-mirror.js` set:

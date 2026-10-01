@@ -144,6 +144,59 @@ off the VPS entirely** (sign locally, upload the already-signed manifest), and
 treat the VPS as replaceable — the trust root is the pinned key in the app, not
 the server.
 
+## ESP32 compiler-cache artifacts
+
+Volt can ship warmed ESP-IDF compiler caches through the same signed toolchain
+manifest. This is deliberately a **ccache artifact**, not a copied ESP-IDF
+`build/` directory: CMake/Ninja build folders contain absolute source/build
+paths and are not safe to replay on another machine. ccache is content-addressed
+and can be seeded from CI, then reused by a user's local ESP-IDF build.
+
+Flow:
+
+1. Install an ESP32 toolchain manifest that exposes `ccache` on `PATH`.
+2. Build a representative Volt firmware profile to warm
+   `~/.volt/cache/ccache/esp32`.
+3. Package the warmed cache:
+
+   ```sh
+   volt cache package esp32 -o /tmp/volt-prebuilt-esp32-ccache.tar.gz
+   ```
+
+4. Add a manifest asset like:
+
+   ```json
+   {
+     "filename": "volt-prebuilt-esp32-ccache.tar.gz",
+     "url": "https://toolchains.example.com/toolchains-2026.05/volt-prebuilt-esp32-ccache.tar.gz",
+     "source_file": "/tmp/volt-prebuilt-esp32-ccache.tar.gz",
+     "sha256": "...",
+     "size_bytes": 123,
+     "extract": { "format": "tar.gz", "strip_components": 0 },
+     "install_to": "cache/ccache/esp32",
+     "exposes": {},
+     "kind": "compiler-cache",
+     "version": "esp32-idf5.4-volt-runtime-<hash>"
+   }
+   ```
+
+5. Add that asset key to `chip_requirements.esp32.<platform>` alongside the
+   `ccache` binary asset. `volt toolchain install esp32` downloads, verifies and
+   extracts it like any other toolchain piece.
+
+At build time the CLI detects `ccache` on the resolved toolchain `PATH` and
+sets:
+
+- `IDF_CCACHE_ENABLE=1`
+- `CCACHE_DIR=~/.volt/cache/ccache/esp32`
+- `CCACHE_COMPILERCHECK=content`
+- `CCACHE_NOHASHDIR=true`
+- `CCACHE_BASEDIR=/`
+
+If the cache is absent, stale, or only partially useful, ESP-IDF still builds
+normally and gradually warms the cache locally. The cache is an accelerator, not
+a correctness dependency.
+
 ## Open items (not yet done)
 
 - **App auto-update** (`electron-updater`): required so fixes to the IDE (and to
@@ -152,7 +205,8 @@ the server.
 - ~~Pin git-cloned SDKs to exact commit SHAs~~ **DONE** — esp-idf/pico-sdk/
   picotool/ESP8266 in `toolchain.js` now `cloneAtSha()`: fetch-by-SHA + verify
   the checkout (`PINNED_SDK` map). Bump a SHA there to upgrade.
-- **Zip-slip / path-traversal** guard on archive extraction.
+- ~~Zip-slip / path-traversal guard on archive extraction~~ **DONE** in the Go
+  CLI extractor.
 - Consider making **compiler/worker updates explicit/opt-in** (lockfile-pinned
   per project); reserve *silent* OTA for signed security patches, so an update
   can't silently change the C a customer's firmware compiles to.

@@ -146,6 +146,39 @@ const FALLBACK_MANIFEST = {
             kind:       "flash-tool",
             version:    "2.1.0",
         },
+        "python-3.12.14-darwin-arm64": {
+            filename:   "cpython-3.12.14+20260929-aarch64-apple-darwin-install_only.tar.gz",
+            upstream:   "https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-aarch64-apple-darwin-install_only.tar.gz",
+            sha256:     "de6b8f94fa765639b423ea353ab340669704c7186f96ee3cab389dcfde770c3c",
+            size_bytes: 25156032,
+            extract:    { format: "tar.gz", strip_components: 1 },
+            install_to: "python",
+            exposes:    { "python3": "bin/python3" },
+            kind:       "runtime",
+            version:    "3.12.14",
+        },
+        "python-3.12.14-darwin-x86_64": {
+            filename:   "cpython-3.12.14+20260929-x86_64-apple-darwin-install_only.tar.gz",
+            upstream:   "https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-x86_64-apple-darwin-install_only.tar.gz",
+            sha256:     "f51ec8a7fa0ede129a5e2e942a2a453ba4830adaca2289da4449390e42443292",
+            size_bytes: 24847838,
+            extract:    { format: "tar.gz", strip_components: 1 },
+            install_to: "python",
+            exposes:    { "python3": "bin/python3" },
+            kind:       "runtime",
+            version:    "3.12.14",
+        },
+        "python-3.12.14-linux-x64": {
+            filename:   "cpython-3.12.14+20260929-x86_64-unknown-linux-gnu-install_only.tar.gz",
+            upstream:   "https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-x86_64-unknown-linux-gnu-install_only.tar.gz",
+            sha256:     "06c90b93f419b63371c18f20fed0558a1a901f6518c3c24f755077e048447e7f",
+            size_bytes: 66919180,
+            extract:    { format: "tar.gz", strip_components: 1 },
+            install_to: "python",
+            exposes:    { "python3": "bin/python3" },
+            kind:       "runtime",
+            version:    "3.12.14",
+        },
     },
     chip_requirements: {
         rp2040: {
@@ -154,9 +187,9 @@ const FALLBACK_MANIFEST = {
             "linux-x64":     ["picotool-2.1-linux-x64"], // apt handles gcc/cmake/ninja; picotool isn't packaged there
         },
         esp32: {
-            "darwin-arm64":  ["cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
-            "darwin-x86_64": ["cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
-            "linux-x64":     [],
+            "darwin-arm64":  ["python-3.12.14-darwin-arm64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
+            "darwin-x86_64": ["python-3.12.14-darwin-x86_64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
+            "linux-x64":     ["python-3.12.14-linux-x64"],
         },
         stm32f103: {
             "darwin-arm64":  ["arm-gnu-toolchain-13.2-darwin-arm64"],
