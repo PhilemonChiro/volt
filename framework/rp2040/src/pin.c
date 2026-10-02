@@ -121,18 +121,21 @@ int pin_read(uint8_t pin)
 {
     if (pin >= PIN_COUNT) return LOW;
 
-    // ADC read for analog pins GP26-GP28
-    if (pin >= 26 && pin <= 28 && pin_modes[pin] == PIN_MODE_INPUT) {
-        if (!adc_initialized) {
-            adc_init();
-            adc_initialized = true;
-        }
-        adc_gpio_init(pin);
-        adc_select_input(pin - 26);
-        return adc_read(); // 12-bit: 0-4095
-    }
-
     return gpio_get(pin) ? HIGH : LOW;
+}
+
+int pin_read_analog(uint8_t pin)
+{
+    if (pin < 26 || pin > 28 || pin_modes[pin] == PIN_MODE_PWM) {
+        return 0;
+    }
+    if (!adc_initialized) {
+        adc_init();
+        adc_initialized = true;
+    }
+    adc_gpio_init(pin);
+    adc_select_input(pin - 26);
+    return adc_read(); // 12-bit: 0-4095
 }
 
 volt_error_t pin_on_change(uint8_t pin, pin_callback_t callback, void *arg)

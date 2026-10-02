@@ -43,10 +43,9 @@ contextBridge.exposeInMainWorld("volt", {
     checkToolchain:   (chip) => ipcRenderer.invoke("check_toolchain", chip),
     diagnoseToolchain:(chip) => ipcRenderer.invoke("diagnose_toolchain", chip),
     repairToolchain:  (chip) => ipcRenderer.invoke("repair_toolchain", chip),
-    toolchainFreeDisk:(chip) => ipcRenderer.invoke("toolchain_free_disk", chip),
+    toolchainComponents:(chip) => ipcRenderer.invoke("toolchain_components", chip),
     setupToolchain:   (chip) => ipcRenderer.invoke("setup_toolchain", chip),
     cancelToolchain:  () => ipcRenderer.invoke("cancel_toolchain"),
-    onToolchainLog:   (callback) => ipcRenderer.on("toolchain:log",   (_, msg) => callback(msg)),
     onToolchainEvent: (callback) => {
         const handler = (_, evt) => callback(evt);
         ipcRenderer.on("toolchain:event", handler);
@@ -88,6 +87,9 @@ contextBridge.exposeInMainWorld("volt", {
     // Deep link from the Spark studio: volt://install/<prefix>/<version>.
     onDeepLinkInstall: (callback) =>
         ipcRenderer.on("deep_link_install", (_, data) => callback(data)),
+    onOpenPath: (callback) =>
+        ipcRenderer.on("open_path", (_, data) => callback(data)),
+    takePendingOpenPath: () => ipcRenderer.invoke("open_path:take"),
     openExternal:  (url) => ipcRenderer.invoke("open_external", url),
     // Logging — fire-and-forget from the renderer; main writes to the
     // rotating log file. The reveal helper opens Finder/Explorer on it.
@@ -100,5 +102,6 @@ contextBridge.exposeInMainWorld("volt", {
     onSerial: (callback) => ipcRenderer.on("serial:data", (_, data) => callback(data)),
     onSerialDisconnected: (callback) => ipcRenderer.on("serial:disconnected", (_, port) => callback(port)),
     onSerialConnected: (callback) => ipcRenderer.on("serial:connected", (_, port) => callback(port)),
+    onSerialError: (callback) => ipcRenderer.on("serial:error", (_, message) => callback(message)),
     onBuild: (event, callback) => ipcRenderer.on("build:" + event, (_, data) => callback(data)),
 });

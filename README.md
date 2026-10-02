@@ -333,18 +333,9 @@ ESP-IDF v5.4.1 → Target MCU
 
 ```
 volt/
-├── src/volt/               Compiler (Python)
-│   ├── compiler/           7-pass transpiler pipeline
-│   ├── cli/                CLI tool (click-based)
-│   └── paths.py            Cross-platform path resolution
 ├── framework/              C runtime (ESP-IDF components)
 │   ├── include/volt/       Public headers
 │   └── src/                Implementation
-├── volt-vscode/            VS Code extension
-│   ├── extension.js        Sidebar, commands, device polling
-│   ├── server/             LSP server (pygls)
-│   └── syntaxes/           TextMate grammar
-├── tests/                  Compiler test suite (500+ tests)
 ├── examples/               6 example programs
 └── docs/                   Architecture documentation
 ```

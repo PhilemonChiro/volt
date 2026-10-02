@@ -27,8 +27,10 @@ static SemaphoreHandle_t s_mutex = NULL;
 #define FLUSH_INTERVAL_MS 30000
 #define MAX_DIRTY_ENTRIES 32
 
-// Boot loop detection: if the device boots more than MAX_BOOT_CRASHES
-// times without staying alive for MIN_STABLE_MS, trigger factory reset.
+// Boot loop detection: if the device crashes (panic / watchdog) more than
+// MAX_BOOT_CRASHES times in a row without staying alive for MIN_STABLE_MS
+// after boot, trigger factory reset. Power-on, reset-button, flashing and
+// brownout boots don't count — erasing storage can't fix those.
 #define MAX_BOOT_CRASHES 5
 #define MIN_STABLE_MS    60000
 
@@ -155,6 +157,18 @@ static void check_boot_loop(void)
     // Read crash counter
     int32_t crash_count = 0;
     nvs_get_i32(handle, "_crashes", &crash_count);
+
+    esp_reset_reason_t reason = esp_reset_reason();
+    bool crashed = reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT ||
+                   reason == ESP_RST_TASK_WDT || reason == ESP_RST_WDT;
+    if (!crashed) {
+        if (crash_count != 0) {
+            nvs_set_i32(handle, "_crashes", 0);
+            nvs_commit(handle);
+        }
+        nvs_close(handle);
+        return;
+    }
 
     if (crash_count >= MAX_BOOT_CRASHES) {
         log_error("storage", "boot loop detected (%ld crashes) — factory reset", (long)crash_count);
@@ -537,15 +551,11 @@ volt_error_t storage_flush(void)
     nvs_close(handle);
 
     // Clear crash counter after stable operation
+    // (measured from boot, not from the first flush)
     static bool crash_cleared = false;
-    static uint32_t init_tick = 0;
-    if (!crash_cleared) {
-        if (init_tick == 0) init_tick = xTaskGetTickCount() * portTICK_PERIOD_MS;
-        uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
-        if (now - init_tick > MIN_STABLE_MS) {
-            clear_crash_counter();
-            crash_cleared = true;
-        }
+    if (!crash_cleared && esp_timer_get_time() / 1000 > MIN_STABLE_MS) {
+        clear_crash_counter();
+        crash_cleared = true;
     }
 
     log_debug("storage", "flushed %d entries to flash", written);

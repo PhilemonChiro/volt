@@ -164,9 +164,9 @@ function setFileModified(modified) {
 }
 
 // ---- Actions ----
-async function loadProject(projectPath) {
+async function loadProject(projectPath, file) {
     currentProject = projectPath;
-    const voltFile = joinPath(projectPath, "main.volt");
+    const voltFile = file || joinPath(projectPath, "main.volt");
     currentFile = voltFile;
     // Drop the previous project's diagrams so a stale one never lingers.
     diagramsView.reset();
@@ -444,19 +444,16 @@ async function onRun() {
         );
     }
 
-    // Pre-flight: if the ESP32 chip probe came back "silent", flashing will
-    // fail 30 seconds from now with "No serial data received." Abort early
-    // with a clearer hint instead of letting the user wait.
+    // Pre-flight: the probe runs with --before no_reset, so a board running
+    // normal firmware reads "silent" even though esptool's auto-reset at
+    // flash time reaches it fine. Warn, don't block.
     if (device.probe === "silent") {
         bottomPanel.appendOutput(
-            `Cannot flash ${device.chip} on ${device.port} — chip didn't respond to probe. ` +
-            `Possible causes: charge-only USB cable, board not powered, board running ` +
-            `firmware that doesn't enter download mode on RTS/DTR (clone boards). ` +
-            `Hold BOOT, tap RESET, release BOOT, then click Run.`,
-            "error"
+            `${device.chip} on ${device.port} didn't answer the idle probe (normal while ` +
+            `firmware is running). Flashing with auto-reset — if it fails, check the cable ` +
+            `or hold BOOT while it connects.`,
+            "warn"
         );
-        statusBar.setBuild("No chip response");
-        return;
     }
 
     // Show pipeline
@@ -527,10 +524,10 @@ async function onMonitor() {
         bottomPanel.setMonitorConnected(false);
         bottomPanel.appendOutput("Serial monitor stopped", "info");
     } else {
-        const baud = device.chip.includes("8266") ? 74880 : 115200;
-        await window.volt.startMonitor(device.port, baud);
+        // volt picks the baud: serial.defaultBaud setting, else 115200.
+        await window.volt.startMonitor(device.port);
         bottomPanel.setMonitorConnected(true);
-        bottomPanel.appendOutput(`Serial monitor: ${device.port} @ ${baud} baud`, "success");
+        bottomPanel.appendOutput(`Serial monitor: ${device.port}`, "success");
     }
 }
 
@@ -723,10 +720,15 @@ function checkChipMismatch() {
 // the signed-import consent sheet for the requested library.
 window.volt.onDeepLinkInstall(({ prefix, version }) => library.installFromGrid(prefix, version));
 
+// A .volt file or project folder opened from the OS (Finder, `open -a`, CLI arg).
+window.volt.onOpenPath(({ folder, file }) => loadProject(folder, file));
+window.volt.takePendingOpenPath().then((p) => { if (p) loadProject(p.folder, p.file); });
+
 // Wire serial events from main process
 window.volt.onSerial((data) => bottomPanel.appendMonitor(data.line));
 window.volt.onSerialDisconnected(() => bottomPanel.setMonitorConnected(false));
 window.volt.onSerialConnected(() => bottomPanel.setMonitorConnected(true));
+window.volt.onSerialError((message) => bottomPanel.appendOutput("Serial monitor: " + message, "error"));
 
 // Wire build progress events (single handler — registered once, not per-run).
 // main.js is the source of truth for the percent (per-file build steps, real

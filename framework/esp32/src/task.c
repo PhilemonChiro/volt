@@ -8,6 +8,7 @@
 #include "esp_system.h"
 #include "esp_attr.h"
 #include "esp_timer.h"
+#include "esp_rom_sys.h"
 
 // ESP32 has gptimer for hardware timer ISRs; ESP8266 uses esp_timer only
 #if !defined(CONFIG_IDF_TARGET_ESP8266) && !defined(ESP8266_RTOS_SDK)
@@ -240,7 +241,11 @@ volt_error_t volt_critical_create(const char *name, volt_crit_func_t func,
 
 void volt_delay_ms(uint32_t ms)
 {
+    // Whole ticks yield; the sub-tick remainder busy-waits. At 100 Hz a plain
+    // vTaskDelay(ms / 10) turns 1-9 ms delays into 0 (broke LCD clear timing).
     vTaskDelay(ms / portTICK_PERIOD_MS);
+    uint32_t rem = ms % portTICK_PERIOD_MS;
+    if (rem) esp_rom_delay_us(rem * 1000);
 }
 
 uint32_t volt_tick_ms(void)

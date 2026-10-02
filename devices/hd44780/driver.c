@@ -92,3 +92,18 @@ void hd44780_backlight(hd44780_t *dev, uint8_t on)
     uint8_t val = on ? LCD_BL : 0;
     volt_i2c_write(dev->bus_id, dev->addr, &val, 1);
 }
+
+void hd44780_create_char(hd44780_t *dev, uint8_t slot,
+                         uint8_t r0, uint8_t r1, uint8_t r2, uint8_t r3,
+                         uint8_t r4, uint8_t r5, uint8_t r6, uint8_t r7)
+{
+    uint8_t rows[8] = { r0, r1, r2, r3, r4, r5, r6, r7 };
+    lcd_command(dev, 0x40 | ((slot & 0x07) << 3));
+    for (int i = 0; i < 8; i++) lcd_send(dev, rows[i] & 0x1F, LCD_RS);
+    lcd_command(dev, 0x80); // back to DDRAM; caller sets the cursor
+}
+
+void hd44780_write_char(hd44780_t *dev, uint8_t code)
+{
+    lcd_send(dev, code, LCD_RS);
+}

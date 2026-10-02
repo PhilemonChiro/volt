@@ -18,70 +18,28 @@ import * as dialog from "./dialog.js";
 
 const api = window.volt;
 
-// Stages are platform-dependent — macOS uses portable tarballs (no apt),
-// skips Linux-only steps (udev), and skips macOS-skipped steps (picotool).
-// stagesFor(chip, platform) returns the list the dialog should render.
-function stagesFor(chip, platform) {
-    const c = chip.toLowerCase();
-    const isMac   = platform === "darwin";
-    const isLinux = platform === "linux";
+// Stage rows come from volt: prefilled from `volt toolchain status` and
+// extended by any stage_start the install reports. Weights are rough shares
+// of a cold install's time (≈ download size). SDK packs are keyed
+// "sdks/<pack>", so they match by prefix.
+const STAGE_WEIGHTS = { "xtensa-esp-elf": 85, "arm-gnu-toolchain": 85 };
 
-    if (c.includes("rp2040") || c.includes("pico")) {
-        if (isMac) {
-            return [
-                { id: "check",     label: "Check system",                weight: 2  },
-                { id: "arm-gcc",   label: "Install ARM GCC compiler",     weight: 65 },
-                { id: "cmake",     label: "Install CMake + Ninja",         weight: 12 },
-                { id: "clone-sdk", label: "Download Pico SDK",             weight: 21 },
-            ];
-        }
-        // Linux full path
-        return [
-            { id: "check",     label: "Check system",                     weight: 2  },
-            { id: "arm-gcc",   label: "Install ARM GCC compiler (apt)",    weight: 30 },
-            { id: "cmake",     label: "Install CMake (apt)",               weight: 5  },
-            { id: "clone-sdk", label: "Download Pico SDK",                 weight: 25 },
-            { id: "picotool",  label: "Build & install picotool",          weight: 30 },
-            { id: "udev",      label: "Configure USB permissions (udev)",  weight: 8  },
-        ];
+function stageWeight(id) {
+    if (STAGE_WEIGHTS[id]) return STAGE_WEIGHTS[id];
+    return id.startsWith("sdks/") ? 10 : 5;
+}
+
+function addStage(state, id, label) {
+    if (!id || state.stages.some(s => s.id === id)) return;
+    const s = { id, label: label || id, weight: stageWeight(id),
+                status: "pending", detail: "", subPct: 0, durationMs: 0 };
+    state.stages.push(s);
+    const refs = activeDialog && activeDialog.refs;
+    if (refs && refs.stagesEl) {
+        refs.stagesEl.insertAdjacentHTML("beforeend", buildStageMarkup(s));
+        updateStage(activeDialog.overlay, s);
     }
-    if (c.includes("8266")) {
-        return [
-            { id: "check",       label: "Check system",                       weight: 2  },
-            { id: "deps",        label: isMac ? "Install CMake + Ninja" : "Install system deps (apt)", weight: 8 },
-            { id: "clone-idf",   label: "Download ESP8266 RTOS SDK",          weight: 40 },
-            { id: "install-idf", label: "Install xtensa-lx compiler + tools", weight: 45 },
-            { id: "env",         label: "Wrap up",                            weight: 5  },
-        ];
-    }
-    if (c.includes("esp32") || c.includes("esp")) {
-        return [
-            { id: "check",       label: "Check system",                                weight: 2  },
-            { id: "deps",        label: isMac ? "Install CMake + Ninja" : "Install system deps (apt)", weight: 8 },
-            { id: "clone-idf",   label: "Download ESP-IDF",                            weight: 35 },
-            { id: "install-idf", label: "Install xtensa compiler + Python tools",      weight: 50 },
-            { id: "env",         label: "Wrap up",                                     weight: 5  },
-        ];
-    }
-    if (c.includes("stm32")) {
-        if (isMac) {
-            return [
-                { id: "check",   label: "Check system",                weight: 2  },
-                { id: "arm-gcc", label: "Install ARM GCC compiler",     weight: 80 },
-                { id: "openocd", label: "OpenOCD (manual install)",     weight: 13 },
-                { id: "env",     label: "Wrap up",                      weight: 5  },
-            ];
-        }
-        return [
-            { id: "check",   label: "Check system",                  weight: 2  },
-            { id: "arm-gcc", label: "Install ARM GCC compiler (apt)", weight: 50 },
-            { id: "openocd", label: "Install OpenOCD (apt)",          weight: 30 },
-            { id: "env",     label: "Wrap up",                        weight: 18 },
-        ];
-    }
-    return [
-        { id: "check", label: "Check system", weight: 100 },
-    ];
+    markOverallDirty();
 }
 
 const CHIP_LABELS = {
@@ -99,11 +57,9 @@ export function show({ chip, onComplete, onCancel }) {
         return;
     }
 
-    const platform = api.platform || "linux";
-    const stageDefs = stagesFor(chip, platform);
     const state = {
         chip,
-        stages: stageDefs.map(s => ({ ...s, status: "pending", detail: "", subPct: 0, durationMs: 0 })),
+        stages: [],
         currentId: null,
         startedAt: Date.now(),
         log: [],
@@ -138,6 +94,11 @@ export function show({ chip, onComplete, onCancel }) {
 
     buildSkeleton(overlay, state);
     startTicker();
+    api.toolchainComponents(chip).then((components) => {
+        if (!activeDialog || activeDialog.state !== state) return;
+        for (const c of components) addStage(state, c.id, c.name);
+        scheduleFlush(state, overlay);
+    }).catch(() => {});
     startInstall(state);
 }
 
@@ -159,6 +120,7 @@ function handleEvent(state, event, overlay) {
     if (!event) return;
     switch (event.type) {
         case "stage_start": {
+            addStage(state, event.id, event.name);
             const s = state.stages.find(x => x.id === event.id);
             if (s) { s.status = "running"; s.detail = ""; s.subPct = 0; s.startedAt = Date.now(); }
             state.currentId = event.id;

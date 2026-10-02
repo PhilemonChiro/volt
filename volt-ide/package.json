@@ -19,20 +19,13 @@
     "postinstall": "node scripts/fix-sandbox.js",
     "stage:sdk": "node scripts/stage-sdk.js",
     "build:icons": "node scripts/build-icons.js",
-    "bundle:python": "node scripts/bundle-python.js",
+    "build:volt": "node scripts/build-volt.js",
     "publish:toolchains": "node scripts/publish-toolchains.js",
     "prepack": "npm run stage:sdk && npm run build:icons",
-    "bundle:python:mac": "npm run bundle:python -- --platform=darwin-arm64 && npm run bundle:python -- --platform=darwin-x64",
-    "bundle:python:linux": "npm run bundle:python -- --platform=linux-x64",
-    "bundle:python:win": "npm run bundle:python -- --platform=win32-x64",
-    "pack:linux": "npm run prepack && npm run bundle:python:linux && electron-builder --linux",
-    "pack:win": "npm run prepack && npm run bundle:python:win && electron-builder --win",
-    "pack:mac": "npm run prepack && npm run bundle:python:mac && electron-builder --mac",
-    "pack:all": "npm run prepack && npm run bundle:python:linux && npm run bundle:python:win && electron-builder --linux --win"
-  },
-  "dependencies": {
-    "@serialport/parser-readline": "^13.0.0",
-    "serialport": "^13.0.0"
+    "pack:linux": "npm run prepack && npm run build:volt -- linux-x64 && electron-builder --linux",
+    "pack:win": "npm run prepack && npm run build:volt -- win32-x64 && electron-builder --win",
+    "pack:mac": "npm run prepack && npm run build:volt -- darwin-arm64 darwin-x64 && electron-builder --mac",
+    "pack:all": "npm run prepack && npm run build:volt -- linux-x64 win32-x64 && electron-builder --linux --win"
   },
   "devDependencies": {
     "electron": "^41.2.0",
@@ -44,7 +37,6 @@
     "appId": "dev.volt.ide",
     "productName": "Volt IDE",
     "copyright": "Copyright © 2026 Philemon Chiro",
-    "afterPack": "scripts/afterPack.js",
     "protocols": [
       {
         "name": "Volt Library",
@@ -63,6 +55,7 @@
       "assets/**",
       "lib/**",
       "scripts/**",
+      "bin/**",
       "src/**",
       "package.json",
       "!**/*.{md,log}",
@@ -70,7 +63,8 @@
       "!**/__pycache__/**"
     ],
     "asarUnpack": [
-      "scripts/**/*"
+      "scripts/**/*",
+      "bin/**/*"
     ],
     "extraResources": [
       {
@@ -106,8 +100,6 @@
     },
     "deb": {
       "depends": [
-        "python3 (>= 3.10)",
-        "python3-lark",
         "libnotify4",
         "libgconf-2-4 | libgconf2-4"
       ]
@@ -145,6 +137,15 @@
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
       "hardenedRuntime": false
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": "volt",
+        "name": "Volt Source",
+        "description": "Volt program",
+        "role": "Editor",
+        "mimeType": "text/x-volt"
+      }
+    ]
   }
 }

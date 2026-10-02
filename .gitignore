@@ -23,9 +23,6 @@ volt-ide-v2/dist/
 volt-electron/dist/
 volt-ide/src-tauri/target/
 
-# VS Code extension
-volt-vscode/*.vsix
-
 # OS files
 .DS_Store
 Thumbs.db
@@ -84,7 +81,6 @@ compiler/test_grammar.py
 
 # Lock files
 package-lock.json
-volt-vscode/package-lock.json
 
 # Hardcoded paths in CLI/extension (machine-specific)
 # Users will configure their own paths after cloning

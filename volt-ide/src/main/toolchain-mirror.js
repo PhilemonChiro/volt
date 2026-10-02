@@ -50,154 +50,190 @@ const CACHE_TTL_MS   = 24 * 60 * 60 * 1000; // 24h
 //   chip_requirements[chip][platform] — list of asset keys to install
 //   known_issues — [{ platform, min_macos?, asset, note }]
 const FALLBACK_MANIFEST = {
-    schema_version: 1,
-    tag: MIRROR_TAG,
+    "schema_version": 1,
+    "tag": MIRROR_TAG,
     // Monotonic counter, bumped on every publish. The client refuses any
     // fetched manifest whose version is below the highest it has accepted, so a
     // replay of an older signed manifest can't downgrade the pinned toolchains.
-    manifest_version: 1,
-    min_ide_version: "2.0.10",
-    assets: {
+    // Mirrors the signed v8 in cli/internal/toolchain/fallback-manifest.json.
+    "manifest_version": 8,
+    "min_ide_version": "2.0.10",
+    "assets": {
         "arm-gnu-toolchain-13.2-darwin-arm64": {
-            filename:   "arm-gnu-toolchain-13.2-darwin-arm64.tar.xz",
-            url:        `${MIRROR_BASE}/arm-gnu-toolchain-13.2-darwin-arm64.tar.xz`,
-            upstream:   "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-darwin-arm64-arm-none-eabi.tar.xz",
-            sha256:     "39c44f8af42695b7b871df42e346c09fee670ea8dfc11f17083e296ea2b0d279",
-            size_bytes: 129557320,
-            extract:    { format: "tar.xz", strip_components: 1 },
-            install_to: "arm-gnu-toolchain",
-            exposes:    { "arm-none-eabi-gcc": "bin/arm-none-eabi-gcc" },
-            kind:       "compiler",
-            version:    "13.2.rel1",
+            "filename": "arm-gnu-toolchain-13.2-darwin-arm64.tar.xz",
+            "url": "https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/arm-gnu-toolchain-13.2-darwin-arm64.tar.xz",
+            "upstream": "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-darwin-arm64-arm-none-eabi.tar.xz",
+            "sha256": "39c44f8af42695b7b871df42e346c09fee670ea8dfc11f17083e296ea2b0d279",
+            "size_bytes": 129557320,
+            "extract": {
+                "format": "tar.xz",
+                "strip_components": 1
+            },
+            "install_to": "arm-gnu-toolchain",
+            "exposes": {
+                "arm-none-eabi-gcc": "bin/arm-none-eabi-gcc"
+            },
+            "kind": "compiler",
+            "version": "13.2.rel1",
+            "mirrors": [
+                "https://toolchains.sigma.co.zw/toolchains-2026.05/arm-gnu-toolchain-13.2-darwin-arm64.tar.xz"
+            ]
         },
         "arm-gnu-toolchain-13.2-darwin-x86_64": {
-            filename:   "arm-gnu-toolchain-13.2-darwin-x86_64.tar.xz",
-            url:        `${MIRROR_BASE}/arm-gnu-toolchain-13.2-darwin-x86_64.tar.xz`,
-            upstream:   "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-darwin-x86_64-arm-none-eabi.tar.xz",
-            sha256:     "075faa4f3e8eb45e59144858202351a28706f54a6ec17eedd88c9fb9412372cc",
-            size_bytes: 139345848,
-            extract:    { format: "tar.xz", strip_components: 1 },
-            install_to: "arm-gnu-toolchain",
-            exposes:    { "arm-none-eabi-gcc": "bin/arm-none-eabi-gcc" },
-            kind:       "compiler",
-            version:    "13.2.rel1",
+            "filename": "arm-gnu-toolchain-13.2-darwin-x86_64.tar.xz",
+            "url": "https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/arm-gnu-toolchain-13.2-darwin-x86_64.tar.xz",
+            "upstream": "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-darwin-x86_64-arm-none-eabi.tar.xz",
+            "sha256": "075faa4f3e8eb45e59144858202351a28706f54a6ec17eedd88c9fb9412372cc",
+            "size_bytes": 139345848,
+            "extract": {
+                "format": "tar.xz",
+                "strip_components": 1
+            },
+            "install_to": "arm-gnu-toolchain",
+            "exposes": {
+                "arm-none-eabi-gcc": "bin/arm-none-eabi-gcc"
+            },
+            "kind": "compiler",
+            "version": "13.2.rel1",
+            "mirrors": [
+                "https://toolchains.sigma.co.zw/toolchains-2026.05/arm-gnu-toolchain-13.2-darwin-x86_64.tar.xz"
+            ]
         },
         "arm-gnu-toolchain-13.2-linux-x64": {
-            filename:   "arm-gnu-toolchain-13.2-linux-x64.tar.xz",
-            url:        `${MIRROR_BASE}/arm-gnu-toolchain-13.2-linux-x64.tar.xz`,
-            upstream:   "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi.tar.xz",
-            sha256:     "6cd1bbc1d9ae57312bcd169ae283153a9572bd6a8e4eeae2fedfbc33b115fdbb",
-            size_bytes: 179347712,
-            extract:    { format: "tar.xz", strip_components: 1 },
-            install_to: "arm-gnu-toolchain",
-            exposes:    { "arm-none-eabi-gcc": "bin/arm-none-eabi-gcc" },
-            kind:       "compiler",
-            version:    "13.2.rel1",
+            "filename": "arm-gnu-toolchain-13.2-linux-x64.tar.xz",
+            "url": "https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/arm-gnu-toolchain-13.2-linux-x64.tar.xz",
+            "upstream": "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi.tar.xz",
+            "sha256": "6cd1bbc1d9ae57312bcd169ae283153a9572bd6a8e4eeae2fedfbc33b115fdbb",
+            "size_bytes": 179347712,
+            "extract": {
+                "format": "tar.xz",
+                "strip_components": 1
+            },
+            "install_to": "arm-gnu-toolchain",
+            "exposes": {
+                "arm-none-eabi-gcc": "bin/arm-none-eabi-gcc"
+            },
+            "kind": "compiler",
+            "version": "13.2.rel1",
+            "mirrors": [
+                "https://toolchains.sigma.co.zw/toolchains-2026.05/arm-gnu-toolchain-13.2-linux-x64.tar.xz"
+            ]
         },
-        "cmake-3.30.5-macos-universal": {
-            filename:   "cmake-3.30.5-macos-universal.tar.gz",
-            url:        `${MIRROR_BASE}/cmake-3.30.5-macos-universal.tar.gz`,
-            upstream:   "https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5-macos-universal.tar.gz",
-            sha256:     "3d603e507c7579b13518ef752b4ffcf3ed479fba80ee171d7d85da8153e869d0",
-            size_bytes: 76493076,
-            extract:    { format: "tar.gz", strip_components: 1 },
-            install_to: "cmake",
-            exposes:    { "cmake": "CMake.app/Contents/bin/cmake" },
-            kind:       "build-system",
-            version:    "3.30.5",
+        "volt-sdk-esp32-idf5.4-ac74c4d4fd98": {
+            "filename": "volt-sdk-esp32-idf5.4-ac74c4d4fd98.tar.gz",
+            "url": "https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/volt-sdk-esp32-idf5.4-ac74c4d4fd98.tar.gz",
+            "mirrors": [
+                "https://toolchains.sigma.co.zw/toolchains-2026.05/volt-sdk-esp32-idf5.4-ac74c4d4fd98.tar.gz"
+            ],
+            "sha256": "6390a1694ecb0179c62ba863c155c56b2b57a8a20421c661ab14f539dfc24b11",
+            "size_bytes": 17889283,
+            "extract": {
+                "format": "tar.gz",
+                "strip_components": 1
+            },
+            "install_to": "sdks/volt-sdk-esp32-idf5.4-ac74c4d4fd98",
+            "exposes": {
+                "build.json": "build.json"
+            },
+            "kind": "sdk-pack",
+            "version": "esp-idf v5.4 (profile ac74c4d4fd98)"
         },
-        "ninja-1.12.1-mac": {
-            filename:   "ninja-1.12.1-mac.zip",
-            url:        `${MIRROR_BASE}/ninja-1.12.1-mac.zip`,
-            upstream:   "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip",
-            sha256:     "89a287444b5b3e98f88a945afa50ce937b8ffd1dcc59c555ad9b1baf855298c9",
-            size_bytes: 281130,
-            extract:    { format: "zip", strip_components: 0 },
-            install_to: "ninja",
-            exposes:    { "ninja": "ninja" },
-            kind:       "build-system",
-            version:    "1.12.1",
+        "xtensa-esp-elf-14.2.0-darwin-arm64": {
+            "filename": "xtensa-esp-elf-14.2.0_20241119-aarch64-apple-darwin.tar.xz",
+            "url": "https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/xtensa-esp-elf-14.2.0_20241119-aarch64-apple-darwin.tar.xz",
+            "mirrors": [
+                "https://toolchains.sigma.co.zw/toolchains-2026.05/xtensa-esp-elf-14.2.0_20241119-aarch64-apple-darwin.tar.xz"
+            ],
+            "upstream": "https://github.com/espressif/crosstool-NG/releases/download/esp-14.2.0_20241119/xtensa-esp-elf-14.2.0_20241119-aarch64-apple-darwin.tar.xz",
+            "sha256": "b9732bb3cdcd6a50420c25eb9a8d90eb1216a0a0a274c8ffd4c2037167b5081f",
+            "size_bytes": 167948176,
+            "extract": {
+                "format": "tar.xz",
+                "strip_components": 1
+            },
+            "install_to": "xtensa-esp-elf",
+            "exposes": {
+                "xtensa-esp32-elf-gcc": "bin/xtensa-esp32-elf-gcc"
+            },
+            "kind": "compiler",
+            "version": "esp-14.2.0_20241119"
         },
-        // picotool — direct-USB RP2040 flashing. Built from
-        // github.com/raspberrypi/picotool (no official prebuilts upstream),
-        // bundled with libusb-1.0 alongside, install_name/RPATH rewritten
-        // to look in ./lib next to the binary. ~750-870 KB per platform.
-        "picotool-2.1-darwin-arm64": {
-            filename:   "picotool-2.1-darwin-arm64.tar.gz",
-            url:        `${MIRROR_BASE}/picotool-2.1-darwin-arm64.tar.gz`,
-            upstream:   "https://github.com/raspberrypi/picotool/releases/tag/2.1.0",
-            sha256:     "b8df42935a0ee2a73ae8aa40d9c1b66112f07f1c640e567743a5ff9d64a885ef",
-            size_bytes: 750994,
-            extract:    { format: "tar.gz", strip_components: 0 },
-            install_to: "picotool",
-            exposes:    { "picotool": "picotool" },
-            kind:       "flash-tool",
-            version:    "2.1.0",
+        "xtensa-esp-elf-14.2.0-darwin-x86_64": {
+            "filename": "xtensa-esp-elf-14.2.0_20241119-x86_64-apple-darwin.tar.xz",
+            "url": "https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/xtensa-esp-elf-14.2.0_20241119-x86_64-apple-darwin.tar.xz",
+            "mirrors": [
+                "https://toolchains.sigma.co.zw/toolchains-2026.05/xtensa-esp-elf-14.2.0_20241119-x86_64-apple-darwin.tar.xz"
+            ],
+            "upstream": "https://github.com/espressif/crosstool-NG/releases/download/esp-14.2.0_20241119/xtensa-esp-elf-14.2.0_20241119-x86_64-apple-darwin.tar.xz",
+            "sha256": "1ca7a93825d5b84f6547fa73e6174acadb9af5c877f365e50e176936784383ea",
+            "size_bytes": 182782108,
+            "extract": {
+                "format": "tar.xz",
+                "strip_components": 1
+            },
+            "install_to": "xtensa-esp-elf",
+            "exposes": {
+                "xtensa-esp32-elf-gcc": "bin/xtensa-esp32-elf-gcc"
+            },
+            "kind": "compiler",
+            "version": "esp-14.2.0_20241119"
         },
-        "picotool-2.1-linux-x64": {
-            filename:   "picotool-2.1-linux-x64.tar.gz",
-            url:        `${MIRROR_BASE}/picotool-2.1-linux-x64.tar.gz`,
-            upstream:   "https://github.com/raspberrypi/picotool/releases/tag/2.1.0",
-            sha256:     "016ff925a9e1284219e56252d43cf43c036f8b4278c8930b31fc8d8fc6e708cc",
-            size_bytes: 864086,
-            extract:    { format: "tar.gz", strip_components: 0 },
-            install_to: "picotool",
-            exposes:    { "picotool": "picotool" },
-            kind:       "flash-tool",
-            version:    "2.1.0",
-        },
-        "python-3.12.14-darwin-arm64": {
-            filename:   "cpython-3.12.14+20260929-aarch64-apple-darwin-install_only.tar.gz",
-            upstream:   "https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-aarch64-apple-darwin-install_only.tar.gz",
-            sha256:     "de6b8f94fa765639b423ea353ab340669704c7186f96ee3cab389dcfde770c3c",
-            size_bytes: 25156032,
-            extract:    { format: "tar.gz", strip_components: 1 },
-            install_to: "python",
-            exposes:    { "python3": "bin/python3" },
-            kind:       "runtime",
-            version:    "3.12.14",
-        },
-        "python-3.12.14-darwin-x86_64": {
-            filename:   "cpython-3.12.14+20260929-x86_64-apple-darwin-install_only.tar.gz",
-            upstream:   "https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-x86_64-apple-darwin-install_only.tar.gz",
-            sha256:     "f51ec8a7fa0ede129a5e2e942a2a453ba4830adaca2289da4449390e42443292",
-            size_bytes: 24847838,
-            extract:    { format: "tar.gz", strip_components: 1 },
-            install_to: "python",
-            exposes:    { "python3": "bin/python3" },
-            kind:       "runtime",
-            version:    "3.12.14",
-        },
-        "python-3.12.14-linux-x64": {
-            filename:   "cpython-3.12.14+20260929-x86_64-unknown-linux-gnu-install_only.tar.gz",
-            upstream:   "https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-x86_64-unknown-linux-gnu-install_only.tar.gz",
-            sha256:     "06c90b93f419b63371c18f20fed0558a1a901f6518c3c24f755077e048447e7f",
-            size_bytes: 66919180,
-            extract:    { format: "tar.gz", strip_components: 1 },
-            install_to: "python",
-            exposes:    { "python3": "bin/python3" },
-            kind:       "runtime",
-            version:    "3.12.14",
-        },
+        "xtensa-esp-elf-14.2.0-linux-x64": {
+            "filename": "xtensa-esp-elf-14.2.0_20241119-x86_64-linux-gnu.tar.xz",
+            "url": "https://github.com/PhilemonChiro/volt-toolchains/releases/download/toolchains-2026.05/xtensa-esp-elf-14.2.0_20241119-x86_64-linux-gnu.tar.xz",
+            "mirrors": [
+                "https://toolchains.sigma.co.zw/toolchains-2026.05/xtensa-esp-elf-14.2.0_20241119-x86_64-linux-gnu.tar.xz"
+            ],
+            "upstream": "https://github.com/espressif/crosstool-NG/releases/download/esp-14.2.0_20241119/xtensa-esp-elf-14.2.0_20241119-x86_64-linux-gnu.tar.xz",
+            "sha256": "e3e6dcf3d275c3c9ab0e4c8a9d93fd10e7efc035d435460576c9d95b4140c676",
+            "size_bytes": 174652716,
+            "extract": {
+                "format": "tar.xz",
+                "strip_components": 1
+            },
+            "install_to": "xtensa-esp-elf",
+            "exposes": {
+                "xtensa-esp32-elf-gcc": "bin/xtensa-esp32-elf-gcc"
+            },
+            "kind": "compiler",
+            "version": "esp-14.2.0_20241119"
+        }
     },
-    chip_requirements: {
-        rp2040: {
-            "darwin-arm64":  ["arm-gnu-toolchain-13.2-darwin-arm64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac", "picotool-2.1-darwin-arm64"],
-            "darwin-x86_64": ["arm-gnu-toolchain-13.2-darwin-x86_64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"], // picotool darwin-x86_64 not yet built
-            "linux-x64":     ["picotool-2.1-linux-x64"], // apt handles gcc/cmake/ninja; picotool isn't packaged there
+    "chip_requirements": {
+        "esp32": {
+            "darwin-arm64": [
+                "xtensa-esp-elf-14.2.0-darwin-arm64",
+                "volt-sdk-esp32-idf5.4-ac74c4d4fd98"
+            ],
+            "darwin-x86_64": [
+                "xtensa-esp-elf-14.2.0-darwin-x86_64",
+                "volt-sdk-esp32-idf5.4-ac74c4d4fd98"
+            ],
+            "linux-x64": [
+                "xtensa-esp-elf-14.2.0-linux-x64",
+                "volt-sdk-esp32-idf5.4-ac74c4d4fd98"
+            ]
         },
-        esp32: {
-            "darwin-arm64":  ["python-3.12.14-darwin-arm64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
-            "darwin-x86_64": ["python-3.12.14-darwin-x86_64", "cmake-3.30.5-macos-universal", "ninja-1.12.1-mac"],
-            "linux-x64":     ["python-3.12.14-linux-x64"],
+        "rp2040": {
+            "darwin-arm64": [
+                "arm-gnu-toolchain-13.2-darwin-arm64"
+            ],
+            "darwin-x86_64": [
+                "arm-gnu-toolchain-13.2-darwin-x86_64"
+            ],
+            "linux-x64": []
         },
-        stm32f103: {
-            "darwin-arm64":  ["arm-gnu-toolchain-13.2-darwin-arm64"],
-            "darwin-x86_64": ["arm-gnu-toolchain-13.2-darwin-x86_64"],
-            "linux-x64":     [],
-        },
+        "stm32f103": {
+            "darwin-arm64": [
+                "arm-gnu-toolchain-13.2-darwin-arm64"
+            ],
+            "darwin-x86_64": [
+                "arm-gnu-toolchain-13.2-darwin-x86_64"
+            ],
+            "linux-x64": []
+        }
     },
-    known_issues: [],
+    "known_issues": []
 };
 
 // ============================================================

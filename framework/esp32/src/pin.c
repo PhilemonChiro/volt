@@ -5,6 +5,7 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/dac.h"
+#include "driver/adc.h"
 #include "esp_attr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -37,6 +38,9 @@ static uint8_t pin_output_state[PIN_COUNT];
 
 // Whether the GPIO ISR service has been installed (one-time init)
 static bool isr_service_installed = false;
+static bool adc_width_configured = false;
+static bool adc1_channel_configured[ADC1_CHANNEL_MAX];
+static bool adc2_channel_configured[ADC2_CHANNEL_MAX];
 
 // ISR wrapper: ESP-IDF gives us (void *arg), but our callback wants (pin, arg).
 // We store the pin number and user callback in a small struct per pin.
@@ -204,6 +208,71 @@ int pin_read(uint8_t pin)
     return gpio_get_level(pin);
 }
 
+static bool pin_to_adc1_channel(uint8_t pin, adc1_channel_t *channel)
+{
+    switch (pin) {
+    case 36: *channel = ADC1_CHANNEL_0; return true;
+    case 37: *channel = ADC1_CHANNEL_1; return true;
+    case 38: *channel = ADC1_CHANNEL_2; return true;
+    case 39: *channel = ADC1_CHANNEL_3; return true;
+    case 32: *channel = ADC1_CHANNEL_4; return true;
+    case 33: *channel = ADC1_CHANNEL_5; return true;
+    case 34: *channel = ADC1_CHANNEL_6; return true;
+    case 35: *channel = ADC1_CHANNEL_7; return true;
+    default: return false;
+    }
+}
+
+static bool pin_to_adc2_channel(uint8_t pin, adc2_channel_t *channel)
+{
+    switch (pin) {
+    case 4:  *channel = ADC2_CHANNEL_0; return true;
+    case 0:  *channel = ADC2_CHANNEL_1; return true;
+    case 2:  *channel = ADC2_CHANNEL_2; return true;
+    case 15: *channel = ADC2_CHANNEL_3; return true;
+    case 13: *channel = ADC2_CHANNEL_4; return true;
+    case 12: *channel = ADC2_CHANNEL_5; return true;
+    case 14: *channel = ADC2_CHANNEL_6; return true;
+    case 27: *channel = ADC2_CHANNEL_7; return true;
+    case 25: *channel = ADC2_CHANNEL_8; return true;
+    case 26: *channel = ADC2_CHANNEL_9; return true;
+    default: return false;
+    }
+}
+
+int pin_read_analog(uint8_t pin)
+{
+    if (!is_valid_pin(pin)) return 0;
+
+    adc1_channel_t adc1;
+    if (pin_to_adc1_channel(pin, &adc1)) {
+        if (!adc_width_configured) {
+            adc1_config_width(ADC_WIDTH_BIT_12);
+            adc_width_configured = true;
+        }
+        if (!adc1_channel_configured[adc1]) {
+            adc1_config_channel_atten(adc1, ADC_ATTEN_DB_12);
+            adc1_channel_configured[adc1] = true;
+        }
+        return adc1_get_raw(adc1);
+    }
+
+    adc2_channel_t adc2;
+    if (pin_to_adc2_channel(pin, &adc2)) {
+        if (!adc2_channel_configured[adc2]) {
+            adc2_config_channel_atten(adc2, ADC_ATTEN_DB_12);
+            adc2_channel_configured[adc2] = true;
+        }
+        int raw = 0;
+        if (adc2_get_raw(adc2, ADC_WIDTH_BIT_12, &raw) != ESP_OK) {
+            return 0;
+        }
+        return raw;
+    }
+
+    return 0;
+}
+
 volt_error_t pin_on_change(uint8_t pin, pin_callback_t callback, void *arg)
 {
     if (!is_valid_pin(pin)) return VOLT_ERR_INVALID_PIN;
@@ -226,7 +295,7 @@ volt_error_t pin_on_change(uint8_t pin, pin_callback_t callback, void *arg)
 
     // Enable interrupts on both edges (rising and falling)
     gpio_set_intr_type(pin, GPIO_INTR_ANYEDGE);
-    esp_err_t err = gpio_isr_handler_add(pin, pin_isr_wrapper, &isr_contexts[pin]);
+    esp_err_t err = gpio_isr_handler_add(pin, pin_isr_wrapper, (void *)&isr_contexts[pin]);
     if (err != ESP_OK) {
         log_error("pin", "GPIO %d ISR handler add failed (esp_err=%d)", pin, err);
         return VOLT_ERR_PIN_CONFIG_FAILED;
@@ -447,8 +516,8 @@ static uint8_t dac_values[PIN_COUNT];
 
 static int8_t pin_to_dac_channel(uint8_t pin)
 {
-    if (pin == 25) return DAC_CHANNEL_1;  // ESP-IDF: DAC_CHANNEL_1 = GPIO25
-    if (pin == 26) return DAC_CHANNEL_2;  // ESP-IDF: DAC_CHANNEL_2 = GPIO26
+    if (pin == 25) return DAC_CHAN_0;
+    if (pin == 26) return DAC_CHAN_1;
     return -1;
 }
 

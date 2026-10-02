@@ -64,6 +64,65 @@ function handleDeepLink(url) {
     else _pendingDeepLink = { prefix, version: version || "" };
 }
 
+// ---- Open a .volt file / project folder straight from the OS ----
+// Accepts a path to a .volt file or to a folder holding main.volt (Finder
+// double-click, `open -a`, drag onto the dock icon, or a CLI argument).
+let _pendingOpenPath = null;
+let _rendererReadyForOpen = false;   // set once app.js has wired onOpenPath
+
+function extractOpenPath(argv) {
+    for (const a of (argv || []).slice(1)) {
+        if (typeof a !== "string" || a.startsWith("-") || a.startsWith("volt://")) continue;
+        const abs = path.resolve(a);
+        // In dev (`electron .`) argv[1] is the app directory itself — skip it.
+        if (abs === path.resolve(app.getAppPath())) continue;
+        if (!fs.existsSync(abs)) continue;
+        if (abs.endsWith(".volt") || fs.statSync(abs).isDirectory()) return abs;
+    }
+    return null;
+}
+
+function handleOpenPath(p) {
+    if (!p) return;
+    let folder, file;
+    try {
+        if (fs.statSync(p).isDirectory()) {
+            folder = p;
+            file = path.join(p, "main.volt");
+            if (!fs.existsSync(file)) {
+                const first = fs.readdirSync(p).find((f) => f.endsWith(".volt"));
+                if (!first) return;
+                file = path.join(p, first);
+            }
+        } else {
+            file = p;
+            folder = path.dirname(p);
+        }
+    } catch (_) { return; }
+    logger.log("info", "open", `open path ${file}`);
+
+    const payload = { folder, file };
+    const deliver = () => {
+        if (!win || win.isDestroyed()) return;
+        if (win.isMinimized()) win.restore();
+        win.focus();
+        win.webContents.send("open_path", payload);
+    };
+    // The renderer wires its listener after the page has loaded (app.js is an
+    // async module), so push only once it has asked for the pending path.
+    if (_rendererReadyForOpen) deliver();
+    else _pendingOpenPath = payload;
+}
+
+// Renderer pulls whatever arrived before it was listening (cold start with a
+// file argument, or a macOS open-file event before the window existed).
+ipcMain.handle("open_path:take", () => {
+    _rendererReadyForOpen = true;
+    const p = _pendingOpenPath;
+    _pendingOpenPath = null;
+    return p;
+});
+
 // Single-instance lock so a second launch (Windows/Linux protocol activation)
 // forwards its URL to the running window instead of opening a second IDE.
 const _gotLock = app.requestSingleInstanceLock();
@@ -73,11 +132,18 @@ if (!_gotLock) {
     app.on("second-instance", (_e, argv) => {
         if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
         handleDeepLink(extractDeepLink(argv));
+        handleOpenPath(extractOpenPath(argv));
     });
     // macOS delivers protocol activations here (not via argv).
     app.on("open-url", (event, url) => {
         event.preventDefault();
         handleDeepLink(url);
+    });
+    // macOS delivers file activations (Finder / dock drop) here, possibly
+    // before the window exists — handleOpenPath parks it until then.
+    app.on("open-file", (event, filePath) => {
+        event.preventDefault();
+        handleOpenPath(filePath);
     });
 }
 
@@ -171,6 +237,9 @@ app.whenReady().then(() => {
         } else if (url) {
             handleDeepLink(url);
         }
+        // A file/folder on the command line (cold start) is parked and
+        // handed over when the renderer calls open_path:take.
+        if (!_pendingOpenPath) handleOpenPath(extractOpenPath(process.argv));
     });
 
     // Surface renderer crashes/hangs. Without these, a dead or non-painting
@@ -343,7 +412,7 @@ ipcMain.handle("browse_folder", async () => {
 });
 
 // ============================================================
-// Compiler — long-lived Python worker process (JSON-line IPC over stdin/stdout)
+// Compiler — long-lived Go worker process (JSON-line IPC over stdin/stdout)
 // ============================================================
 const { execSync, spawn } = require("child_process");
 const readline = require("readline");
@@ -617,19 +686,6 @@ ipcMain.handle("device_source", (_, chip, sourceFile) => {
     throw new Error(`Source not found: ${sourceFile} (looked in framework/${platform}/src)`);
 });
 
-function getVoltSrc() {
-    // 1. Dev mode — repo layout (volt-ide/../src/volt/...)
-    const dev = path.join(__dirname, "..", "src");
-    if (fs.existsSync(path.join(dev, "volt", "compiler", "voltc.py"))) return dev;
-    // 2. Packaged app — bundled SDK lives under process.resourcesPath
-    if (process.resourcesPath) {
-        const bundled = path.join(process.resourcesPath, "sdk", "src");
-        if (fs.existsSync(path.join(bundled, "volt", "compiler", "voltc.py"))) return bundled;
-    }
-    // 3. User-installed SDK
-    return path.join(os.homedir(), ".volt", "sdk", "src");
-}
-
 function devicesDir() {
     // dev → repo/devices, packaged → resources/sdk/devices, installed → ~/.volt/sdk/devices
     const dev = path.join(__dirname, "..", "devices");
@@ -667,8 +723,6 @@ function examplesDir() {
     return dev;
 }
 
-const VOLT_SRC = getVoltSrc();
-
 let worker = null;
 let workerStart = null;
 const pending = new Map();   // id → { resolve, reject, timer, onProgress? }
@@ -678,30 +732,22 @@ function startWorker() {
     if (workerStart) return workerStart;
 
     workerStart = new Promise((resolve, reject) => {
-        // When packaged, __dirname is inside app.asar but worker.py is
-        // extracted to app.asar.unpacked (asarUnpack in package.json). In
-        // dev mode this replace is a no-op since __dirname has no "app.asar".
-        const script = path.join(__dirname, "scripts", "worker.py")
-            .replace(/app\.asar(?![\/\\]?unpacked)/, "app.asar.unpacked");
-       
-        // On macOS the IDE may be launched from Finder without a shell PATH,
-        // so /usr/local/bin (Homebrew) and similar aren't visible. Search a
-        // few common Python locations directly, falling back to "python3".
-        const pythonBin = findPython();
+        // The compiler worker is `volt worker` (see src/main/volt-cli.js).
+        const workerBin = require("./src/main/volt-cli").bin();
 
         let started = false;
         let stderrBuf = "";
 
         try {
-            worker = spawn(pythonBin, [script, VOLT_SRC], {
+            worker = spawn(workerBin, ["worker", "--devices", devicesDir()], {
                 stdio: ["pipe", "pipe", "pipe"],
             });
-            logger.log("info", "worker", `spawned ${pythonBin} pid=${worker.pid}`);
-            console.log("info", "worker", `spawned ${pythonBin} pid=${worker.pid}`)
+            logger.log("info", "worker", `spawned ${workerBin} pid=${worker.pid}`);
+            console.log("info", "worker", `spawned ${workerBin} pid=${worker.pid}`)
             // Stderr only — stdout is the JSON-RPC channel we own.
             if (worker.stderr) worker.stderr.on("data", b => logger.log("error", "worker", b.toString().trimEnd()));
         } catch (e) {
-            reject(new Error(`Failed to spawn ${pythonBin}: ${e.message}`));
+            reject(new Error(`Failed to spawn ${workerBin}: ${e.message}`));
             return;
         }
 
@@ -734,12 +780,10 @@ function startWorker() {
 
         worker.on("exit", (code, signal) => {
             // If the worker died BEFORE signalling _ready, reject the start
-            // promise with the captured stderr so the user sees the real
-            // cause (Python missing, lark missing, import error, etc.).
+            // promise with the captured stderr so the user sees the real cause.
             if (!started) {
                 const reason = stderrBuf.trim().slice(0, 600) || `exit code ${code}, signal ${signal}`;
-                const hint = diagnoseWorkerFailure(pythonBin, reason);
-                reject(new Error(hint));
+                reject(new Error(`Compiler worker failed to start:\n${reason}`));
             }
             console.warn(`[worker] exited code=${code} signal=${signal}; will respawn on next request`);
             for (const [, p] of pending) {
@@ -754,99 +798,13 @@ function startWorker() {
         worker.on("error", (err) => {
             console.error("[worker] spawn error:", err);
             const hint = err.code === "ENOENT"
-                ? `Python 3 not found. Install from python.org or 'brew install python@3.12', then 'pip3 install lark'.`
+                ? `Volt compiler not found at ${workerBin}. Run 'npm run build:volt' in volt-ide.`
                 : err.message;
             reject(new Error(hint));
         });
     });
 
     return workerStart;
-}
-
-// Locate a usable python3 binary. Priority order:
-//
-//   1. Bundled python-build-standalone shipped inside the packaged app
-//      (sdk/python/<platform>/) — preferred so the IDE works without any
-//      system Python install. Also used in dev mode if you ran
-//      `npm run bundle:python` locally.
-//   2. Common system install locations (Homebrew x86/arm, python.org,
-//      /usr/bin, etc.). On macOS apps launched from Finder, $PATH doesn't
-//      include /usr/local/bin or /opt/homebrew/bin so we check them
-//      directly.
-//   3. Bare "python3" — let spawn's ENOENT fire if not on PATH.
-// The compiler uses PEP 604 (`X | None`), which needs Python >= 3.10. macOS
-// ships 3.9, so a bare "python3" is often too old — every system candidate must
-// be version-checked, not just existence-checked.
-function pythonMeetsMin(bin) {
-    try {
-        const { execFileSync } = require("child_process");
-        const out = execFileSync(bin, ["-c", "import sys;print(sys.version_info[0],sys.version_info[1])"],
-            { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\s+/);
-        const major = parseInt(out[0], 10), minor = parseInt(out[1], 10);
-        return major > 3 || (major === 3 && minor >= 10);
-    } catch (_) { return false; }
-}
-
-function findPython() {
-    const platKey = `${process.platform}-${process.arch}`;
-    const bundledBin = process.platform === "win32" ? "python.exe" : "bin/python3";
-
-    // (1) Bundled Python — check packaged-resources, then the dev sdk/ dir.
-    // Trusted (shipped as 3.12), so no version check.
-    const bundledRoots = [
-        ...(process.resourcesPath
-            ? [path.join(process.resourcesPath, "sdk", "python", platKey)]
-            : []),
-        path.join(__dirname, "sdk", "python", platKey),
-    ];
-    for (const root of bundledRoots) {
-        const candidate = path.join(root, bundledBin);
-        if (fs.existsSync(candidate)) return candidate;
-    }
-
-    // (2) System Python — prefer explicit 3.13→3.10 (bare + Homebrew/py.org paths,
-    // since Finder-launched apps lack /opt/homebrew/bin on $PATH), then bare
-    // python3 last. Every candidate is version-checked; anything < 3.10 is skipped.
-    const candidates = process.platform === "win32"
-        ? [
-            "python", "python3",
-            "C:\\Python313\\python.exe", "C:\\Python312\\python.exe", "C:\\Python311\\python.exe",
-            path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python312", "python.exe"),
-        ]
-        : [
-            "python3.13", "python3.12", "python3.11", "python3.10",
-            "/opt/homebrew/bin/python3.13", "/opt/homebrew/bin/python3.12",
-            "/opt/homebrew/bin/python3.11", "/opt/homebrew/bin/python3.10",
-            "/usr/local/bin/python3.12", "/usr/local/bin/python3.11", "/usr/local/bin/python3.10",
-            "/opt/homebrew/bin/python3", "/usr/local/bin/python3",
-            "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
-            "python3", "/usr/bin/python3",
-        ];
-    for (const p of candidates) {
-        const isPath = p.startsWith("/") || /^[A-Z]:\\/.test(p);
-        if (isPath && !fs.existsSync(p)) continue;
-        if (pythonMeetsMin(p)) return p;
-    }
-
-    // (3) Fall back to bare name — the worker will surface a clear "too old" hint.
-    return process.platform === "win32" ? "python" : "python3";
-}
-
-// Turn the raw stderr of a failed worker into a one-paragraph user-facing
-// hint that points at the actual fix.
-function diagnoseWorkerFailure(pythonBin, stderr) {
-    if (!stderr) return `Python worker exited before sending ready signal (using ${pythonBin}).`;
-    if (/No module named ['"]?lark/.test(stderr)) {
-        return `Python is installed but the 'lark' library is missing. Run:\n    pip3 install lark\nthen restart Volt IDE.`;
-    }
-    if (/No module named ['"]?volt/.test(stderr)) {
-        return `Volt SDK not bundled correctly — the IDE can't find its compiler.\nstderr: ${stderr}`;
-    }
-    if (/ModuleNotFoundError/.test(stderr)) {
-        const mod = (stderr.match(/No module named ['"]?(\w+)/) || [])[1] || "?";
-        return `Missing Python module: ${mod}. Run:\n    pip3 install ${mod}\nthen restart Volt IDE.`;
-    }
-    return `Python worker failed to start:\n${stderr}`;
 }
 
 function workerCall(op, payload, timeoutMs = 10000, onProgress = null) {
@@ -880,8 +838,8 @@ const EMPTY_COMPILE_RESULT = {
 };
 
 function compileErrorResult(message) {
-    // Preserve the full message (including multi-line install instructions
-    // from diagnoseWorkerFailure) rather than truncating it to 200 chars.
+    // Preserve the full message (including multi-line worker stderr) rather
+    // than truncating it to 200 chars.
     return {
         ...EMPTY_COMPILE_RESULT,
         diagnostics: [{
@@ -955,521 +913,259 @@ ipcMain.handle("system_graph", async (_, source, expanded) => {
 });
 
 // ============================================================
-// Serial — device detection + monitor
+// Serial, toolchain and build — all through the `volt` CLI. ESP32 only
+// (the pre-volt RP2040 / STM32 / ESP8266 code is in git history).
 // ============================================================
-const { SerialPort } = require("serialport");
-const { ReadlineParser } = require("@serialport/parser-readline");
+const volt = require("./src/main/volt-cli");
 
-let activePort = null;
+function send(channel, data) {
+    if (win) win.webContents.send(channel, data);
+}
+
+// The serial port is held by at most one volt child: `volt monitor`, or the
+// monitor phase of `volt run`.
+let monitorProc = null;   // { child, done, port }
 let monitoring = false;
 
-function detectChip(portInfo) {
-    const vid = (portInfo.vendorId || "").toLowerCase();
-    const pid = (portInfo.productId || "").toLowerCase();
-    const mfr = (portInfo.manufacturer || "").toLowerCase();
-    const pnp = (portInfo.pnpId || "").toLowerCase();
-
-    // ESP32 — Silicon Labs CP2102/CP2104, QinHeng CH340, Espressif native USB
-    if (vid === "303a") return "ESP32-S3";
-    if (vid === "10c4" && pid === "ea60") return "ESP32";
-    if (vid === "1a86" && pid === "7523") return "ESP32";
-    if (vid === "1a86" && pid === "55d4") return "ESP32-S2";
-
-    // RP2040 — Raspberry Pi
-    if (vid === "2e8a") return "RP2040";
-
-    // STM32 — ST-Link
-    if (vid === "0483") return "STM32";
-
-    // ESP8266 — CH340/CP2102 (same as ESP32, differentiate by manufacturer)
-    if (mfr.includes("espressif")) return "ESP32";
-    if (mfr.includes("raspberry")) return "RP2040";
-    if (mfr.includes("stm") || mfr.includes("st-link")) return "STM32";
-
-    // Fallback: check pnpId patterns
-    if (pnp.includes("cp210x") || pnp.includes("ch341")) return "ESP32";
-    if (pnp.includes("pico")) return "RP2040";
-
-    return "Unknown";
+// serialEvent relays one `volt monitor --json` object; false if it isn't one.
+function serialEvent(o) {
+    if (typeof o.line === "string") { send("serial:data", { line: o.line }); return true; }
+    switch (o.event) {
+        case "connected":    monitoring = true;  send("serial:connected", o.port); return true;
+        case "error":        send("serial:error", o.message); return true;
+        case "disconnected": monitoring = false; send("serial:disconnected", o.port); return true;
+    }
+    return false;
 }
 
-// ESP32 chip probe — verifies the chip behind the USB-serial bridge is
-// actually reachable, not just that a CH340/CP2102 chip enumerated. The
-// `detectChip` function above guesses ESP32 from the bridge's VID:PID,
-// which is true ~95% of the time but tells you nothing about whether the
-// silicon next to it is alive. v2.0.67 and earlier let users build for
-// "ESP32" against a USB-serial adapter that wasn't actually wired to any
-// chip; flashing then failed deep inside esptool with a hostile message.
-//
-// Strategy: when scan sees a USB-serial device that we'd label "ESP32",
-// kick off an async esptool probe with --before no_reset (don't toggle
-// DTR/RTS, just listen for data). 2-second timeout. Cache the result for
-// 30 seconds so the per-3-second scan tick doesn't thrash. Skip the probe
-// entirely if a serial monitor is currently holding the port — we don't
-// want to yank the user's debug stream.
-//
-// Result is one of:
-//   - "verified" — esptool got a chip response; chip is in download mode
-//     (or bootloader-stub). Confident it's reachable. RARE during normal
-//     use because running user firmware doesn't speak esptool.
-//   - "silent"   — port opened cleanly but the chip sent no data within
-//     the timeout window. Could mean: chip is dead, chip is running user
-//     firmware (no esptool support), wrong cable, or chip not wired.
-//   - "running"  — port is held by the serial monitor; we couldn't probe.
-//     Treat as "user knows it's running, don't bother them."
-//   - null       — probe not yet attempted, or no esptool available.
-const probeCache = new Map();          // port → { result, expiresAt }
-const probesInFlight = new Set();      // ports currently being probed
+function trackMonitor(proc, port) {
+    proc.port = port;
+    monitorProc = proc;
+    proc.done.then(() => {
+        if (monitorProc === proc) { monitorProc = null; monitoring = false; }
+    });
+}
+
+async function stopMonitor() {
+    const m = monitorProc;
+    monitorProc = null;
+    monitoring = false;
+    await volt.stop(m);   // the port is free once volt has exited
+}
+
+// ESP boards are probed (`volt ports --probe`: does esptool get an answer?)
+// in the background, at most every PROBE_TTL_MS per port, never while volt
+// holds a port. Results: "verified" | "silent", or "running" when the
+// monitor has the port.
+const probeCache = new Map();   // port → { result, expiresAt }
 const PROBE_TTL_MS = 30_000;
+let probing = false;
 
-function getEsptoolPath() {
-    try {
-        const espIdf = toolchain.espIdfPath("esp32");
-        const p = path.join(espIdf, "components", "esptool_py", "esptool", "esptool.py");
-        return fs.existsSync(p) ? p : null;
-    } catch (_) { return null; }
-}
-
-function probeEspChip(port) {
-    // Read cache, fire background refresh if stale, return current snapshot.
-    const cached = probeCache.get(port);
-    if (cached && cached.expiresAt > Date.now()) return cached.result;
-
-    if (probesInFlight.has(port)) return cached ? cached.result : null;
-    if (activePort && activePort.isOpen && activePort.path === port) {
-        // Serial monitor is holding the port — never probe; record as "running".
-        const snap = { result: "running", expiresAt: Date.now() + PROBE_TTL_MS };
-        probeCache.set(port, snap);
-        return snap.result;
-    }
-
-    const esptool = getEsptoolPath();
-    const pythonBin = toolchain.bundledPythonBin();
-    if (!esptool || !pythonBin) return null; // can't probe without tools
-
-    probesInFlight.add(port);
-    const proc = spawn(pythonBin, [esptool, "-p", port, "--before", "no_reset", "chip_id"], {
-        stdio: ["ignore", "pipe", "pipe"],
-    });
-    let answered = false;
-    let timer = setTimeout(() => {
-        try { proc.kill("SIGTERM"); } catch (_) {}
-    }, 2000);
-    const onData = (d) => {
-        // esptool prints "Chip is …", "Detected …", or "Connecting …"; only
-        // "Chip is" / "Detected" is positive confirmation.
-        const s = d.toString();
-        if (/Chip is|Detected|Crystal is/.test(s)) answered = true;
-    };
-    proc.stdout.on("data", onData);
-    proc.stderr.on("data", onData);
-    proc.on("close", () => {
-        clearTimeout(timer);
-        probesInFlight.delete(port);
-        const result = answered ? "verified" : "silent";
-        probeCache.set(port, { result, expiresAt: Date.now() + PROBE_TTL_MS });
-        // Push an update so the renderer's dropdown refreshes promptly.
-        if (win) win.webContents.send("devices:probe_updated", { port, state: result });
-    });
-    proc.on("error", () => {
-        clearTimeout(timer);
-        probesInFlight.delete(port);
-        // Couldn't even spawn esptool — record null so we'll retry later.
-    });
-    return cached ? cached.result : null;
-}
-
-// A Pico in BOOTSEL mode isn't a serial port — it's a USB mass-storage
-// volume named RPI-RP2 (RP2040) or RP2350 (Pico 2). Find any mounted
-// instance so the IDE can treat it as a real "connected device" instead
-// of falsely reporting "no device" and demanding the user re-plug.
-function findBootselVolumes() {
-    const PICO_LABELS = ["RPI-RP2", "RP2350"];
-    const matches = (name) => PICO_LABELS.some((label) => name.includes(label));
-    const out = [];
-    // macOS: /Volumes/<label>; Linux: /media/<user>/<label> or /mnt/<label>
-    // or /run/media/<user>/<label>.
-    for (const base of ["/Volumes", "/media", "/mnt", "/run/media"]) {
-        if (!fs.existsSync(base)) continue;
-        try {
-            for (const entry of fs.readdirSync(base)) {
-                const p = path.join(base, entry);
-                let stat;
-                try { stat = fs.statSync(p); } catch { continue; }
-                if (!stat.isDirectory()) continue;
-                if (matches(entry)) {
-                    out.push({ mount: p, label: entry });
-                    continue;
-                }
-                // One level deeper for /media/<user>/<label> shape.
-                try {
-                    for (const sub of fs.readdirSync(p)) {
-                        if (matches(sub)) out.push({ mount: path.join(p, sub), label: sub });
-                    }
-                } catch {}
+function refreshProbes(ports) {
+    if (probing || monitorProc || buildProc) return;
+    const now = Date.now();
+    const stale = ports.filter(p => p.state === "running" && p.chip.startsWith("ESP")
+        && !(probeCache.get(p.port)?.expiresAt > now));
+    if (!stale.length) return;
+    probing = true;
+    volt.run(["ports", "--json", "--probe"], {
+        onJSON: (list) => {
+            if (!Array.isArray(list)) return;
+            for (const p of list) {
+                if (!p.probe) continue;
+                probeCache.set(p.port, { result: p.probe, expiresAt: Date.now() + PROBE_TTL_MS });
+                send("devices:probe_updated", { port: p.port, state: p.probe });
             }
-        } catch {}
-    }
-    return out;
+        },
+    }).done.then(() => {
+        // Ports that got no answer (e.g. toolchain not installed yet) wait a
+        // full TTL before the next attempt.
+        for (const p of stale) {
+            if (!(probeCache.get(p.port)?.expiresAt > now)) {
+                probeCache.set(p.port, { result: null, expiresAt: Date.now() + PROBE_TTL_MS });
+            }
+        }
+        probing = false;
+    });
 }
 
 ipcMain.handle("scan_devices", async () => {
-    // Two presences to merge: serial (running firmware) and BOOTSEL
-    // (bootloader, mounted as a USB MSC volume). Each device entry carries
-    // a `state` field — "running" or "bootsel" — that the renderer uses
-    // for labeling and that the flash path uses to pick the right
-    // mechanism.
-    const out = [];
-
-    // 1. Serial-port devices
-    try {
-        const ports = await SerialPort.list();
-        for (const p of ports) {
-            if (!p.vendorId) continue;
-            if (p.vendorId.toLowerCase() === "8086") continue;
-            if (/\/dev\/ttyS\d+$/.test(p.path) && !p.manufacturer) continue;
-            const chip = detectChip(p);
-            const entry = {
-                port: p.path,
-                chip,
-                desc: p.manufacturer || p.serialNumber || p.path,
-                vendorId: p.vendorId || "",
-                productId: p.productId || "",
-                state: "running",
-            };
-            // For ESP32-family devices (where USB enumeration alone doesn't
-            // prove the chip itself is alive — the bridge can light up
-            // without a working ESP32 on the other side), kick off a probe
-            // and surface the result. RP2040 / STM32 / unknown chips skip
-            // the probe (RP2040's running-state CDC is its own confirmation;
-            // STM32 has no equivalent of esptool chip_id).
-            if (chip.toLowerCase().includes("esp32")) {
-                const probe = probeEspChip(p.path);
-                if (probe) entry.probe = probe;  // "verified" | "silent" | "running"
-            }
-            out.push(entry);
+    let ports = [];
+    await volt.run(["ports", "--json"], {
+        onJSON: (o) => { if (Array.isArray(o)) ports = o; },
+    }).done;
+    const now = Date.now();
+    for (const p of ports) {
+        if (monitorProc && monitorProc.port === p.port) {
+            p.probe = "running";
+            continue;
         }
-    } catch (_) {}
-
-    // 2. BOOTSEL volumes (RP2040 / RP2350)
-    try {
-        for (const vol of findBootselVolumes()) {
-            out.push({
-                port: vol.mount,                    // "port" is the mount path
-                chip: vol.label === "RP2350" ? "RP2350" : "RP2040",
-                desc: `BOOTSEL mode @ ${vol.mount}`,
-                vendorId: "2e8a",
-                productId: "0003",                  // Pico's BOOTSEL VID/PID
-                state: "bootsel",
-            });
-        }
-    } catch (_) {}
-
-    return out;
+        const c = probeCache.get(p.port);
+        if (c && c.result && c.expiresAt > now) p.probe = c.result;
+    }
+    refreshProbes(ports);
+    return ports;
 });
 
-ipcMain.handle("start_monitor", (_, port, baud) => {
-    // Stop existing
-    if (activePort && activePort.isOpen) {
-        try { activePort.close(); } catch (_) {}
-    }
-    try {
-        const fallbackBaud = settings.get("serial.defaultBaud") || 115200;
-        activePort = new SerialPort({ path: port, baudRate: baud || fallbackBaud });
-        const parser = activePort.pipe(new ReadlineParser());
-        parser.on("data", (line) => {
-            if (win) win.webContents.send("serial:data", { line });
-        });
-        activePort.on("error", () => {
-            monitoring = false;
-            if (win) win.webContents.send("serial:error", "Connection lost");
-        });
-        activePort.on("close", () => {
-            monitoring = false;
-            if (win) win.webContents.send("serial:disconnected", port);
-        });
-        monitoring = true;
-        if (win) win.webContents.send("serial:connected", port);
-    } catch (e) {
-        monitoring = false;
-    }
+ipcMain.handle("start_monitor", async (_, port, baud) => {
+    await stopMonitor();
+    const args = ["monitor", "--json", "-p", port];
+    if (baud) args.push("-b", String(baud));
+    trackMonitor(volt.run(args, { onJSON: serialEvent }), port);
 });
 
-ipcMain.handle("stop_monitor", () => {
-    if (activePort && activePort.isOpen) {
-        try { activePort.close(); } catch (_) {}
-    }
-    activePort = null;
-    monitoring = false;
-});
+ipcMain.handle("stop_monitor", () => stopMonitor());
 
 ipcMain.handle("is_monitoring", () => monitoring);
 
-// ============================================================
-// Toolchain + Build
-// ============================================================
-const toolchain = require("./src/main/toolchain");
+// ---- Toolchain ----
 
-ipcMain.handle("check_toolchain", (_, chip) => toolchain.isToolchainReady(chip));
-ipcMain.handle("diagnose_toolchain", (_, chip) => toolchain.diagnoseToolchain(chip));
-ipcMain.handle("repair_toolchain", (_, chip) => {
-    const removed = toolchain.repairToolchain(chip);
-    return { ok: true, removed };
-});
-ipcMain.handle("toolchain_free_disk", (_, chip) => {
-    const dir = require("os").homedir();
-    return toolchain.freeDiskBytes(dir);
-});
-
-ipcMain.handle("setup_toolchain", async (_, chip) => {
-    const logs = [];
-    // toolchain.ensureToolchain accepts either a log(msg) fn or an emit-shaped
-    // object. We pass log; the toolchain module wraps it into an emit
-    // internally and threads __STAGE__: markers through it. Here we parse
-    // those markers back out into structured "toolchain:event" IPC events.
-    const log = (msg) => {
-        const s = String(msg ?? "");
-        // Stage marker — forward as structured event, do NOT include in logs
-        const marker = s.match(/^__STAGE__:([^:]+):([a-z]+)(?::(.*))?$/);
-        if (marker) {
-            const [, id, action, rest] = marker;
-            if (action === "start") {
-                if (win) win.webContents.send("toolchain:event", { type: "stage_start", id });
-            } else if (action === "done") {
-                if (win) win.webContents.send("toolchain:event", { type: "stage_done", id });
-            } else if (action === "error") {
-                if (win) win.webContents.send("toolchain:event", { type: "stage_error", id, message: rest || "" });
-            } else if (action === "progress") {
-                // rest is "percent:detail"
-                const idx = (rest || "").indexOf(":");
-                const percent = Number(idx < 0 ? rest : rest.slice(0, idx));
-                const detail = idx < 0 ? "" : rest.slice(idx + 1);
-                if (win) win.webContents.send("toolchain:event", { type: "stage_progress", id, percent, detail });
-            }
-            return;
-        }
-        // Plain log line — keep + forward to both channels (legacy log + new event)
-        logs.push(s);
-        if (win) {
-            win.webContents.send("toolchain:log", s);
-            win.webContents.send("toolchain:event", { type: "log", message: s });
-        }
-    };
-
-    let ok = false;
-    try {
-        ok = await toolchain.ensureToolchain(chip, log);
-    } catch (e) {
-        if (win) win.webContents.send("toolchain:event", {
-            type: "stage_error",
-            id: "exception",
-            message: e.message || String(e),
-        });
-    }
-
-    // Final structured signal so the dialog flips to its done/failed state
-    if (win) win.webContents.send("toolchain:event", { type: "complete", success: !!ok });
-
-    return { ok, logs };
-});
-
-// Renderer-driven "cancel the in-flight install" — soft cancel for now.
-// Sets a flag the long-running operations check at safe boundaries.
-ipcMain.handle("cancel_toolchain", () => {
-    toolchain.cancel?.();
-});
-
-const builder = require("./src/main/builder");
-
-// Shared emit function for build progress
-function buildEmit(stage, message, pct) {
-    if (win) win.webContents.send("build:progress", { stage, message, percent: pct || 0 });
+// toolchainStatus is `volt toolchain status <chip> --json`:
+// { chip, platform, ready, components: [{id,name,ok,detail,path}], notes },
+// or { error } when volt can't report (e.g. a chip it has no toolchain for).
+async function toolchainStatus(chip) {
+    let status = null;
+    const { stderr } = await volt.run(["toolchain", "status", chip, "--json"], {
+        onJSON: (o) => { status = o; },
+    }).done;
+    return status || { error: stderr.join("\n").trim() || "volt toolchain status failed" };
 }
 
-// Shared compile step (async — goes through the warm worker)
-// The compile stage owns 0-25% of the total build progress, so we map
-// the worker's per-phase 5-100% range into that slice via mapPct().
-const COMPILE_PCT_END = 25;
-const PHASE_LABELS = {
-    include:   "Resolving includes",
-    parse:     "Parsing",
-    resolve:   "Resolving names",
-    check:     "Type checking",
-    hardware:  "Validating hardware",
-    analyze:   "Analyzing tasks",
-    transform: "Transforming",
-    codegen:   "Generating C",
-};
+ipcMain.handle("check_toolchain", async (_, chip) => !!(await toolchainStatus(chip)).ready);
 
-async function compileStep(projectPath, voltFile) {
-    const buildDir = path.join(projectPath, "build");
-    fs.mkdirSync(buildDir, { recursive: true });
+ipcMain.handle("toolchain_components", async (_, chip) => (await toolchainStatus(chip)).components || []);
 
-    buildEmit("compile", "Compiling...", 1);
-    const source = fs.readFileSync(voltFile, "utf-8");
-
-    const onProgress = ({ phase, pct }) => {
-        const label = PHASE_LABELS[phase] || phase;
-        const mapped = Math.round((pct / 100) * COMPILE_PCT_END);
-        buildEmit("compile", label, mapped);
+ipcMain.handle("diagnose_toolchain", async (_, chip) => {
+    const s = await toolchainStatus(chip);
+    if (s.error) return { ready: false, reason: s.error, missing: [s.error] };
+    const bad = s.components.filter(c => !c.ok);
+    return {
+        ready: s.ready,
+        reason: bad.length ? bad[0].detail : "",
+        missing: bad.map(c => `${c.name}: ${c.detail}`),
     };
+});
 
-    // Pass the real voltFile path so #line directives reference the user's
-    // source and compile_volt's volt.toml lookup picks up the project's chip.
-    let result;
-    try {
-        result = await workerCall(
-            "compile_full",
-            { source, filename: voltFile },
-            15000,
-            onProgress,
-        );
-    } catch (e) {
-        buildEmit("error", "Compile failed: " + (e.message || "worker error"));
-        return null;
+ipcMain.handle("repair_toolchain", async (_, chip) => {
+    let r = null;
+    const { stderr } = await volt.run(["toolchain", "repair", chip, "--json"], {
+        onJSON: (o) => { r = o; },
+    }).done;
+    if (!r || !r.ok) throw new Error((r && r.error) || stderr.join("\n") || "repair failed");
+    return { ok: true, removed: r.removed };
+});
+
+let toolchainProc = null;
+
+// Streams `volt toolchain install --json` events (stage_start{id,name},
+// stage_progress, stage_done, stage_error, log, complete) as toolchain:event.
+ipcMain.handle("setup_toolchain", async (_, chip) => {
+    let completed = false;
+    const proc = volt.run(["toolchain", "install", chip, "--json"], {
+        onJSON: (e) => {
+            if (e.type === "complete") completed = true;
+            send("toolchain:event", e);
+        },
+        onText: (line) => send("toolchain:event", { type: "log", message: line }),
+    });
+    toolchainProc = proc;
+    const { code } = await proc.done;
+    if (toolchainProc === proc) toolchainProc = null;
+    // Killed (cancel) or crashed before its own complete event.
+    if (!completed) send("toolchain:event", { type: "complete", success: code === 0 });
+    return { ok: code === 0 };
+});
+
+ipcMain.handle("cancel_toolchain", () => volt.stop(toolchainProc));
+
+// ---- Build / flash ----
+
+// One build at a time: starting another cancels the one in flight.
+let buildProc = null;
+
+// voltBuild runs `volt build|run <voltFile> --json …`, relays its progress
+// events as build:progress and its monitor events as serial:*. Resolves to
+// the done event's artifact (firmware path for build, port for run), or
+// null on failure.
+async function voltBuild(cmd, voltFile, chip, extra = []) {
+    await volt.stop(buildProc);
+    const args = [cmd, voltFile, "--json", "--chip", chip.toLowerCase(), "--devices", devicesDir(), ...extra];
+    if (settings.get("build.verboseBuild")) args.push("-v");
+
+    let result = null, failed = false, reachedDone;
+    const doneEvent = new Promise((resolve) => { reachedDone = resolve; });
+    const proc = volt.run(args, {
+        cwd: path.dirname(voltFile),
+        onJSON: (o) => {
+            if (o.stage) {
+                if (o.stage === "error") failed = true;
+                send("build:progress", o);
+                if (o.stage === "done") {
+                    result = o.artifact || "";
+                    // `volt run` goes on to monitor the board it flashed.
+                    if (cmd === "run" && result) trackMonitor(proc, result);
+                    reachedDone();
+                }
+                return;
+            }
+            serialEvent(o);
+        },
+    });
+    buildProc = proc;
+    await Promise.race([proc.done, doneEvent]);
+    if (buildProc === proc) buildProc = null;
+    if (result !== null) return result;
+    const { code, stderr } = await proc.done;
+    if (!failed) {
+        const why = stderr.join("\n").trim() || `volt ${cmd} exited with code ${code}`;
+        send("build:progress", { stage: "error", message: why, percent: 0 });
     }
-
-    if (!result.c_code) {
-        const errMsg = (result.diagnostics || [])
-            .filter(d => d.severity === "error")
-            .map(d => d.message)
-            .join("; ");
-        buildEmit("error", "Compile failed: " + (errMsg || "unknown error"));
-        return null;
-    }
-
-    fs.writeFileSync(path.join(buildDir, "main.c"), result.c_code);
-    buildEmit("compile", "Compiled successfully", 25);
-    return result;
+    return null;
 }
 
 ipcMain.handle("build_only", async (_, projectPath, voltFile, chip) => {
-    const result = await compileStep(projectPath, voltFile);
-    if (!result) return { ok: false };
-
-    const c = chip.toLowerCase();
-    let ok = false;
-    if (c.includes("rp2040") || c.includes("pico")) {
-        ok = await builder.buildRP2040(projectPath, buildEmit);
-    } else {
-        ok = await builder.buildESP32(projectPath, c, buildEmit);
-    }
-    if (!ok) return { ok: false };
-
-    buildEmit("done", "Build successful", 100);
-    return { ok: true };
+    const art = await voltBuild("build", voltFile, chip);
+    return { ok: art !== null };
 });
 
 ipcMain.handle("export_binary", async (_, projectPath, voltFile, chip) => {
-    // Build first so the exported image matches the current source (the framework
-    // build dir is shared across projects, so a stale artifact is possible).
-    const result = await compileStep(projectPath, voltFile);
-    if (!result) return { ok: false, error: "Compile failed — fix errors first." };
+    // Build first so the exported image matches the current source.
+    const art = await voltBuild("build", voltFile, chip);
+    if (!art) return { ok: false, error: "Build failed." };
 
-    const c = chip.toLowerCase();
-    const built = (c.includes("rp2040") || c.includes("pico"))
-        ? await builder.buildRP2040(projectPath, buildEmit)
-        : await builder.buildESP32(projectPath, c, buildEmit);
-    if (!built) return { ok: false, error: "Build failed." };
-
-    const art = builder.artifactPath(chip);
-    if (!art) return { ok: false, error: "No firmware artifact was produced." };
-
-    const projName = path.basename(projectPath);
+    const ext = path.extname(art).slice(1);
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
         title: "Export firmware binary",
-        defaultPath: `${projName}.${art.ext}`,
-        filters: [{ name: `Firmware (*.${art.ext})`, extensions: [art.ext] }],
+        defaultPath: `${path.basename(projectPath)}.${ext}`,
+        filters: [{ name: `Firmware (*.${ext})`, extensions: [ext] }],
     });
     if (canceled || !filePath) {
-        buildEmit("done", "Export cancelled", 100);
+        send("build:progress", { stage: "done", message: "Export cancelled", percent: 100 });
         return { ok: false, cancelled: true };
     }
-
     try {
-        fs.copyFileSync(art.path, filePath);
+        fs.copyFileSync(art, filePath);
     } catch (e) {
         return { ok: false, error: e.message };
     }
-    buildEmit("done", `Exported firmware → ${filePath}`, 100);
-    return { ok: true, path: filePath, ext: art.ext };
+    send("build:progress", { stage: "done", message: `Exported firmware → ${filePath}`, percent: 100 });
+    return { ok: true, path: filePath, ext };
 });
 
 ipcMain.handle("run_project", async (_, projectPath, voltFile, port, chip) => {
-    const result = await compileStep(projectPath, voltFile);
-    if (!result) return { ok: false };
-
-    const c = chip.toLowerCase();
-
-    // Build
-    let ok = false;
-    if (c.includes("rp2040") || c.includes("pico")) {
-        ok = await builder.buildRP2040(projectPath, buildEmit);
-    } else {
-        ok = await builder.buildESP32(projectPath, c, buildEmit);
-    }
-    if (!ok) return { ok: false };
-
     // Honor "auto-flash" setting — if off, stop after build (no flash, no monitor)
     if (settings.get("build.autoFlash") === false) {
-        buildEmit("done", "Build successful — auto-flash disabled", 100);
-        return { ok: true, port: null };
+        const art = await voltBuild("build", voltFile, chip);
+        return art === null ? { ok: false } : { ok: true, port: null };
     }
-
-    // Release serial port before flashing — esptool needs exclusive access
-    const wasMonitoring = monitoring;
-    if (activePort && activePort.isOpen) {
-        try { activePort.close(); } catch (_) {}
-        activePort = null;
-        monitoring = false;
-        if (win) win.webContents.send("serial:disconnected", port);
-        // Wait for OS to fully release the serial device fd
-        await new Promise(r => setTimeout(r, 500));
-    }
-
-    // Flash
-    if (c.includes("rp2040") || c.includes("pico")) {
-        ok = await builder.flashRP2040(projectPath, port, buildEmit);
-    } else {
-        ok = await builder.flashESP32(projectPath, port, c, buildEmit);
-    }
-    if (!ok) return { ok: false };
-
-    // Wait for device. After a flash + reboot, the same physical device
-    // typically re-enumerates under the same prefix family but possibly
-    // a different unit number (e.g. ttyACM0 → ttyACM1, tty.usbmodem1301
-    // → tty.usbmodem1201). Watch all known prefix families for this
-    // platform so the auto-reconnect actually works on macOS too.
-    buildEmit("connect", "Waiting for device...", 96);
-    let prefixes;
-    if (process.platform === "darwin") {
-        // macOS USB-CDC serial enumeration:
-        //   /dev/tty.usbmodem* — what apps usually open
-        //   /dev/cu.usbmodem*  — call-out variant; some flows pick this
-        //   /dev/tty.usbserial-* / /dev/cu.usbserial-* — CP210x/CH340 (ESP32 dev boards)
-        prefixes = ["tty.usbmodem", "cu.usbmodem", "tty.usbserial", "cu.usbserial"];
-    } else if (port.includes("ttyACM")) {
-        prefixes = ["ttyACM"];
-    } else {
-        prefixes = ["ttyUSB", "ttyACM"];
-    }
-    const newPort = builder.waitForPort(prefixes, 8000);
-    buildEmit("connect", newPort ? "Device on " + newPort : "Reconnect manually", 98);
-
-    // Auto-start serial monitor
-    if (newPort) {
-        const baud = c.includes("8266") ? 74880 : 115200;
-        // Stop existing monitor, start new one
-        if (activePort && activePort.isOpen) try { activePort.close(); } catch (_) {}
-        try {
-            activePort = new SerialPort({ path: newPort, baudRate: baud });
-            const parser = activePort.pipe(new ReadlineParser());
-            parser.on("data", (line) => { if (win) win.webContents.send("serial:data", { line }); });
-            monitoring = true;
-        } catch (_) {}
-    }
-
-    buildEmit("done", "Running on device", 100);
-    return { ok: true, port: newPort || port };
+    // esptool needs the port to itself.
+    await stopMonitor();
+    const newPort = await voltBuild("run", voltFile, chip, ["-p", port]);
+    return newPort === null ? { ok: false } : { ok: true, port: newPort };
 });
 
+app.on("before-quit", () => {
+    for (const p of [buildProc, monitorProc, toolchainProc]) {
+        if (p && p.child) try { p.child.kill("SIGTERM"); } catch (_) {}
+    }
+});

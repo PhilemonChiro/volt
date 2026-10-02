@@ -46,6 +46,58 @@
         }
       ],
       "description": "Toggle backlight on/off"
+    },
+    "create_char": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int"
+        },
+        {
+          "name": "r0",
+          "type": "int"
+        },
+        {
+          "name": "r1",
+          "type": "int"
+        },
+        {
+          "name": "r2",
+          "type": "int"
+        },
+        {
+          "name": "r3",
+          "type": "int"
+        },
+        {
+          "name": "r4",
+          "type": "int"
+        },
+        {
+          "name": "r5",
+          "type": "int"
+        },
+        {
+          "name": "r6",
+          "type": "int"
+        },
+        {
+          "name": "r7",
+          "type": "int"
+        }
+      ],
+      "description": "Define custom character 0-7 from 8 rows of 5-bit pixels (top to bottom)"
+    },
+    "write_char": {
+      "returns": "void",
+      "params": [
+        {
+          "name": "code",
+          "type": "int"
+        }
+      ],
+      "description": "Write a raw character code at the cursor (0-7 = custom chars)"
     }
   },
   "manufacturer": "Generic (HD44780 + PCF8574 backpack)",

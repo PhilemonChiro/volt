@@ -2,9 +2,10 @@
 // Stage the Volt SDK into volt-ide/sdk/ for electron-builder to bundle.
 //
 // What gets copied:
-//   ../src/volt/        → sdk/src/volt/        (Python compiler)
 //   ../devices/         → sdk/devices/         (device catalog JSON)
 //   ../framework/       → sdk/framework/       (C runtime + drivers)
+//
+// The compiler is the Go worker in bin/ (`volt worker`, scripts/build-volt.js), not sdk/.
 //
 // electron-builder is configured to drop sdk/ into Contents/Resources/sdk
 // (macOS) or resources/sdk (Windows/Linux) inside the packaged app.
@@ -62,16 +63,15 @@ function dirSize(dir) {
     return total;
 }
 
-console.log("[stage-sdk] cleaning sdk/ (preserving any python/ bundles)");
-// Defensive: if bundle:python ran first, don't wipe its output. Only clean
-// the dirs stage-sdk owns: src/, devices/, framework/.
-for (const sub of ["src", "devices", "framework"]) {
+console.log("[stage-sdk] cleaning sdk/");
+// Only clean the dirs stage-sdk owns (src/ and python/ are left over from the
+// Python compiler).
+for (const sub of ["src", "python", "devices", "framework"]) {
     rmTree(path.join(OUT, sub));
 }
 fs.mkdirSync(OUT, { recursive: true });
 
 const targets = [
-    { from: path.join(REPO, "src"),       to: path.join(OUT, "src"),       label: "compiler" },
     { from: path.join(REPO, "devices"),   to: path.join(OUT, "devices"),   label: "devices" },
     { from: path.join(REPO, "framework"), to: path.join(OUT, "framework"), label: "framework" },
 ];

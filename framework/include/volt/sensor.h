@@ -2,6 +2,7 @@
 #define VOLT_SENSOR_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "volt/error.h"
 
 // ============================================================
@@ -245,6 +246,8 @@ void hd44780_clear(hd44780_t *dev);
 void hd44780_set_cursor(hd44780_t *dev, uint8_t col, uint8_t row);
 void hd44780_print(hd44780_t *dev, const char *text);
 void hd44780_backlight(hd44780_t *dev, uint8_t on);
+void hd44780_create_char(hd44780_t *dev, uint8_t slot, uint8_t r0, uint8_t r1, uint8_t r2, uint8_t r3, uint8_t r4, uint8_t r5, uint8_t r6, uint8_t r7);
+void hd44780_write_char(hd44780_t *dev, uint8_t code);
 
 // ============================================================
 // BME680 — Gas + Temp + Humidity + Pressure (addr: 0x76/0x77)
@@ -310,5 +313,57 @@ void max7219_set_row(max7219_t *dev, uint8_t row, uint8_t data);
 void max7219_set_intensity(max7219_t *dev, uint8_t level);
 void max7219_clear(max7219_t *dev);
 void max7219_set_digit(max7219_t *dev, uint8_t pos, uint8_t value, uint8_t dp);
+
+
+
+
+
+
+
+
+// hc05 (installed library — generated header)
+typedef struct { uint8_t uart_id; } hc05_t;
+volt_error_t hc05_init(hc05_t *dev, uint8_t uart_id);
+void hc05_send_data(hc05_t *dev, int data);
+int32_t hc05_receive_data(hc05_t *dev, char * buffer, uint16_t max_len);
+void hc05_send_at_command(hc05_t *dev, const char * command);
+int32_t hc05_read_at_response(hc05_t *dev, char * response, uint16_t max_len);
+void hc05_set_baud_rate(hc05_t *dev, int baud_rate);
+void hc05_set_name(hc05_t *dev, const char * name);
+void hc05_set_password(hc05_t *dev, const char * password);
+
+// ============================================================
+// GY-85 9-DoF board: ADXL345 (0x53) + ITG3205 (0x68) + HMC5883L (0x1E)
+// ============================================================
+typedef struct { uint8_t bus_id, addr; float x, y, z; } adxl345_t;
+volt_error_t adxl345_init(adxl345_t *dev, uint8_t bus_id, uint8_t addr);
+float adxl345_x(adxl345_t *dev);
+float adxl345_y(adxl345_t *dev);
+float adxl345_z(adxl345_t *dev);
+float adxl345_magnitude(adxl345_t *dev);
+
+typedef struct { uint8_t bus_id, addr; float x, y, z; } itg3205_t;
+volt_error_t itg3205_init(itg3205_t *dev, uint8_t bus_id, uint8_t addr);
+float itg3205_x(itg3205_t *dev);
+float itg3205_y(itg3205_t *dev);
+float itg3205_z(itg3205_t *dev);
+float itg3205_magnitude(itg3205_t *dev);
+
+typedef struct { uint8_t bus_id, addr; float x, y, z; } hmc5883l_t;
+volt_error_t hmc5883l_init(hmc5883l_t *dev, uint8_t bus_id, uint8_t addr);
+float hmc5883l_x(hmc5883l_t *dev);
+float hmc5883l_y(hmc5883l_t *dev);
+float hmc5883l_z(hmc5883l_t *dev);
+float hmc5883l_heading(hmc5883l_t *dev);
+
+// ============================================================
+// SIM800L — GSM/GPRS modem (UART)
+// ============================================================
+typedef struct { uint8_t uart_id; } sim800l_t;
+volt_error_t sim800l_init(sim800l_t *dev, uint8_t uart_id);
+bool sim800l_ready(sim800l_t *dev);
+bool sim800l_registered(sim800l_t *dev);
+int32_t sim800l_signal(sim800l_t *dev);
+bool sim800l_send_sms(sim800l_t *dev, const char *number, const char *text);
 
 #endif // VOLT_SENSOR_H

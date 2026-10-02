@@ -34,6 +34,10 @@ volt_error_t pin_toggle(uint8_t pin);
 // Works on both input and output pins.
 int pin_read(uint8_t pin);
 
+// Read an analog-capable pin as a raw 12-bit ADC value (0-4095).
+// Returns 0 when the pin is not analog-capable or the target cannot read it.
+int pin_read_analog(uint8_t pin);
+
 // Register a callback that fires when a pin changes state.
 // The callback runs in ISR context — keep it fast, no printf or malloc.
 // Typically used to set a flag that a task checks.

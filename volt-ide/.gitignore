@@ -3,3 +3,4 @@ dist/
 .volt/
 build/
 sdk/
+bin/
