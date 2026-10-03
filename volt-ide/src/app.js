@@ -99,35 +99,22 @@ function showEditor() {
                 setFileModified(true);
                 diagnostics.scheduleCheck(source);
                 // Live pin/bus/device refresh — regex extraction runs even
-                // on broken syntax, so the pinout reflects keystrokes
+                // on broken syntax, so the Hardware panel reflects keystrokes
                 // immediately.
-                import("./components/pinout-panel.js").then(m => {
-                    const chip = (chipSelector.getChip() || "esp32").toLowerCase();
-                    const hw = m.extractHardware(source);
-                    const assignments = Object.values(hw.pinByGpio);
-                    m.render(chip, assignments, hw);
-                }).catch(() => {});
+                import("./components/hardware-panel.js").then(m => m.refresh(source)).catch(() => {});
             },
             onCursorChange: (line, col) => {
                 statusBar.setLine(line, col);
-                // Cursor on a pin / bus / device line → highlight pin(s)
-                // on the board. For a bus line we highlight all of its pins.
-                import("./components/pinout-panel.js").then(m => {
-                    const source = editor.getValue();
-                    const hw = m.extractHardware(source);
-                    let gpio = null;
-                    for (const p of Object.values(hw.pinByGpio)) {
-                        if (p.line === line) { gpio = p.gpio; break; }
-                    }
-                    // If cursor is on a bus line, highlight the bus's first pin
-                    if (!gpio) {
-                        const bus = hw.buses.find(b => b.line === line);
-                        if (bus) gpio = String(Object.values(bus.roles)[0] || "");
-                    }
-                    m.setHighlight(gpio || null);
-                }).catch(() => {});
             },
         });
+        // Gutter dots + selection → board highlight (hardware-editor.js).
+        import("./components/hardware-editor.js").then(m => {
+            const ed = monaco.editor.getEditors()[0];
+            if (ed) m.attach(ed);
+        }).catch(e => console.warn("[hardware-editor]", e));
+        // Board tab — built now so the board is loaded for pin hovers.
+        import("./components/hardware-panel.js").then(m => m.initBoard(document.getElementById("boardView")))
+            .catch(e => console.warn("[hardware-panel]", e));
         editorReady = true;
     }
     editor.focus();
@@ -261,7 +248,7 @@ function showChipPicker(projectPath) {
     });
 }
 
-async function onSave() {
+async function onSave({ quiet = false } = {}) {
     if (!currentFile) return;
     try {
         // Format on save (Settings → Editor → "Format on save")
@@ -287,7 +274,7 @@ async function onSave() {
         editor.markSaved();
         toolbar.setSaveUnsaved(false);
         setFileModified(false);
-        bottomPanel.appendOutput("Saved: " + currentFile, "success");
+        if (!quiet) bottomPanel.appendOutput("Saved: " + currentFile, "success");
         console.log("[volt] Saved:", currentFile);
     } catch (e) {
         console.error("[volt] Save failed:", e);
@@ -363,10 +350,7 @@ async function closeProject() {
 // Returns true if ready / install succeeded, false on cancel or failure.
 async function ensureToolchainWithDialog(chip) {
     const ready = await window.volt.checkToolchain(chip);
-    if (ready) {
-        bottomPanel.appendOutput(`${chip} toolchain: ready`, "success");
-        return true;
-    }
+    if (ready) return true;
     bottomPanel.appendOutput(`${chip} toolchain not found — opening installer…`, "warn");
     bottomPanel.updatePipelineStage("build", `Installing ${chip} toolchain…`, 30);
     statusBar.setBuild("Installing toolchain…");
@@ -387,7 +371,7 @@ async function onExport() {
         bottomPanel.appendOutput("No file open. Open or create a project first.", "warn");
         return;
     }
-    await onSave();
+    await onSave({ quiet: true });
     const targetChip = chipSelector.getChip() || "esp32";
 
     bottomPanel.showPipeline();
@@ -425,7 +409,8 @@ async function onRun() {
     }
 
     // Save first
-    await onSave();
+    await onSave({ quiet: true });
+    startRun("upload", `Upload · ${fileLabel()} → ${device.port}`);
 
     // Project chip from volt.toml is source of truth
     const targetChip = chipSelector.getChip();
@@ -459,24 +444,23 @@ async function onRun() {
     // Show pipeline
     bottomPanel.showPipeline();
     bottomPanel.updatePipelineStage("compile", "Compiling...", 10);
-    bottomPanel.appendOutput(`Starting build for ${targetChip.toUpperCase()} on ${device.port}...`, "info");
     statusBar.setBuild("Compiling...");
 
     // Stage 1: Compile
     try {
         const result = await window.volt.compileFull(editor.getValue());
         const errors = (result.diagnostics || []).filter(d => d.severity === "error");
+        bottomPanel.setProblems(result.diagnostics || []);
+        countWarnings(result.diagnostics);
 
         if (errors.length > 0) {
             bottomPanel.updatePipelineStage("error", `${errors.length} error(s) — fix before building`, 10);
-            bottomPanel.appendOutput(`Compile failed: ${errors.length} error(s)`, "error");
+            failRun(`Compile failed: ${errors.length} error${errors.length === 1 ? "" : "s"} → Problems`);
             statusBar.setBuild("Compile failed");
             return;
         }
 
-        const cLen = (result.c_code || "").length;
         bottomPanel.updatePipelineStage("compile", "Compiled successfully", 20);
-        bottomPanel.appendOutput(`Compiled: ${cLen} chars of C (${result.pins.length} pins, ${result.tasks.length} tasks)`, "success");
 
         // Stage 2: Check/install toolchain
         bottomPanel.updatePipelineStage("build", `Checking ${targetChip} toolchain...`, 25);
@@ -485,6 +469,7 @@ async function onRun() {
         const installed = await ensureToolchainWithDialog(targetChip);
         if (!installed) {
             bottomPanel.updatePipelineStage("error", "Toolchain install cancelled or failed", 30);
+            failRun("Toolchain install cancelled or failed");
             statusBar.setBuild("Setup failed");
             return;
         }
@@ -500,13 +485,14 @@ async function onRun() {
         if (!buildResult || !buildResult.ok) {
             if (!buildResult) {
                 bottomPanel.updatePipelineStage("error", "Build process failed", 0);
+                failRun("Build process failed");
                 statusBar.setBuild("Failed");
             }
         }
 
     } catch (e) {
         bottomPanel.updatePipelineStage("error", "Compiler error", 10);
-        bottomPanel.appendOutput("Run failed: " + e, "error");
+        failRun("Upload failed: " + e);
         statusBar.setBuild("Failed");
     }
 }
@@ -531,38 +517,90 @@ async function onMonitor() {
     }
 }
 
+// ---- Output runs: one header, quiet middle, one summary line ----
+// Progress lines and tool warnings only print with "Verbose build output";
+// Volt warnings are counted into a link to the Warnings tab.
+let run = null;
+const verboseOutput = () => !!settings.get("build.verboseBuild", false);
+const fileLabel = () => {
+    const proj = (currentProject || "").split(/[\\/]/).filter(Boolean).pop() || "";
+    const file = (currentFile || "").split(/[\\/]/).pop() || "";
+    return proj ? `${proj}/${file}` : file;
+};
+
+function startRun(kind, title) {
+    run = { kind, t0: performance.now(), warnings: 0, upToDate: false };
+    bottomPanel.beginRun(title);
+}
+
+function countWarnings(diags) {
+    if (run) run.warnings = (diags || []).filter(d => d.severity === "warning" || d.severity === "warn").length;
+}
+
+function failRun(message) {
+    if (message) bottomPanel.appendOutput(message, "error");
+    bottomPanel.endRun();
+    run = null;
+}
+
+function sizeText(sz) {
+    if (!sz || !sz.flash) return "";
+    const kb = (n) => `${Math.round(n / 1024)} KB`;
+    let t = `Flash ${kb(sz.flash)}`;
+    if (sz.flash_max) t += ` of ${kb(sz.flash_max)} (${Math.round(sz.flash * 100 / sz.flash_max)}%)`;
+    if (sz.ram) t += ` · RAM ${kb(sz.ram)}`;
+    return t;
+}
+
+function finishRun(message, size) {
+    const secs = ((performance.now() - run.t0) / 1000).toFixed(1);
+    if (run.warnings) {
+        bottomPanel.appendOutput(`${run.warnings} warning${run.warnings === 1 ? "" : "s"} → Warnings`, "warn",
+            { onClick: () => bottomPanel.showProblems() });
+    }
+    const parts = run.kind === "upload"
+        ? [`Uploaded in ${secs} s`, message && message !== "Running on device" ? message : ""]
+        : [`Compiled in ${secs} s`, run.upToDate ? "firmware unchanged" : ""];
+    parts.push(sizeText(size));
+    bottomPanel.appendOutput("✓ " + parts.filter(Boolean).join(" · "), "success");
+    bottomPanel.endRun();
+    run = null;
+}
+
 async function onCheck() {
     if (!editorReady || !currentFile) return;
 
-    await onSave();
+    await onSave({ quiet: true });
 
     const targetChip = chipSelector.getChip();
+    startRun("compile", `Compile · ${fileLabel()}`);
 
     bottomPanel.showPipeline();
     bottomPanel.updatePipelineStage("compile", "Compiling...", 10);
-    statusBar.setBuild("Checking...");
+    statusBar.setBuild("Compiling...");
 
     try {
         // Stage 1: Compile
         const result = await window.volt.compileFull(editor.getValue());
         const errors = (result.diagnostics || []).filter(d => d.severity === "error");
         bottomPanel.setProblems(result.diagnostics || []);
+        countWarnings(result.diagnostics);
 
         if (errors.length > 0) {
             bottomPanel.updatePipelineStage("error", `${errors.length} error(s)`, 10);
-            bottomPanel.appendOutput(`Check failed: ${errors.length} error(s)`, "error");
-            statusBar.setBuild("Check failed");
+            failRun(`Compile failed: ${errors.length} error${errors.length === 1 ? "" : "s"} → Problems`);
+            statusBar.setBuild("Compile failed");
             return;
         }
 
         bottomPanel.updatePipelineStage("compile", "Compiled", 20);
-        bottomPanel.appendOutput(`Compiled: ${(result.c_code || "").length} chars of C`, "success");
 
         // Stage 2: Toolchain
         bottomPanel.updatePipelineStage("build", `Checking ${targetChip} toolchain...`, 25);
         const installed = await ensureToolchainWithDialog(targetChip);
         if (!installed) {
             bottomPanel.updatePipelineStage("error", "Toolchain install cancelled or failed", 30);
+            failRun("Toolchain install cancelled or failed");
             statusBar.setBuild("Setup failed");
             return;
         }
@@ -577,13 +615,12 @@ async function onCheck() {
 
         if (buildResult && buildResult.ok) {
             bottomPanel.updatePipelineStage("build", "Build successful", 100);
-            bottomPanel.appendOutput("Check complete — build OK", "success");
             statusBar.setBuild("Build OK");
             setTimeout(() => bottomPanel.clearProgress(), 3000);
         }
     } catch (e) {
-        bottomPanel.updatePipelineStage("error", "Check failed", 0);
-        bottomPanel.appendOutput("Check failed: " + e, "error");
+        bottomPanel.updatePipelineStage("error", "Compile failed", 0);
+        failRun("Compile failed: " + e);
         statusBar.setBuild("Failed");
     }
 }
@@ -604,7 +641,7 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "2") { e.preventDefault(); sidePanel.toggle("tasks"); }
     if (e.ctrlKey && e.key === "3") { e.preventDefault(); sidePanel.toggle("outline"); }
     if (e.ctrlKey && e.key === "4") { e.preventDefault(); sidePanel.toggle("library"); }
-    if (e.ctrlKey && e.key === "5") { e.preventDefault(); sidePanel.toggle("pinout"); }
+    if (e.ctrlKey && e.key === "5") { e.preventDefault(); diagramsView.showView("board"); }
 });
 
 // Init panels
@@ -661,6 +698,7 @@ document.addEventListener("pinout:jump", (e) => {
 // Update status bar + problems panel + side panel when diagnostics complete
 diagnostics.onResult((diags, result) => {
     bottomPanel.setProblems(diags);
+    import("./components/hardware-panel.js").then(m => m.setDiagnostics(diags, editor.getValue())).catch(() => {});
     // Feed AST data to side panel (live update as user types)
     if (result) sidePanel.update(result);
     // Live-update the "Generated C" view with the transpiler output.
@@ -687,11 +725,7 @@ chipSelector.init((chip) => {
     if (editorReady) diagnostics.scheduleCheck(editor.getValue());
     // Repaint the pinout for the new chip (otherwise it shows the
     // previous board until the user types a character).
-    import("./components/pinout-panel.js").then(m => {
-        const source = editorReady ? editor.getValue() : "";
-        const hw = m.extractHardware(source);
-        m.render(chip.toLowerCase(), Object.values(hw.pinByGpio), hw);
-    }).catch(() => {});
+    import("./components/hardware-panel.js").then(m => m.refresh(editorReady ? editor.getValue() : "")).catch(() => {});
 });
 
 // Init device detection — check for chip mismatch
@@ -734,21 +768,26 @@ window.volt.onSerialError((message) => bottomPanel.appendOutput("Serial monitor:
 // main.js is the source of truth for the percent (per-file build steps, real
 // flash percentages); fall back to a coarse per-stage estimate only when it
 // doesn't send one.
-window.volt.onBuild("progress", ({ stage, message, percent }) => {
+window.volt.onBuild("progress", ({ stage, message, percent, size }) => {
     if (stage === "error") {
         bottomPanel.updatePipelineStage("error", message, 0);
-        bottomPanel.appendOutput(message, "error");
+        if (run) failRun(message); else bottomPanel.appendOutput(message, "error");
         statusBar.setBuild("Failed");
     } else if (stage === "done") {
         bottomPanel.updatePipelineStage("verify", message, 100);
-        bottomPanel.appendOutput(message, "success");
+        if (run) finishRun(message, size); else bottomPanel.appendOutput(message, "success");
         statusBar.setBuild("Ready");
         setTimeout(() => bottomPanel.clearProgress(), 3000);
+    } else if (stage === "warn" || stage === "info") {
+        // Volt warnings are already in the Warnings tab; C/toolchain lines are noise
+        // unless the user asked for verbose output.
+        if (verboseOutput()) bottomPanel.appendOutput(message, stage);
     } else {
         const pctFallback = { compile: 20, build: 45, flash: 70, connect: 90, verify: 95 };
         const pct = typeof percent === "number" ? percent : (pctFallback[stage] || 50);
         bottomPanel.updatePipelineStage(stage, message, pct);
-        bottomPanel.appendOutput(message, "info");
+        if (run && /up to date/i.test(message)) run.upToDate = true;
+        if (verboseOutput() || !run) bottomPanel.appendOutput(message, "info");
         statusBar.setBuild(message);
     }
 });

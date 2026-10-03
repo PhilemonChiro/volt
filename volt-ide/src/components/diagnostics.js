@@ -4,6 +4,7 @@ import * as settings from "../services/settings.js";
 
 let timer = null;
 let onResultCallback = null;
+let lastDiags = [];
 
 export function scheduleCheck(source) {
     clearTimeout(timer);
@@ -34,9 +35,17 @@ async function runCheck(source) {
     }
 }
 
+// Compiler fixes for a marker (matched by line and message), best first.
+export function fixesFor(marker) {
+    const d = lastDiags.find(d => (d.line || 1) === marker.startLineNumber
+        && (marker.message || "").startsWith(d.message));
+    return (d && d.fixes) || [];
+}
+
 function applyMarkers(diags) {
     const model = monaco.editor.getModels()[0];
     if (!model) return;
+    lastDiags = diags;
 
     const markers = diags.map(d => {
         const sev = d.severity === "error" ? monaco.MarkerSeverity.Error
@@ -48,7 +57,8 @@ function applyMarkers(diags) {
 
         let startCol = d.col || 1;
         let endCol = startCol + 1;
-        try {
+        if (d.end_line === d.line && d.end_col > startCol) endCol = d.end_col;
+        else try {
             const line = model.getLineContent(d.line || 1);
             let s = startCol - 1;
             let e = startCol - 1;
@@ -64,6 +74,7 @@ function applyMarkers(diags) {
             endLineNumber: d.line || 1,
             endColumn: endCol,
             message: msg,
+            code: d.code || undefined,
         };
     });
 

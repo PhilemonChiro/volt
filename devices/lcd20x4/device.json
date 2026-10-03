@@ -98,6 +98,11 @@
         }
       ],
       "description": "Write a raw character code at the cursor (0-7 = custom chars)"
+    },
+    "reinit": {
+      "returns": "void",
+      "params": [],
+      "description": "Re-initialise the display (recovers garbled characters after noise or a supply dip); redraw afterwards"
     }
   },
   "manufacturer": "Generic (HD44780 + PCF8574 backpack)",
@@ -105,8 +110,8 @@
   "specs": {
     "voltage": "5V",
     "current": "1.5 mA + ~30 mA backlight",
-    "characters": "20 columns \u00d7 4 rows",
-    "interface_speed": "I\u00b2C up to 100 kHz"
+    "characters": "20 columns × 4 rows",
+    "interface_speed": "I²C up to 100 kHz"
   },
   "wiring": {
     "pins": [
@@ -138,17 +143,17 @@
     ]
   },
   "tips": [
-    "Line addressing isn't sequential \u2014 line 3 starts at column 0x00+0x14, line 4 at 0x40+0x14. Most drivers hide this.",
-    "Drawing 80 chars over I\u00b2C at 100 kHz takes ~50 ms \u2014 avoid refreshing the whole screen every frame."
+    "Line addressing isn't sequential — line 3 starts at column 0x00+0x14, line 4 at 0x40+0x14. Most drivers hide this.",
+    "Drawing 80 chars over I²C at 100 kHz takes ~50 ms — avoid refreshing the whole screen every frame."
   ],
   "alternatives": [
     {
       "name": "SSD1306",
-      "note": "OLED \u2014 smaller package but you get graphics."
+      "note": "OLED — smaller package but you get graphics."
     },
     {
       "name": "ST7789",
-      "note": "Color TFT \u2014 more pixels, more flexibility, more code."
+      "note": "Color TFT — more pixels, more flexibility, more code."
     }
   ]
 }

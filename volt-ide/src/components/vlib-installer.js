@@ -142,7 +142,12 @@ export function showResult(res, opts) {
     const pinsSec = pinsHtml ? `<details class="vlib2-src vs-details"><summary>Wiring · pinout</summary><table class="vs-pins">${pinsHtml}</table></details>` : "";
     // Private (collection) libs are trusted by your login, not a registry
     // signature — say so honestly rather than claiming "Signature verified".
-    const trustSec = res.private
+    const trustSec = res.local
+        ? `<div class="vs-trust vs-trust-private">
+                    <span class="vs-trust-check">◇</span>
+                    <span>Device library on this machine · not from the Grid, <b>unsigned</b>${d.c_source ? ` · <b>${esc(d.c_source)}</b>` : ""}</span>
+                </div>`
+        : res.private
         ? `<div class="vs-trust vs-trust-private">
                     <span class="vs-trust-check">◇</span>
                     <span>Private library · <b>unsigned</b> — your own, not registry-verified · <b class="vlib-tier vlib-tier-community">private</b></span>
@@ -163,13 +168,15 @@ export function showResult(res, opts) {
 
     // context-aware footer
     const footer = installed
-        ? `<button class="wiz-btn wiz-btn-danger" id="vlibUninstall">Uninstall</button><div class="vs-foot-gap"></div>`
+        ? (opts.onUninstall === null ? "" : `<button class="wiz-btn wiz-btn-danger" id="vlibUninstall">Uninstall</button>`) + `<div class="vs-foot-gap"></div>`
           + (u && canInstall ? `<button class="wiz-btn wiz-btn-primary" id="vlibInstall">Update to v${esc(u.toVersion)}</button>` : "")
           + `<button class="wiz-btn" id="vlibDone">Done</button>`
         : `<button class="wiz-btn" id="vlibCancel">Cancel</button>`
           + `<button class="wiz-btn wiz-btn-primary" id="vlibInstall" ${canInstall ? "" : "disabled"}>Install</button>`;
 
-    const headBadge = installed
+    const headBadge = res.local
+        ? `<span class="vs-installed-badge">On this machine</span>`
+        : installed
         ? `<span class="vs-installed-badge">Installed</span>`
         : `<span class="vs-tier-badge vs-tier-${esc(tier)}">${esc(tier)}</span>`;
 
@@ -180,7 +187,7 @@ export function showResult(res, opts) {
             <div class="vlib2-head">
                 <span class="lib-ic lib-ic-${esc(iface)}">${esc(iface === "?" ? "•" : iface.toUpperCase())}</span>
                 <div class="vlib2-head-txt">
-                    <div class="vlib2-title">${esc(m.name || d.name || "Library")} <span class="vlib2-ver">v${esc(m.version || "?")}</span>${headBadge}</div>
+                    <div class="vlib2-title">${esc(m.name || d.name || "Library")} ${m.version || !res.local ? `<span class="vlib2-ver">v${esc(m.version || "?")}</span>` : ""}${headBadge}</div>
                     <div class="vlib2-sub">${esc(subParts.join(" · ") || m.description || "Signed Volt library")}</div>
                 </div>
                 ${d.datasheet ? `<button class="vs-link" id="vlibDatasheet" title="Open datasheet">Datasheet ↗</button>` : ""}

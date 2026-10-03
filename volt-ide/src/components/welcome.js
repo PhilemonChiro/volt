@@ -37,7 +37,7 @@ export function init(container, { onNew, onOpen, onOpenRecent }) {
             <div class="welcome-hints">
                 <span><kbd>⌃N</kbd>New</span>
                 <span><kbd>⌃O</kbd>Open</span>
-                <span><kbd>⌃R</kbd>Run</span>
+                <span><kbd>⌃R</kbd>Upload</span>
             </div>
         </div>
     `;

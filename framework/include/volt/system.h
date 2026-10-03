@@ -12,6 +12,12 @@ uint32_t system_free_heap(void);
 // Seconds since last boot.
 uint32_t system_uptime(void);
 
+// Microseconds since boot (wraps after ~71 min, like Arduino micros()).
+uint32_t system_micros(void);
+
+// Lowest free heap seen since boot, in bytes (0 where untracked).
+uint32_t system_min_free_heap(void);
+
 // Chip/device unique ID.
 uint32_t system_id(void);
 

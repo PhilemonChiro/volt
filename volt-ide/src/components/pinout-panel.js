@@ -9,33 +9,16 @@
 //
 // Public API:
 //   init(container)
-//   render(chip, assignedPins)    assignedPins = [{ name, gpio, mode }]
-//
-// Click an assigned pin → fires 'pinout:jump' on document with
-// { detail: { name } } so the editor can scroll to the declaration.
+//   render(chip, assignedPins, hardware)    assignedPins = [{ name, gpio, mode }]
+//   onPinClick(fn)    fn(gpio, boardPin, assigned, element) — the Hardware
+//                     panel (hardware-panel.js) owns the popover + actions.
+
+import * as chipSelector from "./chip-selector.js";
 
 let _root = null;
 let _boards = null;
 let _state = { chip: null, assigned: [] };
 let _vp = null;          // viewport: { svg, container, host, scale, tx, ty }
-
-// Global listeners bound once across the lifetime of the page so toggling
-// the panel doesn't pile up duplicates.
-let _globalListenersBound = false;
-function ensureGlobalListeners() {
-    if (_globalListenersBound) return;
-    _globalListenersBound = true;
-    document.addEventListener("pointerdown", (e) => {
-        const pop = document.getElementById("pinoutPopover");
-        if (!pop || pop.style.display === "none") return;
-        if (pop.contains(e.target)) return;
-        if (e.target.closest(".pinout-pin")) return;
-        closePopover();
-    }, true);
-    document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closePopover();
-    });
-}
 
 export function init(container) {
     _root = container;
@@ -47,7 +30,6 @@ export function init(container) {
     container.innerHTML = `
         <div class="pinout-canvas" id="pinoutCanvas">
             <div class="pinout-svg-host" id="pinoutSvgHost"></div>
-            <div class="pinout-popover" id="pinoutPopover" style="display:none"></div>
         </div>
         <div class="pinout-controls">
             <button class="pinout-ctrl" id="pinoutZoomOut"  title="Zoom out">−</button>
@@ -58,8 +40,31 @@ export function init(container) {
     document.getElementById("pinoutZoomIn").onclick    = () => zoomBy(1.25);
     document.getElementById("pinoutZoomOut").onclick   = () => zoomBy(0.8);
     document.getElementById("pinoutZoomReset").onclick = () => resetView();
+}
 
-    ensureGlobalListeners();
+let _onPinClick = () => {};
+export function onPinClick(fn) { _onPinClick = fn; }
+
+// Free-pin tint: { "23": "safe" | "caution" | "risky" | "unavailable" }.
+let _safety = {};
+export function setSafety(map) {
+    _safety = map || {};
+    if (_skeleton.refs) applyAssignments();
+}
+
+// Pick mode ("Move to another pin"): light these GPIOs, dim the rest.
+export function setTargets(gpios) {
+    const svg = document.querySelector("#pinoutSvgHost svg");
+    const set = new Set((gpios || []).map(String));
+    document.getElementById("pinoutCanvas")?.classList.toggle("is-picking", !!gpios);
+    if (!svg) return;
+    svg.querySelectorAll(".pinout-pin").forEach(g =>
+        g.classList.toggle("is-target", set.has(g.getAttribute("data-gpio"))));
+}
+
+// The <g> drawn for a GPIO (popover anchor), or null.
+export function pinElement(gpio) {
+    return _skeleton.refs?.[String(gpio)]?.g || null;
 }
 
 // Lightweight regex extractor — pulls pin/bus/device declarations out of
@@ -195,6 +200,23 @@ export function extractHardware(source) {
         });
     }
 
+    // device <name>: <Type>(role: N, …) — the device owns these GPIOs itself.
+    const devArgRe = /^\s*device\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*([A-Za-z_][A-Za-z_0-9]*)\s*\(([^)]*)\)\s*$/gm;
+    while ((mm = devArgRe.exec(block)) !== null) {
+        const dev = { name: mm[1], type: mm[2], bus: "", address: "", line: lineOf(mm.index), roles: {} };
+        devices.push(dev);
+        for (const pair of (mm[3] || "").split(",")) {
+            const r = pair.match(/^\s*([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(\d+)\s*$/);
+            if (!r) continue;
+            const key = String(parseInt(r[2], 10));
+            dev.roles[r[1].toLowerCase()] = parseInt(r[2], 10);
+            if (!pinByGpio[key]) {
+                pinByGpio[key] = { name: dev.name, kind: "device", role: r[1].toLowerCase(),
+                    deviceType: dev.type, gpio: key, line: dev.line };
+            }
+        }
+    }
+
     // Resolve 'orphan' devices — ones whose `on <name>` doesn't reference a
     // declared bus OR a declared pin. These are typically GPIO-attached
     // devices (DHT, HC-SR04, NEOPIXEL …) where the user hasn't yet declared
@@ -203,7 +225,7 @@ export function extractHardware(source) {
     const busNames = new Set(buses.map(b => b.name));
     const pinNames = new Set(pins.map(p => p.name));
     for (const d of devices) {
-        if (busNames.has(d.bus) || pinNames.has(d.bus)) continue;
+        if (d.roles || busNames.has(d.bus) || pinNames.has(d.bus)) continue;
         // Address may be decimal (4), hex (0x4), or a trailing fragment;
         // parseInt(str) with no radix handles "0x" prefix automatically.
         const gpio = parseInt(d.address);
@@ -245,13 +267,39 @@ export function findConflicts(assignedPins) {
 
 // Highlight one pin (e.g. the one matching the editor's cursor line).
 // Pass null to clear.
-export function setHighlight(gpio) {
+// Highlight one GPIO, a list of them, or none (null / []).
+export function setHighlight(gpios) {
     const svg = document.querySelector("#pinoutSvgHost svg");
     if (!svg) return;
     svg.querySelectorAll(".pinout-pin.is-cursor").forEach(g => g.classList.remove("is-cursor"));
-    if (gpio == null) return;
-    const target = svg.querySelector(`.pinout-pin[data-gpio="${CSS.escape(String(gpio))}"]`);
-    if (target) target.classList.add("is-cursor");
+    for (const gpio of [].concat(gpios ?? [])) {
+        if (gpio == null || gpio === "") continue;
+        const target = svg.querySelector(`.pinout-pin[data-gpio="${CSS.escape(String(gpio))}"]`);
+        if (target) target.classList.add("is-cursor");
+    }
+}
+
+// Where a GPIO sits on the current board drawing, with its silkscreen
+// label, alternate functions and board note — or null.
+export function boardPinInfo(gpio) {
+    const board = _skeleton.board;
+    if (!board) return null;
+    const sides = board.columns.length === 2 ? ["left", "right"] : board.columns.map((_, i) => "column " + (i + 1));
+    for (let c = 0; c < board.columns.length; c++) {
+        const col = board.columns[c];
+        for (let i = 0; i < col.length; i++) {
+            const p = col[i];
+            if (p && String(p.gpio ?? "") === String(gpio))
+                return { board: board.name, header: sides[c], index: i + 1, label: p.label,
+                    type: p.type || "", alt: p.alt || [], note: p.note || "" };
+        }
+    }
+    return null;
+}
+
+// Compiler hardware messages for a GPIO (see setDiagnostics).
+export function pinDiagnostics(gpio) {
+    return _pinDiags[String(gpio)] || [];
 }
 
 // Cache of the static SVG built per chip. Subsequent renders mutate
@@ -268,13 +316,15 @@ export async function render(chip, assignedPins, hardware) {
     _state.conflicts = findConflicts(_state.assigned);
     _state.hardware = hardware || null;
 
-    // Same chip → mutate the existing DOM. Different chip → rebuild.
-    if (_skeleton.chip === newChip && _skeleton.refs) {
+    // Same chip + board → mutate the existing DOM. Otherwise rebuild.
+    const boardId = boardIdFor(newChip);
+    const key = newChip + ":" + boardId;
+    if (_skeleton.chip === key && _skeleton.refs) {
         applyAssignments();
         return;
     }
 
-    const board = await loadBoard(_state.chip);
+    const board = await loadBoard(_state.chip, boardId);
     const host  = document.getElementById("pinoutSvgHost");
     if (!board) {
         host.innerHTML = `<div class="pinout-empty">No board diagram for ${escapeHtml(chip)} yet.</div>`;
@@ -287,11 +337,11 @@ export async function render(chip, assignedPins, hardware) {
     host.innerHTML = drawBoard(board, _state.assigned);
     const svg = host.querySelector("svg");
     if (!svg) return;
-    bindPinClicks(svg, board, _state.assigned);
+    bindPinClicks(svg, board);
     attachZoomPan(svg);
 
     // Cache element refs by GPIO so subsequent renders mutate in place.
-    _skeleton.chip  = _state.chip;
+    _skeleton.chip  = key;
     _skeleton.board = board;
     _skeleton.refs  = {};
     svg.querySelectorAll(".pinout-pin").forEach(g => {
@@ -300,6 +350,7 @@ export async function render(chip, assignedPins, hardware) {
         _skeleton.refs[gpio] = {
             g,
             varLabel: g.querySelector(".bp-var-label"),
+            warnMark: g.querySelector(".bp-warn-mark"),
             devList:  g.querySelector(".bp-dev-list"),
             varX:     parseFloat(g.getAttribute("data-varx") || "0"),
             varY:     parseFloat(g.getAttribute("data-vary") || "0"),
@@ -340,6 +391,8 @@ function applyAssignments() {
         refs.g.classList.toggle("is-bus",    kind === "bus");
         refs.g.classList.toggle("is-pin",    kind === "pin");
         refs.g.classList.toggle("is-device", kind === "device");
+        const role = roleOf(a);
+        for (const r of ROLES) refs.g.classList.toggle("role-" + r, role === r);
 
         // data-* used by click-to-jump + hover events
         refs.g.setAttribute("data-name", a ? a.name : "");
@@ -349,9 +402,7 @@ function applyAssignments() {
         // Var label text — for bus pins show the role (sda/scl); for
         // device-anchored pins show the device name; for pin assignments
         // show the variable name.
-        const labelText = a
-            ? (kind === "bus" ? (a.role || "?") : a.name)
-            : "";
+        const labelText = a ? labelFor(a) : "";
         // Note: device kind uses a.name which is the device name (set in
         // extractHardware's orphan pass).
         if (refs.varLabel) {
@@ -360,12 +411,103 @@ function applyAssignments() {
             refs.varLabel.setAttribute("data-line", a && a.line ? a.line : 0);
         }
 
+        const warn = a ? pinWarning(gpio) : "";
+        if (refs.warnMark) {
+            refs.warnMark.style.display = warn ? "" : "none";
+            const t = refs.warnMark.querySelector("title");
+            if (t && t.textContent !== warn) t.textContent = warn;
+        }
+        refs.g.classList.toggle("has-warning", !!warn);
+        const safety = a ? "" : (_safety[gpio] || "");
+        for (const s of ["safe", "caution", "risky", "unavailable"]) refs.g.classList.toggle("safe-" + s, safety === s);
+
         // Device cards on the graphic were too noisy; devices live in
         // the popover only now. Keep the dormant placeholder hidden.
         if (refs.devList) updateDevList(refs, []);
     }
 }
 
+// What a pin is used for → one colour each (legend in the corner).
+const ROLES = ["out", "pwm", "in", "adc", "bus", "dev"];
+export function roleOf(a) {
+    if (!a) return null;
+    if (a.kind === "bus") return "bus";
+    if (a.kind === "device") return "dev";
+    const m = (a.mode || "Output").toLowerCase();
+    if (m === "pwm" || m === "servo") return "pwm";
+    if (m.includes("analog") || m === "adc" || m === "dac") return "adc";
+    if (m.includes("input") || m === "touch") return "in";
+    return "out";
+}
+
+// "heater · PWM", "estop · pull-up", "i2c0 · SDA", "bin_level · trig"
+export function labelFor(a) {
+    if (a.kind === "bus") return `${a.name} · ${(a.role || "?").toUpperCase()}`;
+    if (a.kind === "device") return a.role ? `${a.name} · ${a.role}` : a.name;
+    const m = (a.mode || "Output").toLowerCase();
+    const tag = m === "pwm" ? "PWM"
+        : m === "servo" ? "servo"
+        : m === "dac" ? "DAC"
+        : m === "touch" ? "touch"
+        : m.includes("analog") || m === "adc" ? "analog"
+        : m.includes("pullup") ? "pull-up"
+        : m.includes("pulldown") ? "pull-down"
+        : m.includes("input") ? "input" : "output";
+    return `${a.name} · ${tag}`;
+}
+
+// Wiring hazards worth a mark on the drawing (hover for the reason) — the
+// compiler's hardware diagnostics, by GPIO. A diagnostic with a fix points
+// at the offending pin number; otherwise it belongs to the pin on its line.
+let _pinDiags = {}, _pinFixes = {};
+export function setDiagnostics(diags, source) {
+    const lines = (source || "").split("\n");
+    const out = {}, fixes = {};
+    for (const d of diags || []) {
+        if (!d.code || d.code === "pin-note" || !/^(pin|bus)-/.test(d.code)) continue;
+        let gpios = [];
+        const f = d.fixes && d.fixes[0];
+        if (f && f.line === f.end_line) {
+            const n = (lines[f.line - 1] || "").slice(f.col - 1, f.end_col - 1).replace(/^GP/i, "");
+            if (/^\d+$/.test(n)) gpios = [String(Number(n))];
+        }
+        if (!gpios.length)
+            gpios = _state.assigned.filter(a => a.line === d.line && (a.kind || "pin") === "pin").map(a => String(a.gpio));
+        for (const g of gpios) {
+            (out[g] = out[g] || []).push(d.message);
+            for (const fx of d.fixes || []) (fixes[g] = fixes[g] || []).push(fx);
+        }
+    }
+    _pinDiags = out;
+    _pinFixes = fixes;
+    if (_skeleton.refs) applyAssignments();
+}
+
+// Compiler fixes for a GPIO's diagnostics ({title, line, col, end_line, end_col, text}).
+export function pinFixes(gpio) {
+    return _pinFixes[String(gpio)] || [];
+}
+
+function pinWarning(gpio) {
+    return (_pinDiags[String(gpio ?? "")] || []).join("\n");
+}
+
+// Board choice: a chip can have several dev-board drawings; volt.toml's
+// `board` picks one (the default is the first).
+const BOARDS_BY_CHIP = {
+    esp32: [
+        { id: "esp32-devkitc-v4", label: "ESP32 DevKitC V4 (38-pin)" },
+        { id: "esp32-devkit-v1",  label: "ESP32 DevKit V1 (30-pin)" },
+    ],
+};
+export function boardsFor(chip) {
+    return BOARDS_BY_CHIP[(chip || "").toLowerCase()] || [];
+}
+export function boardIdFor(chip) {
+    const list = BOARDS_BY_CHIP[chip] || [];
+    const want = chipSelector.getBoard();
+    return (list.find(b => b.id === want) || list[0] || { id: "" }).id;
+}
 // ============================================================
 // Device cards — anti-collision layout
 // ============================================================
@@ -524,15 +666,16 @@ const CHIP_TO_JSON = {
     stm32f103: null,
 };
 
-async function loadBoard(chip) {
+async function loadBoard(chip, boardId) {
     if (!_boards) _boards = {};
-    if (_boards[chip]) return _boards[chip];
+    const key = chip + ":" + boardId;
+    if (_boards[key]) return _boards[key];
     const file = CHIP_TO_JSON[chip];
     if (!file) return null;
     try {
         const data = await fetch(`assets/boards/${file}`).then(r => r.json());
-        _boards[chip] = normalize(data);
-        return _boards[chip];
+        _boards[key] = normalize(data, boardId);
+        return _boards[key];
     } catch (e) {
         console.warn("[pinout] failed to load", file, e);
         return null;
@@ -542,7 +685,7 @@ async function loadBoard(chip) {
 // Project per-chip JSON into one layout: { name, chip, columns, art }
 //   columns = [ [pinRow, …], [pinRow, …] ]   left + right header
 //   art     = chip-specific visual hints (IC, buttons, LED, antenna)
-function normalize(data) {
+function normalize(data, boardId) {
     if (data.chip === "rp2040") {
         const sorted = [...data.pins].sort((a, b) => a.pin_num - b.pin_num);
         const left  = sorted.filter(p => p.pin_num <= 20);
@@ -565,13 +708,21 @@ function normalize(data) {
     // ESP32 DevKitC v4 — canonical column order from the Espressif datasheet,
     // looking at the component side with USB at the top.
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/hw-reference/esp32/get-started-devkitc.html
-    const LEFT  = ["3V3","EN","VP","VN","34","35","32","33","25","26","27","14","12","GND","13","D2","D3","CMD","5V"];
-    const RIGHT = ["GND","23","22","TX","RX","21","GND","19","18","5","17","16","4","0","2","15","D1","D0","CLK"];
+    // DevKit V1 (DOIT, 30-pin) uses the same module, so the same pin facts,
+    // in its own header order; it has VIN where the DevKitC has 5V.
+    const v1 = boardId === "esp32-devkit-v1";
+    const LEFT  = v1
+        ? ["EN","VP","VN","34","35","32","33","25","26","27","14","12","13","GND","VIN"]
+        : ["3V3","EN","VP","VN","34","35","32","33","25","26","27","14","12","GND","13","D2","D3","CMD","5V"];
+    const RIGHT = v1
+        ? ["23","22","TX","RX","21","19","18","5","17","16","4","2","15","GND","3V3"]
+        : ["GND","23","22","TX","RX","21","GND","19","18","5","17","16","4","0","2","15","D1","D0","CLK"];
     const byLabel = {};
     for (const p of data.pins) if (!(p.label in byLabel)) byLabel[p.label] = p;
-    const buildCol = (labels) => labels.map(lbl => byLabel[lbl] || { label: lbl, type: "ground", alt: [] });
+    const extra = { VIN: { label: "VIN", type: "power", alt: [], note: "5V input (from USB or external)" } };
+    const buildCol = (labels) => labels.map(lbl => byLabel[lbl] || extra[lbl] || { label: lbl, type: "ground", alt: [] });
     return {
-        name: data.board || "ESP32 DevKitC v4",
+        name: v1 ? "ESP32 DevKit V1" : (data.board || "ESP32 DevKitC v4"),
         chip: "esp32",
         columns: [buildCol(LEFT), buildCol(RIGHT)],
         art: {
@@ -601,7 +752,7 @@ function drawBoard(board, assigned) {
     const innerH    = topPad + (rows - 1) * PITCH + bottomPad;
 
     // Horizontal sizing
-    const labelGutter = 84;     // room outside the board for pin labels
+    const labelGutter = 150;    // room outside the board for pin + "name · type" labels
     const innerBoardW = COL_GAP + 24;
     const boardW = innerBoardW;
     const totalW = labelGutter * 2 + boardW;
@@ -649,6 +800,11 @@ function drawPin(p, side, edgeX, y) {
     const labelX = side === "left" ? edgeX - 10 : edgeX + 10;
     const labelAnchor = side === "left" ? "end" : "start";
     const varX = side === "left" ? labelX - 56 : labelX + 56;
+    const warnX = side === "left" ? varX + 12 : varX - 12;
+    // Named pins (VP, TX…) also show their GPIO number, which is what code uses.
+    const shown = gpio && gpio !== p.label && type !== "reserved"
+        ? (side === "left" ? `${p.label} ${gpio}` : `${gpio} ${p.label}`)
+        : p.label;
 
     return `
         <g class="pinout-pin pin-type-${type}" data-gpio="${escapeHtml(gpio)}"
@@ -657,7 +813,8 @@ function drawPin(p, side, edgeX, y) {
             <title>${escapeHtml(pinTooltip(p))}</title>
             <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
             <circle cx="${edgeX}" cy="${y}" r="8" class="bp-pin-ring"/>
-            <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(p.label)}</text>
+            <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(shown)}</text>
+            <text x="${warnX}" y="${y + 4}" class="bp-warn-mark" text-anchor="middle" style="display:none">⚠<title></title></text>
             <text x="${varX}" y="${y + 4}" class="bp-var-label"
                   text-anchor="${labelAnchor}" data-line="0" style="display:none"></text>
             <g class="bp-dev-list" style="display:none"></g>
@@ -665,12 +822,9 @@ function drawPin(p, side, edgeX, y) {
     `;
 }
 
-function bindPinClicks(svg, board, assignedPins) {
-    const byGpio = {};
-    for (const a of assignedPins) {
-        const gpio = String(a.gpio ?? a.pin_number ?? a.pin ?? "").trim();
-        if (gpio) byGpio[gpio] = a;
-    }
+function bindPinClicks(svg, board) {
+    const assignedAt = (gpio) => _state.assigned.find(a =>
+        String(a.gpio ?? a.pin_number ?? a.pin ?? "").trim() === gpio) || null;
     // Build pin lookup from chip defs (the JSON loaded for this board)
     const pinByGpio = {};
     const pinByLabel = {};
@@ -696,8 +850,8 @@ function bindPinClicks(svg, board, assignedPins) {
             const gpio = g.getAttribute("data-gpio");
             const pin  = pinByGpio[gpio] || pinByLabel[g.querySelector("text.bp-pin-label")?.textContent?.trim() || ""];
             if (!pin) return;
-            const assigned = gpio ? byGpio[gpio] : null;
-            openPopover(g, pin, assigned);
+            const assigned = gpio ? assignedAt(gpio) : null;
+            _onPinClick(gpio, pin, assigned, g);
         });
         // Hover → tell the editor to highlight the declaration line
         g.addEventListener("pointerenter", () => {
@@ -708,137 +862,6 @@ function bindPinClicks(svg, board, assignedPins) {
             document.dispatchEvent(new CustomEvent("pinout:hover", { detail: { line: 0 } }));
         });
     });
-}
-
-// ============================================================
-// Pin info popover — opens on click, shows everything we know
-// about the pin from chip defs (label, GPIO, type, alt functions,
-// notes) + assigned variable + "Jump to declaration" action.
-// ============================================================
-function openPopover(pinEl, pin, assigned) {
-    const pop = document.getElementById("pinoutPopover");
-    const canvas = document.getElementById("pinoutCanvas");
-    if (!pop || !canvas) return;
-
-    pop.innerHTML = renderPopoverHTML(pin, assigned);
-    pop.style.display = "";
-
-    // Position next to the pin element. Use the pin's screen rect
-    // (which already includes the pan/zoom transform).
-    const pinRect = pinEl.getBoundingClientRect();
-    const canvasRect = canvas.getBoundingClientRect();
-    const popW = pop.offsetWidth;
-    const popH = pop.offsetHeight;
-
-    // Prefer the side opposite the board centre — if pin is on the left
-    // half, popup goes right of it, and vice versa.
-    const pinCenterX = pinRect.left + pinRect.width / 2 - canvasRect.left;
-    const canvasMidX = canvasRect.width / 2;
-    let x = (pinCenterX < canvasMidX)
-        ? pinRect.right - canvasRect.left + 12
-        : pinRect.left  - canvasRect.left - popW - 12;
-    let y = pinRect.top - canvasRect.top + pinRect.height / 2 - popH / 2;
-
-    // Clamp to canvas bounds
-    x = Math.max(8, Math.min(x, canvasRect.width  - popW - 8));
-    y = Math.max(8, Math.min(y, canvasRect.height - popH - 8));
-    pop.style.left = x + "px";
-    pop.style.top  = y + "px";
-
-    // Wire the Jump-to-declaration button
-    const jumpBtn = pop.querySelector("[data-action='jump']");
-    if (jumpBtn && assigned) {
-        jumpBtn.onclick = () => {
-            document.dispatchEvent(new CustomEvent("pinout:jump", { detail: { name: assigned.name } }));
-            closePopover();
-        };
-    }
-    const closeBtn = pop.querySelector("[data-action='close']");
-    if (closeBtn) closeBtn.onclick = closePopover;
-}
-
-function closePopover() {
-    const pop = document.getElementById("pinoutPopover");
-    if (pop) { pop.style.display = "none"; pop.innerHTML = ""; }
-}
-
-function renderPopoverHTML(pin, assigned) {
-    const gpio = pin.gpio ? `GPIO ${pin.gpio}` : "";
-    const alts = (pin.alt && pin.alt.length)
-        ? `<div class="pp-section">
-             <div class="pp-section-title">Alternate functions</div>
-             <ul class="pp-alts">
-                ${pin.alt.map(a => `<li>${escapeHtml(a)}</li>`).join("")}
-             </ul>
-           </div>`
-        : "";
-    const note = pin.note
-        ? `<div class="pp-section">
-             <div class="pp-section-title">Note</div>
-             <div class="pp-note">${escapeHtml(pin.note)}</div>
-           </div>`
-        : "";
-    let assignedBlock;
-    if (assigned && assigned.kind === "bus") {
-        // List devices that ride on this bus (from the hardware extract)
-        const devices = (_state.hardware && _state.hardware.devices) || [];
-        const onThisBus = devices.filter(d => d.bus === assigned.name);
-        const devicesHtml = onThisBus.length
-            ? `<ul class="pp-alts">
-                 ${onThisBus.map(d => `<li>${escapeHtml(d.name)} <span style="color:var(--t3)">${escapeHtml(d.type)} @ ${escapeHtml(d.address)}</span></li>`).join("")}
-               </ul>`
-            : `<div class="pp-note" style="font-size:11px">No devices declared on this bus yet.</div>`;
-        assignedBlock = `
-            <div class="pp-assigned pp-bus">
-                <span class="pp-assigned-label">Bus role · ${escapeHtml(assigned.busType || "")}</span>
-                <span class="pp-assigned-name">${escapeHtml(assigned.name)} → ${escapeHtml(assigned.role || "")}</span>
-                <button class="pp-btn pp-btn-primary" data-action="jump">Jump to bus declaration</button>
-            </div>
-            <div class="pp-section">
-                <div class="pp-section-title">Devices on ${escapeHtml(assigned.name)}</div>
-                ${devicesHtml}
-            </div>
-        `;
-    } else if (assigned) {
-        // For regular pin assignments, also surface any GPIO-bound devices
-        // ('device dht1: DHT11 on <thisPin> at 4') so the popover reads
-        // 'led' or 'dht_pin → DHT11 attached' instead of just the pin.
-        const devices = (_state.hardware && _state.hardware.devices) || [];
-        const onThisPin = devices.filter(d => d.bus === assigned.name);
-        const devicesHtml = onThisPin.length
-            ? `<div class="pp-section">
-                 <div class="pp-section-title">Devices attached</div>
-                 <ul class="pp-alts">
-                    ${onThisPin.map(d => `<li>${escapeHtml(d.name)} <span style="color:var(--t3)">${escapeHtml(d.type)} @ ${escapeHtml(d.address)}</span></li>`).join("")}
-                 </ul>
-               </div>`
-            : "";
-        assignedBlock = `
-            <div class="pp-assigned">
-                <span class="pp-assigned-label">Assigned to</span>
-                <span class="pp-assigned-name">${escapeHtml(assigned.name)}</span>
-                ${assigned.mode ? `<span class="pp-assigned-mode">${escapeHtml(assigned.mode)}</span>` : ""}
-                <button class="pp-btn pp-btn-primary" data-action="jump">Jump to declaration</button>
-            </div>
-            ${devicesHtml}`;
-    } else {
-        assignedBlock = `<div class="pp-unassigned">Not assigned. Use <code>pin name = ${escapeHtml(pin.gpio || pin.label)}</code> in your hardware block.</div>`;
-    }
-    return `
-        <div class="pp-head">
-            <div class="pp-head-title">
-                <span class="pp-pin-label">${escapeHtml(pin.label)}</span>
-                ${gpio ? `<span class="pp-pin-gpio">${gpio}</span>` : ""}
-            </div>
-            <button class="pp-close" data-action="close" aria-label="Close">×</button>
-        </div>
-        <div class="pp-body">
-            ${pin.type ? `<div class="pp-type pp-type-${escapeHtml(pin.type)}">${escapeHtml(pin.type)}</div>` : ""}
-            ${alts}
-            ${note}
-            ${assignedBlock}
-        </div>
-    `;
 }
 
 function pinTooltip(p) {
@@ -879,7 +902,7 @@ function onWheel(e) {
 let _drag = null;
 function onPointerDown(e) {
     if (e.button !== 0) return;
-    if (e.target.closest(".pinout-pin, .pinout-popover")) return;
+    if (e.target.closest(".pinout-pin")) return;
     _vp.container.setPointerCapture(e.pointerId);
     _vp.container.classList.add("is-panning");
     _drag = { x: e.clientX, y: e.clientY, startTx: _vp.tx, startTy: _vp.ty };

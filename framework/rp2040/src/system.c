@@ -25,6 +25,16 @@ uint32_t system_uptime(void)
     return to_ms_since_boot(get_absolute_time()) / 1000;
 }
 
+uint32_t system_micros(void)
+{
+    return time_us_32();
+}
+
+uint32_t system_min_free_heap(void)
+{
+    return 0; // heap not tracked, see system_free_heap
+}
+
 uint32_t system_id(void)
 {
     pico_unique_board_id_t id;

@@ -53,6 +53,11 @@
         }
       ],
       "returns": "void"
+    },
+    "reinit": {
+      "returns": "void",
+      "params": [],
+      "description": "Re-initialise the display (recovers garbled characters after noise or a supply dip); redraw afterwards"
     }
   },
   "name": "HD44780",

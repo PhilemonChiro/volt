@@ -596,8 +596,13 @@ async function getSessionToken() {
 ipcMain.handle("auth_login", async () => {
     return await new Promise((resolve) => {
         const authWin = new BrowserWindow({
-            width: 520, height: 720, parent: win, modal: true, show: true, title: "Sign in to VoltGrid",
+            // Not modal: on macOS a modal child is a sheet with no title bar, so the
+            // user couldn't back out of signing in. A normal window has a close button.
+            width: 520, height: 720, parent: win, modal: false, show: true, title: "Sign in to VoltGrid",
             webPreferences: { nodeIntegration: false, contextIsolation: true },
+        });
+        authWin.webContents.on("before-input-event", (e, input) => {
+            if (input.type === "keyDown" && input.key === "Escape") { e.preventDefault(); authWin.close(); }
         });
         let done = false;
         const grab = async () => {
@@ -880,6 +885,16 @@ ipcMain.handle("check_code", async (_, source) => {
     }
 });
 
+// The compiler's GPIO table for a chip (capabilities + safety) — feeds
+// pin completion, hover and the board view.
+ipcMain.handle("pin_table", async (_, chip) => {
+    try {
+        return await workerCall("pin_table", { chip: chip || "" }, 5000);
+    } catch (_) {
+        return [];
+    }
+});
+
 ipcMain.handle("format_code", async (_, source) => {
     try {
         return await workerCall("format_code", { source }, 5000);
@@ -1153,11 +1168,6 @@ ipcMain.handle("export_binary", async (_, projectPath, voltFile, chip) => {
 });
 
 ipcMain.handle("run_project", async (_, projectPath, voltFile, port, chip) => {
-    // Honor "auto-flash" setting — if off, stop after build (no flash, no monitor)
-    if (settings.get("build.autoFlash") === false) {
-        const art = await voltBuild("build", voltFile, chip);
-        return art === null ? { ok: false } : { ok: true, port: null };
-    }
     // esptool needs the port to itself.
     await stopMonitor();
     const newPort = await voltBuild("run", voltFile, chip, ["-p", port]);

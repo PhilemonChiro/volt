@@ -1,6 +1,7 @@
 // New Project Wizard — 3-step: Board → Template → Name
 
 import { createProject } from "../services/projects.js";
+import * as settings from "../services/settings.js";
 
 const BOARDS = [
     { id: "esp32", label: "ESP32", desc: "WiFi + BLE, 520KB RAM" },
@@ -22,7 +23,8 @@ export function show(onCreated) {
     const old = document.getElementById("wizardOverlay");
     if (old) old.remove();
 
-    const state = { step: 1, chip: "esp32", template: "blink" };
+    const defChip = settings.get("build.defaultChip", "esp32");
+    const state = { step: 1, chip: BOARDS.some(c => c.id === defChip) ? defChip : "esp32", template: "blink" };
     let dir = "forward";
 
     const overlay = document.createElement("div");

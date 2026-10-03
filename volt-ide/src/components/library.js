@@ -1,8 +1,5 @@
-// Device library — sidebar list, context menu, detail dialog, insert logic.
-//
-// Click a device row to get a context menu with: Add to project / Add with
-// sample read / View details / Open C source / Copy declaration / Copy snippet.
-// The detail dialog is read-only; all actions live in the context menu.
+// Device library — sidebar panel (On this machine / Browse), docked detail
+// card, and the insert logic behind "Add to project".
 
 import * as dialog from "./dialog.js";
 import * as installer from "./vlib-installer.js";
@@ -35,7 +32,7 @@ const LIB_GROUPS = [
     { key: "health",  label: "Health",                    cats: ["health"] },
     { key: "display", label: "Displays & LEDs",           cats: ["display"] },
     { key: "control", label: "Control & Timing",          cats: ["control", "time"] },
-    { key: "comms",   label: "Comms, RFID & Storage",     cats: ["communication", "storage"] },
+    { key: "comms",   label: "Comms, RFID & Storage",     cats: ["communication", "rf", "storage"] },
     { key: "other",   label: "Other",                     cats: [] },
 ];
 const LIB_CAT_TO_GRP = {};
@@ -44,21 +41,25 @@ const LIB_EXPANDED_KEY = "volt.lib.expanded";   // which groups the user opened
 const LIB_TAB_KEY = "volt.lib.tab";             // active tab: installed | grid
 
 async function loadDevices() {
-    if (cachedDevices) return cachedDevices;
+    // Always re-read: a library created or installed since the last paint must
+    // show up without restarting the IDE.
     try {
         cachedDevices = (await api.devicesList()) || [];
     } catch (e) {
         console.warn("[library] devicesList failed:", e);
-        cachedDevices = [];
+        cachedDevices = cachedDevices || [];
     }
     return cachedDevices;
 }
 
+// Two tabs, each library listed once with one status:
+//   On this machine — everything the compiler can resolve right now (bundled,
+//                     created here, installed). "In project" pinned on top.
+//   Browse          — what you can get: the Grid + your private collection.
+// Clicking any row opens the docked side card; the row button is the shortcut.
 export async function renderInto(container) {
     if (!container) return;
 
-    // Load in parallel: installed libraries (lockfile), the Grid marketplace, and
-    // device descriptors (to map an installed prefix → its device.json for "Use").
     const [installed, gridRes, descriptors, collRes] = await Promise.all([
         api.vlibInstalledList().then(x => x || []).catch(() => []),
         api.gridList().then(cells => ({ ok: true, cells: cells || [] })).catch(err => ({ ok: false, err })),
@@ -66,30 +67,81 @@ export async function renderInto(container) {
         (api.collectionList ? api.collectionList() : Promise.resolve({ ok: false })).then(x => x || { ok: false }).catch(() => ({ ok: false })),
     ]);
     const grid = gridRes.ok ? gridRes.cells : [];
-    // Private collection — the user's own libraries (only present when signed in).
     const collection = collRes && collRes.ok ? (collRes.libraries || []) : [];
     const signedIn = !!(collRes && collRes.ok);
     const gridOffline = !gridRes.ok;
-    const descByPrefix = {};
-    for (const d of descriptors) descByPrefix[(d.c_prefix || "").toLowerCase()] = d;
-    const installedByPrefix = {};
-    for (const l of installed) installedByPrefix[l.prefix] = l;
-    const gridByPrefix = {};
-    for (const c of grid) gridByPrefix[c.prefix] = c;
 
-    container.classList.add("lib-panel");   // flex column: fixed header, scrolling list
+    const key = (s) => (s || "").toLowerCase();
+    const installedByPrefix = {};
+    for (const l of installed) installedByPrefix[key(l.prefix)] = l;
+    const gridByPrefix = {};
+    for (const c of grid) gridByPrefix[key(c.prefix)] = c;
+
+    // ---- On this machine: one item per device library ----
+    const source = currentEditorSource();
+    const inProject = (name) => !!source && !!name && new RegExp(`:\\s*${name}\\b`).test(source);
+    const machine = [];
+    const machineByPrefix = {};
+    for (const d of descriptors) {
+        const prefix = key(d.c_prefix || d.name);
+        if (machineByPrefix[prefix]) continue;
+        const it = { d, prefix, name: d.name || prefix, interface: d.interface, category: d.category,
+            description: d.description, inst: installedByPrefix[prefix] };
+        machineByPrefix[prefix] = it;
+        machine.push(it);
+    }
+    // an installed .vlib whose descriptor didn't load still belongs here
+    for (const l of installed) {
+        const prefix = key(l.prefix);
+        if (machineByPrefix[prefix]) continue;
+        const it = { d: { name: l.name || l.prefix, interface: l.interface, c_prefix: l.prefix }, prefix,
+            name: l.name || l.prefix, interface: l.interface, category: "", description: "", inst: l };
+        machineByPrefix[prefix] = it;
+        machine.push(it);
+    }
+    for (const it of machine) {
+        it.inProject = inProject(it.d.name);
+        const g = gridByPrefix[it.prefix];
+        it.update = !!(it.inst && g && g.version !== it.inst.version) ? g.version : null;
+    }
+
+    // ---- Browse: Grid + private collection, merged by prefix ----
+    const browse = [];
+    const browseByPrefix = {};
+    for (const c of grid) {
+        const it = { ...c, prefix: key(c.prefix), fromGrid: true, yours: false };
+        browseByPrefix[it.prefix] = it;
+        browse.push(it);
+    }
+    for (const c of collection) {
+        const p = key(c.prefix);
+        if (browseByPrefix[p]) { browseByPrefix[p].yours = true; continue; }
+        const it = { ...c, prefix: p, fromGrid: false, yours: true };
+        browseByPrefix[p] = it;
+        browse.push(it);
+    }
+    for (const it of browse) {
+        const inst = installedByPrefix[it.prefix];
+        it.state = inst ? (inst.version === it.version ? "have" : "update")
+            : machineByPrefix[it.prefix] ? "have" : "get";
+    }
+    // Browse is for getting things: what's already here lives in the other tab
+    // (an available update stays, as that's still something to get).
+    const browsable = browse.filter(it => it.state !== "have");
+
+    container.classList.add("lib-panel");
     container.innerHTML = `
         <div class="lib-search-wrap">
             <div class="lib-search-box">
                 <input type="text" class="lib-search" id="libSearch" placeholder="Search libraries…" autocomplete="off" spellcheck="false">
                 <button class="lib-search-clear" id="libSearchClear" tabindex="-1" aria-label="Clear search">&times;</button>
             </div>
-            <button class="lib-new" id="libImport" title="Import a signed .vcell file">Import</button>
+            <button class="lib-new" id="libCreate" title="Create a new device library">+ New</button>
+            <button class="lib-new lib-grid" id="libImport" title="Import a signed .vcell file">Import</button>
         </div>
         <div class="lib-tabs" id="libTabs">
-            <button class="lib-tab" data-tab="installed">Installed <span class="lib-tab-n">${installed.length}</span></button>
-            <button class="lib-tab" data-tab="grid">Grid <span class="lib-tab-n">${grid.length}</span></button>
-            <button class="lib-tab" data-tab="mine">Mine <span class="lib-tab-n">${collection.length}</span></button>
+            <button class="lib-tab" data-tab="machine">On this machine <span class="lib-tab-n">${machine.length}</span></button>
+            <button class="lib-tab" data-tab="browse">Browse <span class="lib-tab-n">${browsable.length}</span></button>
         </div>
         <div class="lib-scroll" id="libScroll"></div>
     `;
@@ -99,146 +151,138 @@ export async function renderInto(container) {
     const clearBtn = container.querySelector("#libSearchClear");
     const refresh = () => renderInto(container);
     container.querySelector("#libImport").onclick = () => installer.show(refresh);
+    container.querySelector("#libCreate").onclick = () =>
+        import("./library-creator.js").then(m => m.show(() => refresh()));
 
     const icon = (iface) => {
         const i = (iface || "?").toLowerCase();
         return `<span class="lib-ic lib-ic-${esc(i)}">${esc(i === "?" ? "•" : i.toUpperCase())}</span>`;
     };
-    // distinct interfaces in a group → colored dots, summarizing a collapsed group
     const ifaceDots = (items) => {
         const seen = [];
         for (const c of items) { const i = (c.interface || "").toLowerCase(); if (i && !seen.includes(i)) seen.push(i); }
         return seen.map(i => `<span class="lib-dot lib-dot-${esc(i)}" title="${esc(i)}"></span>`).join("");
     };
-    const stateOf = (cell) => {
-        const inst = installedByPrefix[cell.prefix];
-        if (!inst) return "install";
-        return inst.version === cell.version ? "installed" : "update";
-    };
 
-    // persisted UI state: which category groups are expanded (default = ALL
-    // collapsed), and the active tab (default = Grid when nothing is installed).
+    // persisted UI state: expanded category groups (default all collapsed), active tab
     let expanded = new Set();
     try { expanded = new Set(JSON.parse(localStorage.getItem(LIB_EXPANDED_KEY) || "[]")); } catch (_) {}
     const saveExpanded = () => { try { localStorage.setItem(LIB_EXPANDED_KEY, JSON.stringify([...expanded])); } catch (_) {} };
-    let tab = localStorage.getItem(LIB_TAB_KEY) || (installed.length ? "installed" : "grid");
-    if (tab === "installed" && !installed.length && grid.length) tab = "grid";
+    let tab = localStorage.getItem(LIB_TAB_KEY);
+    if (tab !== "machine" && tab !== "browse") tab = "machine";
     const saveTab = () => { try { localStorage.setItem(LIB_TAB_KEY, tab); } catch (_) {} };
 
-    // ---- row markup ----
-    // Rows are the entry to the detail sheet: the whole row is clickable. The
-    // right-side control is a state cue (Install / Installed / Update / ›), the
-    // real actions live in the sheet.
-    const gridRow = (c) => {
-        const st = stateOf(c);
-        const tag = c.trustTier && c.trustTier !== "verified" ? `<span class="lib-tag lib-tag-community">${esc(c.trustTier)}</span>` : "";
-        const net = (c.capabilities || []).includes("network") ? `<span class="lib-cap-net">network</span> · ` : "";
-        const action = st === "installed"
-            ? `<span class="lib-btn lib-btn-installed">&#10003; Installed</span>`
-            : `<span class="lib-btn lib-btn-${st === "update" ? "update" : "install"}">${st === "update" ? "Update" : "Install"}</span>`;
-        return `<div class="lib-row lib-row-click" data-act="open" data-prefix="${esc(c.prefix)}" data-version="${esc(c.version)}">
-            ${icon(c.interface)}
+    // ---- rows ----
+    const machineRow = (it) => {
+        const tags = (it.inst && it.inst.tier === "private" ? `<span class="lib-tag lib-tag-private">private</span>` : "")
+            + (it.update ? `<span class="lib-tag lib-tag-update">Update</span>` : "");
+        const ver = it.inst && it.inst.version ? `<span class="lib-row-ver">v${esc(it.inst.version)}</span>` : "";
+        const act = it.inProject
+            ? `<span class="lib-btn lib-btn-installed">&#10003; In project</span>`
+            : `<button class="lib-btn lib-btn-install" data-add="${esc(it.prefix)}" title="Add device + bus + sample to the open file">+ Add</button>`;
+        return `<div class="lib-row lib-row-click" data-open="machine" data-prefix="${esc(it.prefix)}">
+            ${icon(it.interface)}
             <div class="lib-row-body">
-                <div class="lib-row-name"><span class="lib-row-nm">${esc(c.name)}</span>${tag}</div>
-                <div class="lib-row-desc">${net}${esc(c.description || c.interface || "")}</div>
+                <div class="lib-row-name"><span class="lib-row-nm">${esc(it.name)}</span>${ver}${tags}</div>
+                <div class="lib-row-desc">${esc(it.description || it.interface || "")}</div>
             </div>
-            <div class="lib-row-act">${action}</div>
+            <div class="lib-row-act">${act}</div>
         </div>`;
     };
-    const instRow = (l) => {
-        const g = gridByPrefix[l.prefix];
-        const hasUpdate = g && g.version !== l.version;
-        const ver = (g && g.version) || l.version;
-        const right = hasUpdate ? `<span class="lib-tag lib-tag-update">Update</span>` : `<span class="lib-row-chev">›</span>`;
-        return `<div class="lib-row lib-row-click" data-act="open" data-prefix="${esc(l.prefix)}" data-version="${esc(ver)}">
-            ${icon(l.interface)}
+    const browseRow = (it) => {
+        const tags = (it.yours ? `<span class="lib-tag lib-tag-private">yours</span>` : "")
+            + (it.trustTier && it.trustTier !== "verified" && it.fromGrid ? `<span class="lib-tag lib-tag-community">${esc(it.trustTier)}</span>` : "");
+        const net = (it.capabilities || []).includes("network") ? `<span class="lib-cap-net">network</span> · ` : "";
+        const act = `<button class="lib-btn lib-btn-${it.state === "update" ? "update" : "install"}" data-get="${esc(it.prefix)}">${it.state === "update" ? "Update" : "Get"}</button>`;
+        return `<div class="lib-row lib-row-click" data-open="browse" data-prefix="${esc(it.prefix)}">
+            ${icon(it.interface)}
             <div class="lib-row-body">
-                <div class="lib-row-name"><span class="lib-row-nm">${esc(l.name || l.prefix)}</span><span class="lib-row-ver">v${esc(l.version || "?")}</span></div>
-                <div class="lib-row-desc">${esc(l.interface || "")}${(l.capabilities || []).includes("network") ? " · network" : ""}</div>
+                <div class="lib-row-name"><span class="lib-row-nm">${esc(it.name || it.prefix)}</span><span class="lib-row-ver">v${esc(it.version || "?")}</span>${tags}</div>
+                <div class="lib-row-desc">${net}${esc(it.description || it.interface || "")}</div>
             </div>
-            <div class="lib-row-act">${right}</div>
+            <div class="lib-row-act">${act}</div>
         </div>`;
     };
-    // Private-collection rows carry a clear provenance cue: these are the user's
-    // own unsigned, unreviewed libraries (trusted by their login, not a registry
-    // signature). The row action installs straight from their collection.
-    const collRow = (c) => {
-        const inst = installedByPrefix[c.prefix];
-        const sameVer = inst && inst.version === c.version;
-        // Installed (this or another version) → let them remove it; a stale/broken
-        // installed driver breaks every firmware build, so uninstall must be handy.
-        const primary = !inst
-            ? `<button class="lib-btn lib-btn-install lib-coll-install" data-prefix="${esc(c.prefix)}" data-version="${esc(c.version)}">Install</button>`
-            : sameVer
-                ? `<span class="lib-btn lib-btn-installed">&#10003; Installed</span>`
-                : `<button class="lib-btn lib-btn-update lib-coll-install" data-prefix="${esc(c.prefix)}" data-version="${esc(c.version)}">Update</button>`;
-        const uninstall = inst
-            ? `<button class="lib-btn lib-btn-install lib-coll-uninstall" data-prefix="${esc(c.prefix)}" title="Remove the installed driver from this project">Uninstall</button>`
-            : "";
-        return `<div class="lib-row">
-            ${icon(c.interface)}
-            <div class="lib-row-body">
-                <div class="lib-row-name"><span class="lib-row-nm">${esc(c.name || c.prefix)}</span><span class="lib-tag lib-tag-private">private</span><span class="lib-row-ver">v${esc(c.version || "?")}</span></div>
-                <div class="lib-row-desc">${esc(c.description || c.interface || "")} · unreviewed, yours only</div>
-            </div>
-            <div class="lib-row-act">${primary}${uninstall}</div>
-        </div>`;
+    // category-grouped list, collapsed unless expanded (all open while searching)
+    const grouped = (items, row, searching) => {
+        const buckets = {};
+        for (const c of items) { const k = LIB_CAT_TO_GRP[c.category] || "other"; (buckets[k] ||= []).push(c); }
+        return LIB_GROUPS.filter(g => buckets[g.key] && buckets[g.key].length).map(g => {
+            const its = buckets[g.key].slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+            const isCollapsed = !searching && !expanded.has(g.key);
+            return `<div class="lib-grp${isCollapsed ? " collapsed" : ""}" data-grp="${esc(g.key)}">
+                    <button class="lib-grp-hdr" data-grp="${esc(g.key)}">
+                        <span class="lib-grp-chev">&#9662;</span>
+                        <span class="lib-grp-label">${esc(g.label)}</span>
+                        <span class="lib-grp-sum">${ifaceDots(its)}</span>
+                        <span class="lib-grp-count">${its.length}</span>
+                    </button>
+                    <div class="lib-grp-body">${its.map(row).join("")}</div>
+                </div>`;
+        }).join("");
     };
+    const section = (title, n, body) =>
+        `<div class="lib-sec"><div class="lib-sec-hdr">${esc(title)} <span class="lib-count">${n}</span></div>${body}</div>`;
 
-    // Open the detail sheet for a library (Grid or Installed). Downloads + verifies
-    // via the Grid, then hands the verified result to the sheet, which decides the
-    // actions (Install / Update / Add to project / Uninstall).
-    // Build the shape gridFetch returns, from locally-installed data, so a
-    // private (or Grid-offline) library opens the SAME docked side card as
-    // everything else. No token → the card renders in manage mode (Add / Uninstall).
-    function localCardResult(prefix, inst, desc) {
-        if (!inst) return null;
-        const priv = inst.tier === "private";
-        return {
+    // ---- docked side card ----
+    async function openMachine(it) {
+        let driver = "";
+        if (it.d.c_source) {
+            try { driver = ((await api.deviceSource(detectChip(), it.d.c_source)) || {}).content || ""; } catch (_) {}
+        }
+        const inst = it.inst;
+        installer.showResult({
             ok: true,
             alreadyInstalled: true,
-            private: priv,
-            manifest: {
-                name: (desc && desc.name) || inst.name || prefix,
-                prefix,
-                interface: (desc && desc.interface) || inst.interface,
-                trustTier: inst.tier || "community",
-            },
-            device: desc || { name: inst.name || prefix, interface: inst.interface },
-            capabilities: inst.capabilities || [],
-            keyId: inst.keyId || (priv ? "local" : ""),
-            driver: "",
-        };
+            local: !inst,
+            private: !!(inst && inst.tier === "private"),
+            manifest: { name: it.name, prefix: it.prefix, interface: it.interface,
+                version: inst && inst.version, trustTier: (inst && inst.tier) || "local" },
+            device: it.d,
+            capabilities: (inst && inst.capabilities) || [],
+            keyId: (inst && inst.keyId) || "",
+            driver,
+        }, {
+            onClose: () => {},
+            onUse: () => { addDevice(it.d, { withSample: true }); refresh(); },
+            // only .vlib-installed libraries can be removed from here
+            onUninstall: inst ? () => doUninstall(it.prefix) : null,
+        });
     }
 
-    async function openDetail(prefix, version) {
-        const inst = installedByPrefix[prefix];
-        // Public libs come from the Grid (verified card). Private/local libs aren't
-        // on the Grid — so don't gridFetch them (it 404s); build the same card from
-        // the installed device.json instead.
-        let res = null;
-        if (!inst || inst.tier !== "private") {
-            try { res = await api.gridFetch(prefix, version); } catch (_) { res = null; }
+    async function openBrowse(it) {
+        if (it.fromGrid) {
+            let res = null;
+            try { res = await api.gridFetch(it.prefix, it.version); } catch (_) {}
+            if (res && res.token) {
+                const m = machineByPrefix[it.prefix];
+                return installer.showResult(res, {
+                    onClose: refresh,
+                    onUse: m ? () => addDevice(m.d, { withSample: true }) : undefined,
+                    onUninstall: installedByPrefix[it.prefix] ? () => doUninstall(it.prefix) : null,
+                });
+            }
+            if (!it.yours) {
+                return dialog.alert("Cannot open library", {
+                    detail: res && res.stage === "verify"
+                        ? `Signature verification failed: ${res.reason}`
+                        : (res && res.reason) || "This library isn’t available on the Grid.",
+                });
+            }
         }
-        if ((!res || !res.token) && inst) {
-            res = localCardResult(prefix, inst, descByPrefix[(prefix || "").toLowerCase()]);
-        }
-        if (!res || (!res.token && !res.alreadyInstalled)) {
-            return dialog.alert("Cannot open library", {
-                detail: res && res.stage === "verify"
-                    ? `Signature verification failed: ${res.reason}`
-                    : (res && res.reason) || "This library isn’t available on the Grid.",
-            });
-        }
-        installer.showResult(res, {
-            onClose: refresh,
-            onUse: () => {
-                const desc = descByPrefix[(prefix || "").toLowerCase()];
-                if (desc) addDevice(desc, { withSample: true });
-                else dialog.alert("Descriptor unavailable", { detail: "Reinstall the library to use it in code." });
-            },
-            onUninstall: () => doUninstall(prefix),
-        });
+        // private-only: nothing to verify against the Grid — open it once it's here
+        const m = machineByPrefix[it.prefix];
+        if (m) return openMachine(m);
+        return getFromCollection(it, null);
+    }
+
+    async function getFromCollection(it, btn) {
+        const label = btn && btn.textContent;
+        if (btn) { btn.disabled = true; btn.textContent = "Getting…"; }
+        const r = await api.collectionInstall(it.prefix, it.version);
+        if (r && r.ok) return refresh();
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+        dialog.alert("Cannot install", { detail: (r && r.reason) || "unknown error" });
     }
 
     async function doUninstall(prefix) {
@@ -255,61 +299,39 @@ export async function renderInto(container) {
         const match = (o) => !f || `${o.name || ""} ${o.prefix || ""} ${o.description || ""} ${o.interface || ""} ${o.category || ""} ${o.author || ""}`.toLowerCase().includes(f);
         container.querySelectorAll(".lib-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
 
-        if (tab === "installed") {
-            const inst = installed.filter(match);
-            scroll.innerHTML = installed.length
-                ? (inst.map(instRow).join("") || `<div class="lib-empty">No installed libraries match “${esc(f)}”.</div>`)
-                : `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>No libraries installed yet.</div><button class="lib-link" id="libGoGrid">Browse the Grid →</button></div>`;
-            const go = scroll.querySelector("#libGoGrid");
-            if (go) go.onclick = () => { tab = "grid"; saveTab(); paint(input.value); };
-        } else if (tab === "mine") {
-            if (!signedIn) {
-                scroll.innerHTML = `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>Your private library.</div><div class="lib-note">Sign in with GitHub to install the libraries you saved in the studio.</div><button class="lib-link" id="libSignIn">Sign in with GitHub →</button></div>`;
-                const s = scroll.querySelector("#libSignIn");
-                if (s) s.onclick = async () => { const r = await api.authLogin(); if (r && r.ok) refresh(); };
-            } else {
-                const mine = collection.filter(match);
-                scroll.innerHTML = collection.length
-                    ? (mine.map(collRow).join("") || `<div class="lib-empty">No private libraries match “${esc(f)}”.</div>`)
-                    : `<div class="lib-empty lib-empty-cta"><div class="lib-empty-icon">◇</div><div>No private libraries yet.</div><div class="lib-note">Generate one in the studio and choose “Save to my collection”.</div></div>`;
-                scroll.querySelectorAll(".lib-coll-install").forEach(b => b.onclick = async (e) => {
-                    e.stopPropagation();
-                    const label = b.textContent;
-                    b.disabled = true; b.textContent = "Installing…";
-                    const r = await api.collectionInstall(b.dataset.prefix, b.dataset.version);
-                    if (r && r.ok) refresh();
-                    else { b.disabled = false; b.textContent = label; dialog.alert("Cannot install", { detail: (r && r.reason) || "unknown error" }); }
-                });
-                scroll.querySelectorAll(".lib-coll-uninstall").forEach(b => b.onclick = (e) => {
-                    e.stopPropagation();
-                    doUninstall(b.dataset.prefix); // shared confirm + remove + refresh
-                });
-            }
+        if (tab === "machine") {
+            const hits = machine.filter(match);
+            const proj = hits.filter(it => it.inProject).sort((a, b) => a.name.localeCompare(b.name));
+            const rest = hits.filter(it => !it.inProject);
+            const html = (proj.length ? section("In project", proj.length, proj.map(machineRow).join("")) : "")
+                + (rest.length ? section(proj.length ? "Available" : "Device libraries", rest.length, grouped(rest, machineRow, searching)) : "");
+            scroll.innerHTML = html || `<div class="lib-empty">${machine.length
+                ? `Nothing on this machine matches “${esc(f)}”. <button class="lib-link" id="libTryBrowse">Search Browse →</button>`
+                : "No device libraries found on this machine."}</div>`;
         } else {
-            const gcells = grid.filter(match);
-            const buckets = {};
-            for (const c of gcells) { const k = LIB_CAT_TO_GRP[c.category] || "other"; (buckets[k] ||= []).push(c); }
-            const groupsHtml = LIB_GROUPS.filter(g => buckets[g.key] && buckets[g.key].length).map(g => {
-                const items = buckets[g.key].slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-                const isCollapsed = !searching && !expanded.has(g.key);
-                return `<div class="lib-grp${isCollapsed ? " collapsed" : ""}" data-grp="${esc(g.key)}">
-                    <button class="lib-grp-hdr" data-grp="${esc(g.key)}">
-                        <span class="lib-grp-chev">&#9662;</span>
-                        <span class="lib-grp-label">${esc(g.label)}</span>
-                        <span class="lib-grp-sum">${ifaceDots(items)}</span>
-                        <span class="lib-grp-count">${items.length}</span>
-                    </button>
-                    <div class="lib-grp-body">${items.map(gridRow).join("")}</div>
-                </div>`;
-            }).join("");
-            scroll.innerHTML = gridOffline
-                ? `<div class="lib-note lib-note-warn">Grid unreachable. Check the URL in <b>Settings → Registry</b>, or start your Grid.</div>`
-                : (groupsHtml || `<div class="lib-empty">${grid.length ? `No Grid libraries match “${esc(f)}”.` : "No published libraries on the Grid yet."}</div>`);
+            const hits = browsable.filter(match);
+            const notes = (gridOffline ? `<div class="lib-note lib-note-warn">Grid unreachable — check the URL in <b>Settings → Registry</b>.${signedIn ? " Showing your collection only." : ""}</div>` : "")
+                + (!signedIn ? `<div class="lib-note">Sign in to see your private libraries here. <button class="lib-link" id="libSignIn">Sign in with GitHub →</button></div>` : "");
+            scroll.innerHTML = notes + (grouped(hits, browseRow, searching)
+                || (gridOffline && !signedIn ? "" : `<div class="lib-empty">${browsable.length ? `Nothing to browse matches “${esc(f)}”.` : browse.length ? "You already have everything published." : "Nothing published yet."}</div>`));
         }
 
-        // whole row opens the detail sheet (Grid → install, Installed → manage)
-        scroll.querySelectorAll("[data-act='open']").forEach(r => r.onclick = () => openDetail(r.dataset.prefix, r.dataset.version));
-        // expand/collapse category groups (frozen while searching — all shown)
+        scroll.querySelectorAll("[data-open='machine']").forEach(r => r.onclick = () => openMachine(machineByPrefix[r.dataset.prefix]));
+        scroll.querySelectorAll("[data-open='browse']").forEach(r => r.onclick = () => openBrowse(browseByPrefix[r.dataset.prefix]));
+        scroll.querySelectorAll("[data-add]").forEach(b => b.onclick = (e) => {
+            e.stopPropagation();
+            addDevice(machineByPrefix[b.dataset.add].d, { withSample: true });
+            refresh();
+        });
+        scroll.querySelectorAll("[data-get]").forEach(b => b.onclick = (e) => {
+            e.stopPropagation();
+            const it = browseByPrefix[b.dataset.get];
+            if (it.fromGrid) openBrowse(it); else getFromCollection(it, b);
+        });
+        const tryBrowse = scroll.querySelector("#libTryBrowse");
+        if (tryBrowse) tryBrowse.onclick = () => { tab = "browse"; saveTab(); paint(input.value); };
+        const signIn = scroll.querySelector("#libSignIn");
+        if (signIn) signIn.onclick = async () => { const r = await api.authLogin(); if (r && r.ok) refresh(); };
         scroll.querySelectorAll(".lib-grp-hdr").forEach(h => h.onclick = () => {
             if (searching) return;
             const k = h.dataset.grp;

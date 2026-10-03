@@ -59,8 +59,6 @@ const SCHEMA = {
                               label: "Default chip for new projects" },
             verboseBuild:   { type: "bool",   default: false,
                               label: "Verbose build output", hint: "Show every compiler/linker line." },
-            autoFlash:      { type: "bool",   default: true,
-                              label: "Flash automatically after build" },
             toolchainSource:{ type: "enum",   default: "auto",
                               options: [
                                   {value: "auto",     label: "Auto (Volt mirror, fall back to upstream)"},

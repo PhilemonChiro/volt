@@ -74,12 +74,16 @@ function updateFreezeBtn() {
     fb.innerHTML = (frozen ? RESUME_ICON : FREEZE_ICON) + `<span>${frozen ? "Resume" : "Freeze"}</span>`;
 }
 
+// view = "code" | "board" | "diagrams"
 export function showView(view) {
     diagramsVisible = view === "diagrams";
     const editorArea = document.getElementById("editorArea");
     const diagramsView = document.getElementById("diagramsView");
-    if (editorArea) editorArea.style.display = diagramsVisible ? "none" : "flex";
+    const boardView = document.getElementById("boardView");
+    if (editorArea) editorArea.style.display = view === "code" ? "flex" : "none";
     if (diagramsView) diagramsView.style.display = diagramsVisible ? "flex" : "none";
+    if (boardView) boardView.style.display = view === "board" ? "flex" : "none";
+    document.dispatchEvent(new CustomEvent("volt:view", { detail: { view } }));
     document.querySelectorAll(".view-tab").forEach(t =>
         t.classList.toggle("active", t.dataset.view === view));
     if (diagramsVisible) {
@@ -129,6 +133,8 @@ export function reset() {
     activeDiagram = "systemmap";
     const dv = document.getElementById("diagramsView");
     if (dv) dv.style.display = "none";
+    const bv = document.getElementById("boardView");
+    if (bv) bv.style.display = "none";
     document.getElementById("dgSystemMap")?.classList.add("active");
     document.getElementById("dgStateMachine")?.classList.remove("active");
     document.querySelectorAll(".view-tab").forEach(t =>

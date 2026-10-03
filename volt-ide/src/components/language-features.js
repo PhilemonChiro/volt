@@ -1,6 +1,8 @@
 // Language features — providers extracted from Tauri app.js
 // Registers: autocomplete, hover, signatures, go-to-def, references, rename, symbols, formatting
 
+import { fixesFor } from "./diagnostics.js";
+import * as hwEditor from "./hardware-editor.js";
 import { SNIPPETS, PIN_METHODS, SENSOR_METHODS, TYPES, CHIPS, DURATIONS, CONSTANTS,
     KEYWORD_DOCS, TYPE_DOCS, CHIP_DOCS, ESP32_PIN_NOTES, METHOD_SIGS, METHOD_DOCS, EASING_DOCS,
     DOT_METHODS, BUILTIN_DOCS } from "./language-data.js";
@@ -52,10 +54,24 @@ export function register() {
         return null;
     }
 
+    // Hardware positions (pin numbers, modes, buses, addresses) first;
+    // anything else falls through to the general provider.
+    function hardwareFirst(general) {
+        return function (model, position) {
+            var before = model.getLineContent(position.lineNumber).substring(0, position.column - 1);
+            var w = model.getWordUntilPosition(position);
+            var r = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+                startColumn: w.startColumn, endColumn: w.endColumn };
+            return hwEditor.complete(model, position, before, r).then(function (hw) {
+                return hw ? { suggestions: hw } : general(model, position);
+            }, function () { return general(model, position); });
+        };
+    }
+
     // ---- completionProvider ----
     monaco.languages.registerCompletionItemProvider("volt", {
         triggerCharacters: [".", " ", ":"],
-        provideCompletionItems: function (model, position) {
+        provideCompletionItems: hardwareFirst(function (model, position) {
             var line = model.getLineContent(position.lineNumber);
             var textBefore = line.substring(0, position.column - 1);
             var word = model.getWordUntilPosition(position);
@@ -200,7 +216,7 @@ export function register() {
             });
 
             return { suggestions: suggestions };
-        }
+        })
     });
     // AST-aware formatter — uses the Volt compiler's parser via IPC.
     // Auto-updates when DSL grammar changes (same parser, same AST).
@@ -244,8 +260,17 @@ export function register() {
     // ----------------------------------------------------------------
 
     // ---- hoverProvider ----
+    // Pin hover (board facts + compiler warnings) on hardware lines first.
+    function pinHoverFirst(general) {
+        return function (model, position) {
+            return hwEditor.hover(model, position).then(function (h) {
+                return h || general(model, position);
+            }, function () { return general(model, position); });
+        };
+    }
+
     monaco.languages.registerHoverProvider("volt", {
-        provideHover: function (model, position) {
+        provideHover: pinHoverFirst(function (model, position) {
             var word = model.getWordAtPosition(position);
             var line = model.getLineContent(position.lineNumber);
             var col = position.column - 1;
@@ -413,7 +438,7 @@ export function register() {
 
             if (contents.length === 0) return null;
             return { range: hoverRange, contents: contents };
-        }
+        })
     });
 
     // ----------------------------------------------------------------
@@ -635,32 +660,44 @@ export function register() {
     });
 
     // ----------------------------------------------------------------
-    // Quick fixes (code actions) — turn actionable diagnostics into
-    // one-click edits. Handles pin errors whose message lists the valid /
-    // available pins (flash pins, input-only pins, out-of-range), offering to
-    // swap in the first suggested GPIO.
+    // Quick fixes (code actions) — the compiler attaches fixes to
+    // hardware diagnostics (e.g. "Move to GPIO 23" with the exact span of
+    // the pin number); each becomes a one-click, single-undo edit.
     // ----------------------------------------------------------------
     monaco.languages.registerCodeActionProvider("volt", {
         provideCodeActions: function (model, range, context) {
             var actions = [];
+            var seen = {};
             var markers = (context && context.markers) || [];
+            // A selection over several pins: say which pin each fix moves.
+            var lines = {};
+            markers.forEach(function (m) { if (fixesFor(m).length) lines[m.startLineNumber] = true; });
+            var several = Object.keys(lines).length > 1;
             markers.forEach(function (m) {
-                var fix = pinFixFromDiagnostic(m.message || "", model.getLineContent(m.startLineNumber));
-                if (!fix) return;
-                actions.push({
-                    title: "Change to GPIO " + fix.pin,
-                    kind: "quickfix",
-                    diagnostics: [m],
-                    isPreferred: true,
-                    edit: {
-                        edits: [{
-                            resource: model.uri,
-                            textEdit: {
-                                range: new monaco.Range(m.startLineNumber, fix.startCol, m.startLineNumber, fix.endCol),
-                                text: fix.text,
-                            },
-                        }],
-                    },
+                fixesFor(m).forEach(function (f, i) {
+                    var key = f.title + "@" + f.line + ":" + f.col;
+                    if (seen[key]) return;
+                    seen[key] = true;
+                    var title = f.title;
+                    if (several) {
+                        var decl = model.getLineContent(f.line).match(/^\s*(?:pin|bus|device)\s+(\w+)/);
+                        if (decl) title = decl[1] + ": " + title;
+                    }
+                    actions.push({
+                        title: title,
+                        kind: "quickfix",
+                        diagnostics: [m],
+                        isPreferred: i === 0 && !several,
+                        edit: {
+                            edits: [{
+                                resource: model.uri,
+                                textEdit: {
+                                    range: new monaco.Range(f.line, f.col, f.end_line, f.end_col),
+                                    text: f.text,
+                                },
+                            }],
+                        },
+                    });
                 });
             });
             return { actions: actions, dispose: function () {} };
@@ -672,25 +709,5 @@ export function register() {
     // ----------------------------------------------------------------
 
     console.log("[volt] language features registered");
-}
-
-// Parse an actionable pin diagnostic into a concrete edit. Given the marker
-// message (which includes the compiler hint, e.g. "Available output pins:
-// 2, 4, 5, ...") and the source line (e.g. "    pin led = 6"), return the GPIO
-// to swap in and the 1-based column span of the number to replace — or null if
-// the diagnostic isn't a pin-list fix. Pure/exported so it can be unit-tested.
-export function pinFixFromDiagnostic(message, lineText) {
-    if (!message || !lineText) return null;
-    var list = message.match(/pins?\s*:\s*([0-9]+(?:\s*,\s*[0-9]+)*)/i);
-    if (!list) return null;
-    var pin = list[1].split(",")[0].trim();
-    if (!pin) return null;
-    var eq = lineText.indexOf("=");
-    if (eq < 0) return null;
-    var after = lineText.slice(eq);
-    var num = after.match(/([0-9]+)/);
-    if (!num) return null;
-    var numStart = eq + after.indexOf(num[1]);
-    return { pin: pin, text: pin, startCol: numStart + 1, endCol: numStart + 1 + num[1].length };
 }
 

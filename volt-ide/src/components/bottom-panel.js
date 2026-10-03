@@ -41,7 +41,10 @@ function applyGeneratedCVisibility() {
     }
 }
 
+let rootEl = null;   // the panel container, for switching tabs from outside
+
 export function init(container) {
+    rootEl = container;
     container.innerHTML = `
         <div class="bp-resize" id="bpResize" title="Drag to resize"></div>
         <div class="bp-header">
@@ -238,7 +241,24 @@ export function setGeneratedC(code) {
 // Output panel — structured IDE messages + build progress bar
 // ============================================================
 
-export function appendOutput(text, level) {
+// A run (Compile / Upload) groups its lines under one timestamped header; the
+// lines inside it leave the time column blank so the header reads as a block.
+let runOpen = false;
+
+export function beginRun(title) {
+    runOpen = false;
+    appendOutput(title, "run");
+    runOpen = true;
+}
+
+export function endRun() { runOpen = false; }
+
+export function showProblems() {
+    if (rootEl) switchTab(rootEl, "problems");
+}
+
+// opts.onClick makes the line a link (e.g. "5 warnings → Warnings").
+export function appendOutput(text, level, opts = {}) {
     const output = document.getElementById("bpOutput");
     if (!output) return;
 
@@ -246,16 +266,20 @@ export function appendOutput(text, level) {
     if (!clean) return;
 
     const entry = document.createElement("div");
-    entry.className = "bp-line bp-" + (level || "info");
+    entry.className = "bp-line bp-" + (level || "info") + (runOpen ? " bp-in-run" : "");
 
     const now = new Date();
-    const ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    const ts = runOpen ? "" : [now.getHours(), now.getMinutes(), now.getSeconds()]
         .map(n => String(n).padStart(2, "0")).join(":");
 
     entry.innerHTML =
         `<span class="bp-time">${ts}</span>` +
         `<span class="bp-out-dot bp-out-${level || "info"}"></span>` +
         `<span>${esc(clean)}</span>`;
+    if (opts.onClick) {
+        entry.classList.add("bp-link");
+        entry.onclick = opts.onClick;
+    }
 
     output.appendChild(entry);
     if (autoScroll) output.scrollTop = output.scrollHeight;

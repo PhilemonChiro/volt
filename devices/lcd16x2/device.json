@@ -98,6 +98,11 @@
         }
       ],
       "description": "Write a raw character code at the cursor (0-7 = custom chars)"
+    },
+    "reinit": {
+      "returns": "void",
+      "params": [],
+      "description": "Re-initialise the display (recovers garbled characters after noise or a supply dip); redraw afterwards"
     }
   },
   "manufacturer": "Generic (HD44780 + PCF8574 backpack)",
@@ -105,8 +110,8 @@
   "specs": {
     "voltage": "5V (logic and backlight)",
     "current": "1.5 mA + ~20 mA backlight",
-    "characters": "16 columns \u00d7 2 rows",
-    "interface_speed": "I\u00b2C up to 100 kHz (backpack)"
+    "characters": "16 columns × 2 rows",
+    "interface_speed": "I²C up to 100 kHz (backpack)"
   },
   "wiring": {
     "pins": [
@@ -138,9 +143,9 @@
     ]
   },
   "tips": [
-    "Address is usually 0x27 or 0x3F depending on backpack vendor \u2014 scan the bus if unsure.",
+    "Address is usually 0x27 or 0x3F depending on backpack vendor — scan the bus if unsure.",
     "Adjust the contrast pot on the backpack until characters are clearly visible.",
-    "Backlight current is significant (~20 mA) \u2014 disable when you don't need it for battery projects."
+    "Backlight current is significant (~20 mA) — disable when you don't need it for battery projects."
   ],
   "alternatives": [
     {
@@ -149,7 +154,7 @@
     },
     {
       "name": "SSD1306",
-      "note": "128\u00d764 OLED if you need graphics or sharper text."
+      "note": "128×64 OLED if you need graphics or sharper text."
     }
   ]
 }

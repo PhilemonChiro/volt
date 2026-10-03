@@ -107,3 +107,12 @@ void hd44780_write_char(hd44780_t *dev, uint8_t code)
 {
     lcd_send(dev, code, LCD_RS);
 }
+
+// Re-run the init sequence (same address/size, backlight kept). Recovers a
+// display whose 4-bit nibble sync was lost to noise or a supply dip.
+void hd44780_reinit(hd44780_t *dev)
+{
+    uint8_t bl = dev->backlight;
+    hd44780_init(dev, dev->bus_id, dev->addr, dev->cols, dev->rows);
+    hd44780_backlight(dev, bl);
+}

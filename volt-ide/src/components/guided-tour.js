@@ -19,8 +19,8 @@ const STEPS = [
     },
     {
         target: "#runBtn",
-        title: "Run on device",
-        body: "Click Run to compile, flash, and monitor your code on the connected microcontroller.",
+        title: "Upload to device",
+        body: "Click Upload to compile, flash, and monitor your code on the connected microcontroller.",
         placement: "bottom",
         highlightPadding: 6,
     },

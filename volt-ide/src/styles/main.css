@@ -1495,10 +1495,16 @@ kbd {
 .bp-time {
     color: var(--t3);
     margin-right: var(--s-2);
+    display: inline-block; min-width: 8ch;   /* blank inside a run, keeps alignment */
 }
 .bp-success { color: var(--ok); }
 .bp-error { color: var(--err); }
-.bp-warning { color: var(--warn); }
+.bp-warn, .bp-warning { color: var(--warn); }
+/* run header (Compile / Upload): the block's one timestamp + title */
+.bp-run { color: var(--t1); font-weight: 600; margin-top: 6px; }
+.bp-out-run { background: var(--volt); }
+.bp-link { cursor: pointer; }
+.bp-link:hover span:last-child { text-decoration: underline; }
 
 .bp-empty {
     padding: var(--s-8) var(--s-4);
@@ -3008,11 +3014,11 @@ kbd {
     padding: var(--s-4);
     display: flex;
     justify-content: center;
+    height: 100%;              /* fit the whole board (both dimensions) */
 }
 .pinout-svg-host svg {
-    max-width: 100%;
-    max-height: 100%;
-    height: auto;
+    width: 100%;
+    height: 100%;
     display: block;
     pointer-events: all;
     overflow: visible;          /* labels can extend arbitrarily far past
@@ -4761,3 +4767,211 @@ kbd {
 .lib-row-chev { color: var(--t3); font-size: 18px; line-height: 1; padding: 0 4px; opacity: 0; transition: opacity .12s; }
 .lib-row:hover .lib-row-chev { opacity: 1; }
 .lib-tag-update { background: rgba(74,124,247,.16); color: var(--volt); }
+
+/* ---- Pinout: colour by what the pin does (legend in the corner) ---- */
+.role-out { --pin-c: #5b9bd5; }
+.role-pwm { --pin-c: #c586c0; }
+.role-in  { --pin-c: #d7b65e; }
+.role-adc { --pin-c: #e0875a; }
+.role-bus { --pin-c: #4ec9b0; }
+.role-dev { --pin-c: #8cc66d; }
+.pinout-pin.is-assigned:not(.is-conflict)[class*="role-"] .bp-pin-outer { fill: var(--pin-c); stroke: var(--pin-c); }
+.pinout-pin.is-assigned:not(.is-conflict)[class*="role-"] .bp-pin-ring  { stroke: var(--pin-c); }
+.pinout-pin.is-assigned:not(.is-conflict)[class*="role-"] .bp-pin-label,
+.pinout-pin.is-assigned:not(.is-conflict)[class*="role-"] .bp-var-label { fill: var(--pin-c); }
+.bp-warn-mark { fill: #e0a84e; font: 700 11px var(--sans); cursor: help; }
+.pp-warn { color: #e0a84e; background: rgba(224,168,78,.08); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
+
+.pinout-legend {
+    position: absolute; left: var(--s-3); bottom: var(--s-3); z-index: 5;
+    display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: calc(100% - 90px);
+    padding: 6px 10px; font: 11px var(--sans); color: var(--t2);
+    background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r-2);
+}
+.pinout-legend span { display: inline-flex; align-items: center; white-space: nowrap; }
+.pinout-legend i { width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--pin-c); }
+.pinout-legend-warn { color: #e0a84e; }
+.pinout-board-select {
+    position: absolute; left: var(--s-3); top: var(--s-3); z-index: 5;
+    height: 26px; padding: 0 8px; font: 12px var(--sans); color: var(--t1);
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+}
+
+/* Line just changed by a hardware edit (quick fix, pin panel, wizard). */
+.hw-edit-flash {
+    animation: hw-edit-flash 0.9s ease-out;
+}
+@keyframes hw-edit-flash {
+    from { background: rgba(43,124,179,0.28); }
+    to   { background: transparent; }
+}
+
+/* Gutter dot on pin / bus / device lines, in the pin's role colour
+   (role-* classes set --pin-c). Hover it to light the pin(s) on the board. */
+.hw-dot {
+    cursor: pointer;
+}
+.hw-dot::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    margin-top: -3.5px;
+    border-radius: 50%;
+    background: var(--pin-c, var(--volt));
+}
+
+/* Monaco sizes the quick-fix / code-action menu by setting an inline width
+   that assumes content-box; our global border-box rule would eat the
+   padding + border and clip the titles ("Move to GPI…"). */
+.action-widget {
+    box-sizing: content-box;
+}
+
+/* ===========================================================
+   Hardware (hardware-panel.js) — Board tab + side panel list,
+   docked pin card, edit toast
+   =========================================================== */
+#boardView {
+    flex: 1; min-height: 0; flex-direction: column; overflow: hidden;
+    background: var(--bg-0);
+}
+.bv-bar {
+    display: flex; align-items: center; gap: var(--s-4);
+    height: 36px; flex-shrink: 0; padding: 0 var(--s-3);
+    border-bottom: 1px solid var(--border); background: var(--bg-1);
+}
+.hwp-board {
+    height: 24px; padding: 0 6px; font: 12px var(--sans); color: var(--t1);
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+}
+.hwp-board:disabled { opacity: 1; appearance: none; border-color: transparent; padding: 0; font-weight: 600; }
+.bv-legend { display: flex; align-items: center; gap: 12px; font: 11px var(--sans); color: var(--t2); min-width: 0; overflow: hidden; }
+.bv-legend span { display: inline-flex; align-items: center; white-space: nowrap; }
+.bv-legend i { width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--pin-c); }
+.bv-legend-free { color: var(--t3); cursor: help; padding-left: 12px; border-left: 1px solid var(--border); }
+.bv-legend i.ring { background: none; border: 1.5px solid; margin-left: 2px; }
+.bv-legend i.ring.caution { border-color: #d7b65e; }
+.bv-legend i.ring.risky { border-color: #e0776f; border-style: dashed; margin-left: 8px; }
+.bv-stats { margin-left: auto; font: 11px var(--mono); color: var(--t3); white-space: nowrap; }
+.bv-body { position: relative; flex: 1; min-height: 0; display: flex; }
+.bv-canvas { position: relative; flex: 1; min-width: 0; }
+.bv-side {
+    width: 340px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
+    border-left: 1px solid var(--border); background: var(--bg-1);
+}
+.bv-side .hwp-card { border-bottom: 1px solid var(--border); max-height: 65%; overflow-y: auto; flex-shrink: 0; }
+.bv-side .hwp-list { flex: 1; overflow-y: auto; padding: var(--s-2); }
+
+/* Side panel host: list scrolls, card docks at the bottom */
+#panelHardware { padding: 0; overflow: hidden; }
+.hws { position: relative; height: 100%; display: flex; flex-direction: column; }
+.hws .hwp-list { flex: 1; overflow-y: auto; padding: var(--s-2); }
+.hws .hwp-card {
+    flex-shrink: 0; max-height: 70%; overflow-y: auto;
+    border-top: 1px solid var(--border); background: var(--bg-2);
+    animation: hwp-card-in var(--dur-base) var(--ease-out);
+}
+@keyframes hwp-card-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.hwp-card .pp-head { position: sticky; top: 0; background: inherit; z-index: 1; }
+.bv-side .hwp-card .pp-head { background: var(--bg-1); }
+.hwp-card .pp-pin-gpio { font-size: 11px; }
+.hwp-hint { padding: var(--s-4); color: var(--t3); font-size: 12px; line-height: 1.5; }
+.hwp-hint b { color: var(--t1); font-weight: 600; }
+.hwp-hint span { display: block; margin-top: 6px; font-size: 11px; }
+
+.hwp-banner {
+    position: absolute; left: 50%; bottom: var(--s-4); transform: translateX(-50%); z-index: 15;
+    padding: 6px 12px; font: 12px var(--sans); color: var(--t1); white-space: nowrap;
+    background: var(--bg-2); border: 1px solid var(--volt); border-radius: 999px;
+    display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.hwp-toast {
+    position: absolute; left: var(--s-3); bottom: var(--s-3); z-index: 16;
+    max-width: calc(100% - 2 * var(--s-3));
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 7px 12px; font: 12px var(--sans); color: var(--t1);
+    background: var(--bg-3); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+    box-shadow: 0 6px 20px rgba(0,0,0,.4);
+    animation: hwp-card-in var(--dur-base) var(--ease-out);
+}
+.hws .hwp-toast { position: static; margin: var(--s-2); box-shadow: none; }
+.hwp-toast-what { color: var(--t2); }
+
+.hwp-code {
+    font: 12px var(--mono); color: var(--t1); background: var(--bg-1);
+    border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px;
+    white-space: pre; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.hwp-codebtn {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 0;
+    background: none; border: 0; cursor: pointer; text-align: left;
+}
+.hwp-codebtn .hwp-code { flex: 1; min-width: 0; }
+.hwp-codebtn span { font: 11px var(--sans); color: var(--t3); white-space: nowrap; }
+.hwp-codebtn:hover .hwp-code { border-color: var(--volt); }
+.hwp-codebtn:hover span { color: var(--volt); }
+.hwp-preview { font-size: 11px; color: var(--t3); display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hwp-ok { font-size: 12px; color: #8cc66d; }
+.hwp-roles { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.hwp-roles b { display: inline-block; width: 40px; color: var(--t2); font-weight: 600; font-size: 11px; }
+.hwp-roles em { font-style: normal; color: var(--t3); margin-left: 8px; font-size: 11px; }
+
+/* Free pins: how safe they are to wire */
+.pinout-pin.safe-caution .bp-pin-outer { stroke: #d7b65e; }
+.pinout-pin.safe-risky .bp-pin-outer { stroke: #e0776f; stroke-dasharray: 2 1.5; }
+.pinout-pin.safe-unavailable { opacity: 0.45; }
+
+/* "Move to another pin": valid targets lit, everything else dimmed */
+.pinout-canvas.is-picking .pinout-pin:not(.is-target):not(.is-cursor) { opacity: 0.25; }
+.pinout-pin.is-target .bp-pin-ring { stroke: var(--volt); stroke-opacity: 0.8; }
+.pinout-pin.is-target:hover .bp-pin-ring { stroke-opacity: 1; stroke-width: 2.5; }
+
+/* Card forms */
+.hwp-name {
+    width: 100%; font: 13px var(--mono); padding: 5px 8px;
+    background: var(--bg-1); color: var(--t1);
+    border: 1px solid var(--border-strong); border-radius: var(--r-2); outline: none;
+}
+.hwp-name:focus { border-color: var(--volt); }
+.hwp-name.is-bad { border-color: #e0776f; }
+.hwp-err { color: #e0776f; font-size: 11px; }
+.hwp-err:empty { display: none; }
+.hwp-modes { display: flex; flex-wrap: wrap; gap: 4px; }
+.hwp-chip {
+    font: 11px var(--sans); padding: 2px 9px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border-strong); background: none; color: var(--t2);
+}
+.hwp-chip:hover { color: var(--t1); }
+.hwp-chip.is-active { background: var(--volt); border-color: var(--volt); color: #fff; }
+.hwp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.hwp-actions .pp-btn, .pp-warn .pp-btn { margin-top: 0; }
+.pp-warn .hwp-actions { margin-top: 6px; }
+.pp-warn .hwp-link { display: block; margin-top: 4px; }
+.pp-btn:disabled { opacity: 0.45; cursor: default; }
+.pp-btn-ghost { background: none; color: var(--t1); border: 1px solid var(--border-strong); }
+.pp-btn-ghost:hover { background: var(--bg-3); }
+.pp-btn-danger { color: #e0776f; border-color: rgba(217,83,79,.4); }
+.pp-btn-danger:hover { background: rgba(217,83,79,.14); }
+.hwp-link {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    color: var(--volt); font: 11px var(--sans); white-space: nowrap;
+}
+.hwp-link:hover { text-decoration: underline; }
+.hwp-muted { color: var(--t3); font-size: 11px; line-height: 1.4; }
+
+/* List */
+.hwl-title { display: flex; align-items: center; }
+.hwl-add {
+    margin-left: auto; background: none; border: 0; cursor: pointer;
+    color: var(--volt); font: 600 10px var(--sans); letter-spacing: 0.04em; text-transform: none;
+}
+.panel-empty .hwl-add { margin: var(--s-3) auto 0; font-size: 12px; display: block; }
+.hwl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pin-c, var(--t3)); flex: none; }
+.hwl-row .hw-name { overflow: hidden; text-overflow: ellipsis; }
+.hwl-row.is-selected { background: var(--bg-3); box-shadow: inset 2px 0 0 var(--volt); }
+.hwl-tag { color: var(--t3); font-size: var(--fs-10); white-space: nowrap; }
+.hwl-warn { color: #e0a84e; flex: none; cursor: help; }

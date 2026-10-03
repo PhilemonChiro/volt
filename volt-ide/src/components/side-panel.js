@@ -6,8 +6,8 @@ let activePanel = null;
 let lastAST = null;
 
 export function init() {
-    const ids = ["toggleHardware", "toggleTasks", "toggleOutline", "toggleLibrary", "togglePinout"];
-    const panels = ["hardware", "tasks", "outline", "library", "pinout"];
+    const ids = ["toggleHardware", "toggleTasks", "toggleOutline", "toggleLibrary"];
+    const panels = ["hardware", "tasks", "outline", "library"];
 
     ids.forEach((id, i) => {
         const btn = document.getElementById(id);
@@ -94,12 +94,12 @@ export function open(panel) {
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    const btnMap = { hardware: "toggleHardware", tasks: "toggleTasks", outline: "toggleOutline", library: "toggleLibrary", pinout: "togglePinout" };
+    const btnMap = { hardware: "toggleHardware", tasks: "toggleTasks", outline: "toggleOutline", library: "toggleLibrary" };
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
     // Swap visible body — fade-in via .is-active class (CSS keyframe)
-    ["panelHardware", "panelTasks", "panelOutline", "panelLibrary", "panelPinout"].forEach(id => {
+    ["panelHardware", "panelTasks", "panelOutline", "panelLibrary"].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
@@ -108,7 +108,6 @@ export function open(panel) {
         tasks:    "panelTasks",
         outline:  "panelOutline",
         library:  "panelLibrary",
-        pinout:   "panelPinout",
     };
     const body = document.getElementById(bodyMap[panel]);
     if (body) {
@@ -118,31 +117,17 @@ export function open(panel) {
     }
 
     // Title
-    const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline", library: "Library", pinout: "Pinout" };
+    const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline", library: "Library" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
     if (panel === "library") {
         // Library is data-driven by the device catalog, not the editor AST
         import("./library.js").then(m => m.renderInto(body));
-    } else if (panel === "pinout") {
-        // Pinout uses a regex extract of the CURRENT editor source — so
-        // pins, buses, and devices are all picked up immediately even if
-        // the file was loaded and not yet edited (onContentChange fires
-        // on edits only, never on initial setValue).
-        import("./pinout-panel.js").then(m => {
-            m.init(body);
-            const chip = (window.chipSelector && window.chipSelector.getChip()) ||
-                         (document.getElementById("chipLabel") || {}).textContent || "esp32";
-            let assignments = [], hw = null;
-            try {
-                const editors = (typeof monaco !== "undefined") ? monaco.editor.getEditors() : [];
-                const source = editors.length ? editors[0].getValue() : "";
-                hw = m.extractHardware(source);
-                assignments = Object.values(hw.pinByGpio);
-            } catch (_) { /* fall through to empty */ }
-            m.render(chip.toLowerCase(), assignments, hw);
-        });
+    } else if (panel === "hardware") {
+        // Board + list, driven by the live source (hardware-panel.js), not
+        // the AST — it follows keystrokes even on broken syntax.
+        import("./hardware-panel.js").then(m => m.initSide(body));
     } else if (lastAST) {
         render(lastAST);
     }
@@ -189,84 +174,11 @@ export function update(ast) {
 
 function render(ast) {
     if (!ast) return;
-    if (activePanel === "hardware") renderHardware(ast);
-    else if (activePanel === "tasks") renderTasks(ast);
+    if (activePanel === "tasks") renderTasks(ast);
     else if (activePanel === "outline") renderOutline(ast);
-    // Pinout intentionally NOT driven from the AST path — the editor's
-    // onContentChange already feeds pinout.render with the full
-    // extractHardware result (pins + buses + devices). Letting the AST
-    // path also call render(chip, ast.pins) overwrites bus/device state
-    // with an incomplete pin-only payload, causing annotations to flicker
-    // or disappear ~150ms after each keystroke.
-}
-
-// ============================================================
-// Hardware panel
-// ============================================================
-
-function renderHardware(ast) {
-    const el = document.getElementById("panelHardware");
-    if (!el) return;
-
-    const pins = ast.pins || [];
-    const buses = ast.buses || [];
-    const devices = ast.devices || [];
-
-    if (pins.length === 0 && buses.length === 0 && devices.length === 0) {
-        el.innerHTML = `<div class="panel-empty">
-            <svg class="empty-illustration" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/></svg>
-            <div class="empty-title">No hardware yet</div>
-            <div class="empty-hint">Add a <code>hardware { }</code> block to declare pins, buses, or devices.</div>
-        </div>`;
-        return;
-    }
-
-    let html = "";
-
-    if (pins.length > 0) {
-        html += '<div class="hw-section"><div class="hw-section-title">Pins</div>';
-        for (const pin of pins) {
-            const mode = (pin.mode || "Output").toLowerCase();
-            const badgeCls = mode.includes("output") ? "output"
-                : mode.includes("input") || mode.includes("pull") ? "input"
-                : mode.includes("pwm") || mode.includes("servo") || mode.includes("dac") ? "pwm"
-                : mode.includes("analog") || mode.includes("touch") ? "analog" : "";
-            html += `<div class="hw-item">
-                <span class="hw-icon">P</span>
-                <span class="hw-name">${esc(pin.name)}</span>
-                <span class="hw-badge ${badgeCls}">${esc(pin.mode || "Output")}</span>
-                <span class="hw-detail">GPIO ${esc(String(pin.gpio))}</span>
-            </div>`;
-        }
-        html += "</div>";
-    }
-
-    if (buses.length > 0) {
-        html += '<div class="hw-section"><div class="hw-section-title">Buses</div>';
-        for (const bus of buses) {
-            html += `<div class="hw-item">
-                <span class="hw-icon">B</span>
-                <span class="hw-name">${esc(bus.name)}</span>
-                <span class="hw-badge">${esc((bus.type || "").toUpperCase())}</span>
-            </div>`;
-        }
-        html += "</div>";
-    }
-
-    if (devices.length > 0) {
-        html += '<div class="hw-section"><div class="hw-section-title">Devices</div>';
-        for (const dev of devices) {
-            html += `<div class="hw-item">
-                <span class="hw-icon">D</span>
-                <span class="hw-name">${esc(dev.name)}</span>
-                <span class="hw-badge">${esc(dev.type)}</span>
-                <span class="hw-detail">${esc(dev.bus || "")}</span>
-            </div>`;
-        }
-        html += "</div>";
-    }
-
-    el.innerHTML = html;
+    // Hardware intentionally NOT driven from the AST path — the editor's
+    // onContentChange feeds hardware-panel.refresh with the live source;
+    // a pin-only AST payload would make annotations flicker.
 }
 
 // ============================================================
