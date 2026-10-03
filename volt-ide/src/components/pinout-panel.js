@@ -14,6 +14,7 @@
 //                     panel (hardware-panel.js) owns the popover + actions.
 
 import * as chipSelector from "./chip-selector.js";
+import { busPinsNow, deviceFactsNow } from "./pin-facts.js";
 
 let _root = null;
 let _boards = null;
@@ -44,6 +45,9 @@ export function init(container) {
 
 let _onPinClick = () => {};
 export function onPinClick(fn) { _onPinClick = fn; }
+// fn(gpio, boardPin, assigned, element) on hover / focus, fn(null) on leave.
+let _onPinHover = () => {};
+export function onPinHover(fn) { _onPinHover = fn; }
 
 // Free-pin tint: { "23": "safe" | "caution" | "risky" | "unavailable" }.
 let _safety = {};
@@ -53,13 +57,33 @@ export function setSafety(map) {
 }
 
 // Pick mode ("Move to another pin"): light these GPIOs, dim the rest.
-export function setTargets(gpios) {
+// Pins you can click while moving something. `tags` labels them on the
+// board: { gpio: { text: "free ★", swap: bool } }; the pin's own label is
+// put back when picking ends.
+export function setTargets(gpios, tags = {}) {
     const svg = document.querySelector("#pinoutSvgHost svg");
     const set = new Set((gpios || []).map(String));
     document.getElementById("pinoutCanvas")?.classList.toggle("is-picking", !!gpios);
     if (!svg) return;
-    svg.querySelectorAll(".pinout-pin").forEach(g =>
-        g.classList.toggle("is-target", set.has(g.getAttribute("data-gpio"))));
+    svg.querySelectorAll(".pinout-pin").forEach(g => {
+        const gpio = g.getAttribute("data-gpio");
+        const tag = (set.has(gpio) || (tags[gpio] && tags[gpio].moving)) && tags[gpio];
+        g.classList.toggle("is-target", set.has(gpio));
+        g.classList.toggle("is-swap", !!(tag && tag.swap));
+        const label = g.querySelector(".bp-var-label");
+        if (!label) return;
+        if (label.dataset.orig != null) {          // restore last round's label
+            label.textContent = label.dataset.orig;
+            label.style.display = label.dataset.origDisplay;
+            delete label.dataset.orig;
+            delete label.dataset.origDisplay;
+        }
+        if (!tag) return;
+        label.dataset.orig = label.textContent;
+        label.dataset.origDisplay = label.style.display;
+        label.textContent = tag.moving ? `${label.textContent}  (moving)` : tag.swap ? `${label.textContent}  ⇄ swap` : tag.text;
+        label.style.display = "";
+    });
 }
 
 // The <g> drawn for a GPIO (popover anchor), or null.
@@ -144,7 +168,7 @@ export function extractHardware(source) {
     const lineOf = (offset) => source.slice(0, blockStart + offset).split("\n").length;
 
     // pin <name>[: Mode] = <N>
-    const pinRe = /^\s*pin\s+([a-zA-Z_][a-zA-Z_0-9]*)(?:\s*:\s*([A-Za-z]+))?\s*=\s*(\d+)\s*$/gm;
+    const pinRe = /^[ \t]*pin\s+([a-zA-Z_][a-zA-Z_0-9]*)(?:\s*:\s*([A-Za-z]+))?\s*=\s*(\d+)\s*$/gm;
     let mm;
     while ((mm = pinRe.exec(block)) !== null) {
         const pin = {
@@ -158,92 +182,122 @@ export function extractHardware(source) {
         if (!pinByGpio[pin.gpio]) pinByGpio[pin.gpio] = pin;
     }
 
-    // bus <name>: TYPE(role: N, role: N, ...)
-    const busRe = /^\s*bus\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(I2C|SPI|UART|i2c|spi|uart)\s*\(([^)]*)\)/gm;
-    while ((mm = busRe.exec(block)) !== null) {
-        const roles = {};
-        const inner = mm[3] || "";
-        for (const rolePair of inner.split(",")) {
-            const r = rolePair.match(/^\s*([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(\d+)\s*$/);
-            if (r) roles[r[1].toLowerCase()] = parseInt(r[2], 10);
-        }
-        const bus = {
-            name: mm[1],
-            kind: "bus",
-            busType: mm[2].toUpperCase(),
-            roles,
-            line: lineOf(mm.index),
-        };
-        buses.push(bus);
-        for (const [role, gpio] of Object.entries(roles)) {
-            const gpioKey = String(gpio);
-            // Don't overwrite a user's direct `pin foo = N` assignment with
-            // a bus claim — if both exist, that's a conflict (user error).
-            if (!pinByGpio[gpioKey]) {
-                pinByGpio[gpioKey] = {
-                    name: bus.name, kind: "bus", role,
-                    busType: bus.busType, gpio: gpioKey, line: bus.line,
-                };
-            }
-        }
-    }
-
-    // device <name>: <Type> on <bus> at <addr>
-    const devRe = /^\s*device\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*([A-Za-z_][A-Za-z_0-9]*)\s+on\s+([a-zA-Z_][a-zA-Z_0-9]*)\s+at\s+([^\s].*?)\s*$/gm;
-    while ((mm = devRe.exec(block)) !== null) {
-        devices.push({
-            name: mm[1],
-            type: mm[2],
-            bus: mm[3],
-            address: mm[4].trim(),
-            line: lineOf(mm.index),
-        });
-    }
-
-    // device <name>: <Type>(role: N, …) — the device owns these GPIOs itself.
-    const devArgRe = /^\s*device\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*([A-Za-z_][A-Za-z_0-9]*)\s*\(([^)]*)\)\s*$/gm;
-    while ((mm = devArgRe.exec(block)) !== null) {
-        const dev = { name: mm[1], type: mm[2], bus: "", address: "", line: lineOf(mm.index), roles: {} };
-        devices.push(dev);
-        for (const pair of (mm[3] || "").split(",")) {
-            const r = pair.match(/^\s*([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(\d+)\s*$/);
-            if (!r) continue;
-            const key = String(parseInt(r[2], 10));
-            dev.roles[r[1].toLowerCase()] = parseInt(r[2], 10);
-            if (!pinByGpio[key]) {
-                pinByGpio[key] = { name: dev.name, kind: "device", role: r[1].toLowerCase(),
-                    deviceType: dev.type, gpio: key, line: dev.line };
-            }
-        }
-    }
-
-    // Resolve 'orphan' devices — ones whose `on <name>` doesn't reference a
-    // declared bus OR a declared pin. These are typically GPIO-attached
-    // devices (DHT, HC-SR04, NEOPIXEL …) where the user hasn't yet declared
-    // a pin for them. Anchor them to the GPIO in their `at <N>` clause so
-    // the board shows the device at the right pin.
-    const busNames = new Set(buses.map(b => b.name));
-    const pinNames = new Set(pins.map(p => p.name));
-    for (const d of devices) {
-        if (d.roles || busNames.has(d.bus) || pinNames.has(d.bus)) continue;
-        // Address may be decimal (4), hex (0x4), or a trailing fragment;
-        // parseInt(str) with no radix handles "0x" prefix automatically.
-        const gpio = parseInt(d.address);
-        if (isNaN(gpio)) continue;
+    let legacy = false;    // old syntax the formatter can modernize
+    const claim = (gpio, entry) => {
         const key = String(gpio);
-        if (!pinByGpio[key]) {
-            pinByGpio[key] = {
-                name: d.name,
-                kind: "device",
-                gpio: key,
-                line: d.line,
-                deviceType: d.type,
-            };
+        // A user's direct `pin foo = N` wins; two claims are a conflict
+        // the compiler reports.
+        if (!pinByGpio[key]) pinByGpio[key] = { ...entry, gpio: key };
+    };
+    const addBus = (bus) => {
+        buses.push(bus);
+        for (const [role, gpio] of Object.entries(bus.roles))
+            // A serial module's own UART is labelled by the module.
+            claim(gpio, { name: bus.owner || bus.name, kind: "bus", role, busType: bus.busType, line: bus.line });
+    };
+    const parseArgs = (inner) => {
+        const out = [];
+        for (const pair of (inner || "").split(",")) {
+            const r = pair.match(/^\s*([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(\S+)\s*$/);
+            if (r) out.push([r[1], r[2]]);
         }
+        return out;
+    };
+
+    // `i2c <name>(sda: N, …)` or legacy `bus <name>: I2C(…)`. Signal pins
+    // are roles; anything else (speed, baud) is a param.
+    const busRe = /^[ \t]*(?:bus\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*(I2C|SPI|UART|i2c|spi|uart)|(i2c|spi|uart)\s+([a-zA-Z_][a-zA-Z_0-9]*))\s*\(([^)]*)\)/gm;
+    while ((mm = busRe.exec(block)) !== null) {
+        const roles = {}, params = {};
+        for (const [k, v] of parseArgs(mm[5])) {
+            const key = k.toLowerCase();
+            if (SIGNAL_NAMES.includes(key) && /^\d+$/.test(v)) roles[key] = parseInt(v, 10);
+            else params[k] = v;
+        }
+        if (mm[1]) legacy = true;      // `bus x: I2C(…)`
+        addBus({ name: mm[1] || mm[4], kind: "bus", busType: (mm[2] || mm[3]).toUpperCase(),
+            roles, params, line: lineOf(mm.index) });
     }
 
-    return { pins, buses, devices, pinByGpio };
+    // device <name>: <Type>[(args)] [on <bus>] [at <addr>]
+    const facts = deviceFactsNow() || {};
+    const devRe = /^[ \t]*device\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*:\s*([A-Za-z_][A-Za-z_0-9]*)\s*(?:\(([^)]*)\))?\s*(?:\bon\s+([a-zA-Z_][a-zA-Z_0-9]*))?\s*(?:\bat\s+(\S+))?\s*$/gm;
+    while ((mm = devRe.exec(block)) !== null) {
+        const f = facts[mm[2].toLowerCase()];
+        const args = parseArgs(mm[3]);
+        const has = k => args.some(([a]) => a.toLowerCase() === k);
+        // Unknown type: guess the interface from its arguments.
+        const iface = f ? f.iface : has("tx") || has("rx") ? "uart" : has("cs") ? "spi"
+            : args.length ? "gpio" : "i2c";
+        const dev = { name: mm[1], type: mm[2], iface, bus: mm[4] || "", address: mm[5] || "",
+            line: lineOf(mm.index), roles: {}, params: {}, hasBus: !!mm[4], hasAddress: !!mm[5] };
+        for (const [k, v] of args) {
+            const key = k.toLowerCase();
+            const isPin = f ? !!f.pins[key] : !(key in (f?.params || {})) && /^\d+$/.test(v) && key !== "baud";
+            if ((isPin || iface === "uart" && (key === "tx" || key === "rx")) && /^\d+$/.test(v)) dev.roles[key] = parseInt(v, 10);
+            else dev.params[k] = v;
+        }
+        if (f) for (const [k, p] of Object.entries(f.params))
+            if (!(k in dev.params) && p.default != null) dev.params[k] = String(p.default);
+        devices.push(dev);
+    }
+
+    // Wire each device to its bus; devices without `on` share the chip's
+    // native bus (named `i2c` / `spi`, or `default_<kind>` when taken),
+    // and a serial module gets its own UART named `<device>_uart`.
+    const native = busPinsNow() || {};
+    const taken = new Set([...pins, ...buses, ...devices].map(x => x.name));
+    const implicit = {};
+    let synth = 0;     // implicit buses have no line of their own: -1, -2 …
+    for (const d of devices) {
+        if ((d.iface === "uart" || d.iface === "spi") && d.hasAddress) legacy = true;   // `on ser at 0`, `on spi0 at 5`
+        if (d.iface === "uart") {
+            if (d.hasBus) continue;           // legacy `on ser at 0`
+            const roles = { ...d.roles };
+            d.bus = d.name + "_uart";
+            addBus({ name: d.bus, kind: "bus", busType: "UART", roles, params: { baud: d.params.baud || "" },
+                line: --synth, implicit: true, owner: d.name });
+            d.address = "";
+            continue;
+        }
+        if (d.iface === "i2c" || d.iface === "spi") {
+            if (!d.hasBus) {
+                if (!implicit[d.iface]) {
+                    const name = taken.has(d.iface) ? "default_" + d.iface : d.iface;
+                    const roles = {};
+                    const sigs = d.iface === "i2c" ? ["sda", "scl"] : ["mosi", "miso", "clk"];
+                    for (const r of sigs)
+                        if ((native[d.iface] || {})[r] != null) roles[r] = parseInt(native[d.iface][r], 10);
+                    implicit[d.iface] = { name, kind: "bus", busType: d.iface.toUpperCase(), roles, params: {},
+                        line: --synth, implicit: true };
+                    addBus(implicit[d.iface]);
+                }
+                d.bus = implicit[d.iface].name;
+            }
+            if (d.iface === "i2c" && !d.address) d.address = facts[d.type.toLowerCase()]?.addr || "";
+            if (d.iface === "spi") {
+                // `(cs: N)`, or legacy `on spi0 at N`.
+                if (d.roles.cs == null && /^\d+$/.test(d.address)) d.roles.cs = parseInt(d.address, 10);
+                if (d.roles.cs != null) d.address = String(d.roles.cs);
+            }
+        }
+    }
+    for (const d of devices)
+        for (const [role, gpio] of Object.entries(d.roles))
+            claim(gpio, { name: d.name, kind: "device", role, deviceType: d.type, line: d.line });
+
+    // Legacy GPIO devices anchored with `on <pin> at N`: show them at N.
+    const busNames = new Set(buses.map(b => b.name)), pinNames = new Set(pins.map(p => p.name));
+    for (const d of devices) {
+        if (Object.keys(d.roles).length || !d.hasBus || busNames.has(d.bus) || pinNames.has(d.bus)) continue;
+        const gpio = parseInt(d.address);
+        if (!isNaN(gpio)) claim(gpio, { name: d.name, kind: "device", line: d.line, deviceType: d.type });
+    }
+
+    return { pins, buses, devices, pinByGpio, legacy };
 }
+
+const SIGNAL_NAMES = ["sda", "scl", "mosi", "miso", "clk", "sck", "cs", "tx", "rx"];
 
 // Back-compat alias — old callers asking for just pins still work.
 // Returns the flat by-GPIO assignment list (pins + bus roles together).
@@ -291,7 +345,8 @@ export function boardPinInfo(gpio) {
             const p = col[i];
             if (p && String(p.gpio ?? "") === String(gpio))
                 return { board: board.name, header: sides[c], index: i + 1, label: p.label,
-                    type: p.type || "", alt: p.alt || [], note: p.note || "" };
+                    type: p.type || "", alt: p.alt || [], note: p.note || "",
+                    onboard: board.art && board.art.ledGpio === String(gpio) ? "on-board LED" : "" };
         }
     }
     return null;
@@ -418,6 +473,7 @@ function applyAssignments() {
             if (t && t.textContent !== warn) t.textContent = warn;
         }
         refs.g.classList.toggle("has-warning", !!warn);
+        refs.g.classList.toggle("has-error", !!warn && _pinSev[gpio] === "error");
         const safety = a ? "" : (_safety[gpio] || "");
         for (const s of ["safe", "caution", "risky", "unavailable"]) refs.g.classList.toggle("safe-" + s, safety === s);
 
@@ -440,29 +496,20 @@ export function roleOf(a) {
     return "out";
 }
 
-// "heater · PWM", "estop · pull-up", "i2c0 · SDA", "bin_level · trig"
+// "heater · PWM", "estop · PullUpInput", "i2c0 · SDA", "bin_level · trig"
 export function labelFor(a) {
     if (a.kind === "bus") return `${a.name} · ${(a.role || "?").toUpperCase()}`;
     if (a.kind === "device") return a.role ? `${a.name} · ${a.role}` : a.name;
-    const m = (a.mode || "Output").toLowerCase();
-    const tag = m === "pwm" ? "PWM"
-        : m === "servo" ? "servo"
-        : m === "dac" ? "DAC"
-        : m === "touch" ? "touch"
-        : m.includes("analog") || m === "adc" ? "analog"
-        : m.includes("pullup") ? "pull-up"
-        : m.includes("pulldown") ? "pull-down"
-        : m.includes("input") ? "input" : "output";
-    return `${a.name} · ${tag}`;
+    return `${a.name} · ${a.mode || "Output"}`;
 }
 
 // Wiring hazards worth a mark on the drawing (hover for the reason) — the
 // compiler's hardware diagnostics, by GPIO. A diagnostic with a fix points
 // at the offending pin number; otherwise it belongs to the pin on its line.
-let _pinDiags = {}, _pinFixes = {};
+let _pinDiags = {}, _pinFixes = {}, _pinSev = {};
 export function setDiagnostics(diags, source) {
     const lines = (source || "").split("\n");
-    const out = {}, fixes = {};
+    const out = {}, fixes = {}, sev = {};
     for (const d of diags || []) {
         if (!d.code || d.code === "pin-note" || !/^(pin|bus)-/.test(d.code)) continue;
         let gpios = [];
@@ -475,12 +522,19 @@ export function setDiagnostics(diags, source) {
             gpios = _state.assigned.filter(a => a.line === d.line && (a.kind || "pin") === "pin").map(a => String(a.gpio));
         for (const g of gpios) {
             (out[g] = out[g] || []).push(d.message);
+            if (d.severity === "error" || !sev[g]) sev[g] = d.severity === "error" ? "error" : "warning";
             for (const fx of d.fixes || []) (fixes[g] = fixes[g] || []).push(fx);
         }
     }
     _pinDiags = out;
     _pinFixes = fixes;
+    _pinSev = sev;
     if (_skeleton.refs) applyAssignments();
+}
+
+// "error" | "warning" | "" — the worst compiler message on a GPIO.
+export function pinSeverity(gpio) {
+    return _pinSev[String(gpio)] || "";
 }
 
 // Compiler fixes for a GPIO's diagnostics ({title, line, col, end_line, end_col, text}).
@@ -808,9 +862,9 @@ function drawPin(p, side, edgeX, y) {
 
     return `
         <g class="pinout-pin pin-type-${type}" data-gpio="${escapeHtml(gpio)}"
-           data-name="" data-kind="" data-line="0"
+           data-name="" data-kind="" data-line="0" tabindex="0" role="button"
+           aria-label="${escapeHtml(pinTooltip(p).replace(/\n/g, ". "))}"
            data-varx="${varX}" data-vary="${y + 4}" data-anchor="${labelAnchor}">
-            <title>${escapeHtml(pinTooltip(p))}</title>
             <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
             <circle cx="${edgeX}" cy="${y}" r="8" class="bp-pin-ring"/>
             <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(shown)}</text>
@@ -853,14 +907,26 @@ function bindPinClicks(svg, board) {
             const assigned = gpio ? assignedAt(gpio) : null;
             _onPinClick(gpio, pin, assigned, g);
         });
-        // Hover → tell the editor to highlight the declaration line
-        g.addEventListener("pointerenter", () => {
+        // Keyboard: Enter / Space act like a click.
+        g.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); g.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+        });
+        // Hover / focus → hint, and tell the editor to highlight the declaration line
+        const enter = () => {
             const line = parseInt(g.getAttribute("data-line"), 10);
             if (line > 0) document.dispatchEvent(new CustomEvent("pinout:hover", { detail: { line } }));
-        });
-        g.addEventListener("pointerleave", () => {
+            const gpio = g.getAttribute("data-gpio");
+            const pin = pinByGpio[gpio] || pinByLabel[g.querySelector("text.bp-pin-label")?.textContent?.trim() || ""];
+            if (pin) _onPinHover(gpio, pin, gpio ? assignedAt(gpio) : null, g);
+        };
+        const leave = () => {
             document.dispatchEvent(new CustomEvent("pinout:hover", { detail: { line: 0 } }));
-        });
+            _onPinHover(null);
+        };
+        g.addEventListener("pointerenter", enter);
+        g.addEventListener("focus", enter);
+        g.addEventListener("pointerleave", leave);
+        g.addEventListener("blur", leave);
     });
 }
 

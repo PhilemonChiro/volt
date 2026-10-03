@@ -37,7 +37,7 @@ volt_error_t hc05_send_at_command(hc05_t *dev, const char *command) {
     return volt_uart_print(dev->uart_id, "\r\n");
 }
 
-int hc05_read_at_response(hc05_t *dev, char *response, uint16_t max_len) {
+int32_t hc05_read_at_response(hc05_t *dev, char *response, uint16_t max_len) {
     int len = 0;
     while (volt_uart_available(dev->uart_id) > 0 && len < max_len - 1) {
         len += volt_uart_read(dev->uart_id, (uint8_t *)response + len, 1);

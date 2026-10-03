@@ -16,6 +16,8 @@ set(VOLT_CORE_SRCS
     "${_VOLT_FW}/src/i2c.c"
     "${_VOLT_FW}/src/spi.c"
     "${_VOLT_FW}/src/uart.c"
+    "${_VOLT_FW}/src/servo.c"
+    "${_VOLT_FW}/src/touch.c"
 )
 
 set(VOLT_INCLUDE_DIRS "${_VOLT_FW}/../include")

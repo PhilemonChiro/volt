@@ -3,6 +3,7 @@
   "category": "light",
   "interface": "i2c",
   "default_address": "0x10",
+  "addresses": ["0x10"],
   "description": "High-accuracy ambient light sensor",
   "c_prefix": "veml7700",
   "c_source": "sensor_veml7700.c",

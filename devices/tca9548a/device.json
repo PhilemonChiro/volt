@@ -3,6 +3,7 @@
   "category": "control",
   "interface": "i2c",
   "default_address": "0x70",
+  "addresses": ["0x70", "0x71", "0x72", "0x73", "0x74", "0x75", "0x76", "0x77"],
   "description": "I2C multiplexer (8 channels)",
   "c_prefix": "tca9548a",
   "c_source": "sensor_tca9548a.c",

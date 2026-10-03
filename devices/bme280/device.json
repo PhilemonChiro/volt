@@ -3,6 +3,7 @@
   "category": "sensor",
   "interface": "i2c",
   "default_address": "0x76",
+  "addresses": ["0x76", "0x77"],
   "description": "Temperature, humidity, pressure",
   "c_prefix": "bme280",
   "c_source": "sensor_bme280.c",

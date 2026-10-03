@@ -3,6 +3,7 @@
   "category": "motion",
   "interface": "i2c",
   "default_address": "0x1E",
+  "addresses": ["0x1E"],
   "description": "3-axis magnetometer / compass (found on the GY-85 9-DoF board)",
   "c_prefix": "hmc5883l",
   "c_source": "driver.c",

@@ -3,6 +3,7 @@
   "category": "display",
   "interface": "i2c",
   "default_address": "0x3C",
+  "addresses": ["0x3C", "0x3D"],
   "description": "128x64 OLED display",
   "c_prefix": "ssd1306",
   "c_source": "sensor_ssd1306.c",

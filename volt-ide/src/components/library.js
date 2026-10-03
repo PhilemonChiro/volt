@@ -903,60 +903,25 @@ function analyzeProjectState(device, source) {
     return { kind: "clean" };
 }
 
-function addDevice(device, { withSample }) {
-    const editors = monaco.editor.getEditors();
-    if (!editors.length) return;
-    const editor = editors[0];
+// "Add to project" — the same one-action add as the Add device dialog
+// (hardware-panel.quickAdd: picks bus, pins, address, name), then the
+// optional sample block appended as its own edit.
+async function addDevice(device, { withSample }) {
+    const [{ catalogue }, hp] = await Promise.all([import("./parts.js"), import("./hardware-panel.js")]);
+    const entry = (await catalogue()).find(e => e.kind === "device" && e.type.toLowerCase() === String(device.name).toLowerCase());
+    if (!entry) return;
+    const name = await hp.quickAdd(null, entry);
+    if (!name || !withSample) return;
+    const editor = monaco.editor.getEditors()[0];
     const model = editor.getModel();
-    const source = model.getValue();
-
-    const name = suggestName(device, source);
-    const declLine = buildDeclaration(device, name);
-    const state = analyzeProjectState(device, source);
-
-    // 1. Insert into (or create) the hardware { } block. Match accepts
-    // both multi-line and single-line forms; we always insert a fresh line
-    // before the closing brace, preserving existing content's line endings.
-    let newSource = source;
-    const hwMatch = newSource.match(/hardware\s*\{([\s\S]*?)\}/);
-    const iface = (device.interface || "").toLowerCase();
-    const bus = busFor(device);
-    const needBus = state.kind === "needs-bus";
-
-    let busInsert = "";
-    if (needBus && bus) {
-        // Named-args bus declarations matching the Volt grammar.
-        if (iface === "i2c")  busInsert = `    bus ${bus}: I2C(sda: 21, scl: 22)\n`;
-        if (iface === "spi")  busInsert = `    bus ${bus}: SPI(sck: 18, mosi: 23, miso: 19)\n`;
-        if (iface === "uart") busInsert = `    bus ${bus}: UART(tx: 17, rx: 16)\n`;
-    }
-
-    if (hwMatch) {
-        const closeIdx = hwMatch.index + hwMatch[0].length - 1;  // position of '}'
-        const beforeClose = newSource.slice(0, closeIdx);
-        // Ensure we start the new content on its own line, even if the
-        // previous block was single-line: "hardware { pin led = 2 }".
-        const needNL = !beforeClose.endsWith("\n");
-        const insert = `${needNL ? "\n" : ""}${busInsert}    ${declLine}\n`;
-        newSource = beforeClose + insert + newSource.slice(closeIdx);
-    } else {
-        newSource = `hardware {\n${busInsert}    ${declLine}\n}\n\n` + newSource;
-    }
-
-    // 2. Optionally append a sample block tailored to the device's shape
-    //    (display / LED strip / multi-reader sensor / single reader / writers).
-    if (withSample) {
-        const sample = buildSampleBlock(device, name);
-        newSource = newSource.trimEnd() + "\n\n" + sample;
-    }
-
-    // 3. Apply via executeEdits so the user can undo.
-    editor.executeEdits("library-add-device", [{
-        range: model.getFullModelRange(),
-        text: newSource,
+    const end = model.getFullModelRange().getEndPosition();
+    editor.pushUndoStop();
+    editor.executeEdits("library-sample", [{
+        range: new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column),
+        text: (model.getValue().endsWith("\n") ? "\n" : "\n\n") + buildSampleBlock(device, name) + "\n",
         forceMoveMarkers: true,
     }]);
-    editor.focus();
+    editor.pushUndoStop();
 }
 
 // ============================================================

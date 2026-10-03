@@ -2,6 +2,8 @@
   "name": "MAX31855",
   "category": "temperature",
   "interface": "spi",
+  "pins": {"cs": {"dir": "out"}},
+  "max_speed": 5000000,
   "default_address": "",
   "description": "Thermocouple-to-digital converter",
   "c_prefix": "max31855",

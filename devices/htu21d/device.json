@@ -3,6 +3,7 @@
   "category": "sensor",
   "interface": "i2c",
   "default_address": "0x40",
+  "addresses": ["0x40"],
   "description": "Temperature and humidity",
   "c_prefix": "htu21d",
   "c_source": "sensor_htu21d.c",

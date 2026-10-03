@@ -2,6 +2,7 @@
   "name": "DHT22",
   "category": "sensor",
   "interface": "gpio",
+  "pins": {"pin": {"dir": "io"}},
   "default_address": "",
   "description": "Temperature and humidity (AM2302, higher precision than DHT11)",
   "c_prefix": "dht",

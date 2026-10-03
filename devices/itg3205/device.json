@@ -3,6 +3,7 @@
   "category": "motion",
   "interface": "i2c",
   "default_address": "0x68",
+  "addresses": ["0x68", "0x69"],
   "description": "3-axis gyroscope (found on the GY-85 9-DoF board)",
   "c_prefix": "itg3205",
   "c_source": "driver.c",

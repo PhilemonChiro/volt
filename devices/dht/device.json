@@ -17,6 +17,7 @@
   "description": "Basic temperature and humidity",
   "init_args": "{pin}, 11",
   "interface": "gpio",
+  "pins": {"pin": {"dir": "io"}},
   "manufacturer": "Aosong",
   "methods": {
     "humidity": {

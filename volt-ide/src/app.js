@@ -642,6 +642,13 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "3") { e.preventDefault(); sidePanel.toggle("outline"); }
     if (e.ctrlKey && e.key === "4") { e.preventDefault(); sidePanel.toggle("library"); }
     if (e.ctrlKey && e.key === "5") { e.preventDefault(); diagramsView.showView("board"); }
+    // Add a part from anywhere: Board tab → its card; Code view → Hardware panel.
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        const onBoard = document.getElementById("boardView").style.display === "flex";
+        if (!onBoard) sidePanel.open("hardware");
+        import("./components/hardware-panel.js").then(m => setTimeout(() => m.openPicker(), onBoard ? 0 : 150));
+    }
 });
 
 // Init panels

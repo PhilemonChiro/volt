@@ -7,6 +7,7 @@
   "description": "Driver for HC-05 Bluetooth module using UART with extended AT command support.",
   "init_args": "{uart_id}",
   "interface": "uart",
+  "params": {"baud": {"type": "int", "default": 9600}},
   "methods": {
     "read_at_response": {
       "description": "Reads the response from an AT command.",

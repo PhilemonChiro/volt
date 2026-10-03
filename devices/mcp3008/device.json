@@ -2,6 +2,8 @@
   "name": "MCP3008",
   "category": "analog",
   "interface": "spi",
+  "pins": {"cs": {"dir": "out"}},
+  "max_speed": 1350000,
   "default_address": "",
   "description": "8-channel 10-bit ADC",
   "c_prefix": "mcp3008",

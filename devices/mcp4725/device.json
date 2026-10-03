@@ -3,6 +3,7 @@
   "category": "analog",
   "interface": "i2c",
   "default_address": "0x60",
+  "addresses": ["0x60", "0x61", "0x62", "0x63", "0x64", "0x65", "0x66", "0x67"],
   "description": "12-bit DAC analog output",
   "c_prefix": "mcp4725",
   "c_source": "sensor_mcp4725.c",

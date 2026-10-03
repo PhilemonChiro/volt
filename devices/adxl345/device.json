@@ -3,6 +3,7 @@
   "category": "motion",
   "interface": "i2c",
   "default_address": "0x53",
+  "addresses": ["0x53", "0x1D"],
   "description": "3-axis accelerometer (found on the GY-85 9-DoF board)",
   "c_prefix": "adxl345",
   "c_source": "driver.c",

@@ -3,6 +3,7 @@
   "category": "time",
   "interface": "i2c",
   "default_address": "0x68",
+  "addresses": ["0x68"],
   "description": "Real-time clock with battery backup",
   "c_prefix": "ds3231",
   "c_source": "sensor_ds3231.c",

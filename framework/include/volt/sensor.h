@@ -325,13 +325,13 @@ void max7219_set_digit(max7219_t *dev, uint8_t pos, uint8_t value, uint8_t dp);
 // hc05 (installed library — generated header)
 typedef struct { uint8_t uart_id; } hc05_t;
 volt_error_t hc05_init(hc05_t *dev, uint8_t uart_id);
-void hc05_send_data(hc05_t *dev, int data);
-int32_t hc05_receive_data(hc05_t *dev, char * buffer, uint16_t max_len);
-void hc05_send_at_command(hc05_t *dev, const char * command);
+volt_error_t hc05_send_data(hc05_t *dev, int data);
+int hc05_receive_data(hc05_t *dev, char * buffer, uint16_t max_len);
+volt_error_t hc05_send_at_command(hc05_t *dev, const char * command);
 int32_t hc05_read_at_response(hc05_t *dev, char * response, uint16_t max_len);
-void hc05_set_baud_rate(hc05_t *dev, int baud_rate);
-void hc05_set_name(hc05_t *dev, const char * name);
-void hc05_set_password(hc05_t *dev, const char * password);
+volt_error_t hc05_set_baud_rate(hc05_t *dev, int baud_rate);
+volt_error_t hc05_set_name(hc05_t *dev, const char * name);
+volt_error_t hc05_set_password(hc05_t *dev, const char * password);
 
 // ============================================================
 // GY-85 9-DoF board: ADXL345 (0x53) + ITG3205 (0x68) + HMC5883L (0x1E)

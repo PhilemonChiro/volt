@@ -3,6 +3,7 @@
   "category": "health",
   "interface": "i2c",
   "default_address": "0x57",
+  "addresses": ["0x57"],
   "description": "Pulse oximeter and heart rate (18-bit)",
   "c_prefix": "max30102",
   "c_source": "sensor_max30102.c",

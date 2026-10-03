@@ -3,6 +3,7 @@
   "category": "sensor",
   "interface": "i2c",
   "default_address": "0x44",
+  "addresses": ["0x44", "0x45"],
   "description": "High-accuracy temperature and humidity",
   "c_prefix": "sht31",
   "c_source": "sensor_sht31.c",

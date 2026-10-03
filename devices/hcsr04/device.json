@@ -2,6 +2,7 @@
   "name": "HCSR04",
   "category": "distance",
   "interface": "gpio",
+  "pins": {"trig": {"dir": "out"}, "echo": {"dir": "in"}},
   "default_address": "",
   "description": "Ultrasonic distance sensor (2-400cm)",
   "c_prefix": "hcsr04",

@@ -470,7 +470,7 @@ ipcMain.handle("devices_list", () => {
     // Read from ALL device roots, not just the first that exists: built-ins ship
     // in resources/sdk/devices, but user-installed libraries (incl. private ones)
     // land in ~/.volt/sdk/devices. Reading only one root hid installed devices
-    // from the catalog + detail view. Later roots win on c_prefix collision so an
+    // from the catalog + detail view. Later roots win on a name collision so an
     // installed override shadows a built-in of the same name.
     const byPrefix = new Map();
     for (const root of deviceReadRoots()) {
@@ -481,7 +481,9 @@ ipcMain.handle("devices_list", () => {
                 if (!f.endsWith(".json")) continue;
                 try {
                     const data = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8"));
-                    const key = (data.c_prefix || entry).toLowerCase();
+                    // Keyed by device name: several devices share a driver
+                    // (LCD16x2 / LCD20x4 / HD44780 all use c_prefix hd44780).
+                    const key = (data.name || entry).toLowerCase();
                     byPrefix.set(key, data);
                 } catch (_) {}
             }
@@ -892,6 +894,15 @@ ipcMain.handle("pin_table", async (_, chip) => {
         return await workerCall("pin_table", { chip: chip || "" }, 5000);
     } catch (_) {
         return [];
+    }
+});
+
+// Suggested pins for a new bus: { i2c: {sda, scl}, spi: {...}, uart: {...} }.
+ipcMain.handle("bus_pins", async (_, chip) => {
+    try {
+        return await workerCall("bus_pins", { chip: chip || "" }, 5000);
+    } catch (_) {
+        return {};
     }
 });
 

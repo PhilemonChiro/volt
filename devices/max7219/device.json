@@ -2,6 +2,8 @@
   "name": "MAX7219",
   "category": "display",
   "interface": "spi",
+  "pins": {"cs": {"dir": "out"}},
+  "max_speed": 10000000,
   "default_address": "",
   "description": "LED dot matrix / 7-segment driver",
   "c_prefix": "max7219",

@@ -4862,8 +4862,8 @@ kbd {
     width: 340px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
     border-left: 1px solid var(--border); background: var(--bg-1);
 }
-.bv-side .hwp-card { border-bottom: 1px solid var(--border); max-height: 65%; overflow-y: auto; flex-shrink: 0; }
-.bv-side .hwp-list { flex: 1; overflow-y: auto; padding: var(--s-2); }
+.bv-side .hwp-card { border-bottom: 1px solid var(--border); flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+.bv-side .hwp-list { flex: 1 0 140px; overflow-y: auto; padding: var(--s-2); }
 
 /* Side panel host: list scrolls, card docks at the bottom */
 #panelHardware { padding: 0; overflow: hidden; }
@@ -4926,9 +4926,27 @@ kbd {
 .pinout-pin.safe-unavailable { opacity: 0.45; }
 
 /* "Move to another pin": valid targets lit, everything else dimmed */
+/* Moving a pin: pins not involved dim; green rings + "free" labels on
+   targets, amber on swaps. */
 .pinout-canvas.is-picking .pinout-pin:not(.is-target):not(.is-cursor) { opacity: 0.25; }
-.pinout-pin.is-target .bp-pin-ring { stroke: var(--volt); stroke-opacity: 0.8; }
-.pinout-pin.is-target:hover .bp-pin-ring { stroke-opacity: 1; stroke-width: 2.5; }
+.pinout-pin.is-target { cursor: pointer; }
+.pinout-pin.is-target .bp-pin-ring { stroke: #6cc070 !important; stroke-width: 2.5; }
+.pinout-pin.is-target .bp-var-label { fill: #6cc070 !important; }
+.pinout-pin.is-target.is-swap .bp-pin-ring { stroke: #e0a84e !important; stroke-dasharray: 3 2; }
+.pinout-pin.is-target.is-swap .bp-var-label { fill: #e0a84e !important; }
+.pinout-pin.is-target:hover .bp-pin-ring { stroke-width: 3.5; }
+.hwp-move {
+    display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; padding: 8px 10px;
+    font: 12px var(--sans); color: var(--t1); line-height: 1.4;
+    background: rgba(108,192,112,.08); border: 1px solid rgba(108,192,112,.4); border-radius: var(--r-2);
+}
+.hwp-move-main { display: flex; align-items: baseline; gap: 8px; }
+.hwp-move-main > span { flex: 1; }
+.hwp-move-legend { display: flex; gap: 12px; font-size: 11px; color: var(--t2); }
+.hwp-move-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.hwp-move-legend span.hwp-muted { margin-left: auto; }
+.hwp-move-legend i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #6cc070; }
+.hwp-move-legend i.is-swap { border: 2px dashed #e0a84e; }
 
 /* Card forms */
 .hwp-name {
@@ -4948,6 +4966,8 @@ kbd {
 .hwp-chip:hover { color: var(--t1); }
 .hwp-chip.is-active { background: var(--volt); border-color: var(--volt); color: #fff; }
 .hwp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.hwp-params { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.hwp-param { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--t2); }
 .hwp-actions .pp-btn, .pp-warn .pp-btn { margin-top: 0; }
 .pp-warn .hwp-actions { margin-top: 6px; }
 .pp-warn .hwp-link { display: block; margin-top: 4px; }
@@ -4965,13 +4985,345 @@ kbd {
 
 /* List */
 .hwl-title { display: flex; align-items: center; }
-.hwl-add {
-    margin-left: auto; background: none; border: 0; cursor: pointer;
-    color: var(--volt); font: 600 10px var(--sans); letter-spacing: 0.04em; text-transform: none;
+.hwp-tip span { white-space: pre-line; }
+.hwp-warn-inline { color: #e0a84e; }
+.hwl-count { margin-left: auto; font-weight: 400; letter-spacing: 0; color: var(--t3); }
+/* Add bar: one primary action, one secondary, rarer ones behind ⋯ */
+.hwl-bar { display: flex; gap: 6px; padding: 0 var(--s-2) var(--s-3); }
+.hwl-bar .pp-btn { margin: 0; height: 28px; padding: 0 12px; font-weight: 500; }
+.hwl-bar .hwl-add { min-width: 96px; }
+.hwl-bar .hwl-more, .bv-more { width: 30px; padding: 0; letter-spacing: 1px; }
+.hwl-auto { padding: 2px var(--s-2) 0 26px; color: var(--t3); font-size: 11px; }
+.hwl-autobus { background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: 11px var(--mono); }
+.hwl-autobus:hover { color: var(--t1); text-decoration: underline; }
+.hwl-legacy {
+    display: block; width: calc(100% - 2 * var(--s-2)); margin: 0 var(--s-2) var(--s-3); padding: 6px 10px;
+    text-align: left; cursor: pointer; font: 11px var(--sans); color: var(--t2);
+    background: rgba(224,168,78,.08); border: 1px solid rgba(224,168,78,.35); border-radius: var(--r-2);
 }
-.panel-empty .hwl-add { margin: var(--s-3) auto 0; font-size: 12px; display: block; }
+.hwl-legacy b { color: #e0a84e; font-weight: 600; }
+.hwl-legacy:hover { background: rgba(224,168,78,.14); }
+.hwl-menu {
+    position: fixed; z-index: 1000; min-width: 220px; padding: 4px;
+    background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.hwl-menu button {
+    display: flex; flex-direction: column; gap: 1px; width: 100%; padding: 6px 10px; text-align: left;
+    background: none; border: 0; border-radius: var(--r-1, 4px); cursor: pointer; color: var(--t1);
+}
+.hwl-menu button:hover { background: var(--bg-3); }
+.hwl-menu b { font: 500 12px var(--sans); }
+.hwl-menu span { font: 11px var(--sans); color: var(--t3); }
 .hwl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pin-c, var(--t3)); flex: none; }
 .hwl-row .hw-name { overflow: hidden; text-overflow: ellipsis; }
 .hwl-row.is-selected { background: var(--bg-3); box-shadow: inset 2px 0 0 var(--volt); }
 .hwl-tag { color: var(--t3); font-size: var(--fs-10); white-space: nowrap; }
 .hwl-warn { color: #e0a84e; flex: none; cursor: help; }
+
+/* Bus wizard: one slot per signal (click, then pick a lit pin) */
+.hwp-slots { display: grid; gap: 4px; }
+.hwp-slot {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 6px 10px; cursor: pointer; text-align: left;
+    font: 12px var(--sans); color: var(--t1);
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+}
+.hwp-slot:hover { border-color: var(--t3); }
+.hwp-slot b { width: 38px; font: 600 11px var(--sans); color: var(--bp-bus-accent, #4ec9b0); }
+.hwp-slot span { font-family: var(--mono); }
+.hwp-slot em { margin-left: auto; font-style: normal; font-size: 11px; color: var(--t3); }
+.hwp-slot em.is-warn { color: #e0a84e; }
+.hwp-slot.is-empty span { color: var(--t3); }
+.hwp-slot.is-active { border-color: var(--volt); box-shadow: 0 0 0 1px var(--volt); }
+.hwp-baud { display: flex; align-items: center; gap: 10px; }
+.hwp-baud .pp-section-title { margin: 0; }
+.hwl-none { padding: 0 var(--s-2) var(--s-2); color: var(--t3); font-size: 11px; }
+.hwp-preview { flex-wrap: wrap; }
+.hwp-preview .hwp-code, .hwp-toast .hwp-code { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---- Hardware: first-user flow (steps, parts, plain safety, hints) ---- */
+.pinout-pin.safe-safe .bp-pin-outer { stroke: #6cc070; }
+.pinout-pin:focus { outline: none; }
+.pinout-pin:focus-visible .bp-pin-ring { stroke: var(--volt); stroke-width: 2.5; stroke-opacity: 1; }
+.bv-legend i.ring.good { border-color: #6cc070; margin-left: 6px; }
+.bv-legend i.ring.caution { margin-left: 8px; }
+
+.hwp-tip {
+    position: absolute; z-index: 18; pointer-events: none; max-width: 260px;
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 6px 10px; font: 12px var(--sans); color: var(--t2);
+    background: var(--bg-3); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+}
+.hwp-tip b { color: var(--t1); font-weight: 600; }
+
+.hwp-status {
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 8px 10px; border-radius: var(--r-2); font-size: 12px; line-height: 1.45;
+    border: 1px solid transparent;
+}
+.hwp-status b { font-weight: 600; }
+.hwp-status span { color: var(--t2); }
+.hwp-status.is-good  { background: rgba(108,192,112,.08); border-color: rgba(108,192,112,.25); }
+.hwp-status.is-good b { color: #6cc070; }
+.hwp-status.is-ok    { background: rgba(215,182,94,.08); border-color: rgba(215,182,94,.25); }
+.hwp-status.is-ok b { color: #d7b65e; }
+.hwp-status.is-avoid { background: rgba(224,119,111,.08); border-color: rgba(224,119,111,.3); }
+.hwp-status.is-avoid b { color: #e0776f; }
+.hwp-status.is-no    { background: var(--bg-1); }
+.hwp-status .hwp-actions { margin-top: 6px; }
+
+.hwp-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.hwp-step { display: flex; flex-direction: column; gap: 6px; }
+.hwp-step[hidden] { display: none; }
+.hwp-step-h { display: flex; align-items: center; gap: 8px; font: 600 12px var(--sans); color: var(--t1); }
+.hwp-step-h span {
+    width: 18px; height: 18px; border-radius: 50%; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    font: 600 10px var(--sans); color: #fff; background: var(--volt);
+}
+.hwp-uses { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; }
+.hwp-use {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    padding: 7px 10px; cursor: pointer; text-align: left;
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+    color: var(--t1); font: 12px var(--sans);
+}
+.hwp-use b { font-weight: 600; }
+.hwp-use span { color: var(--t3); font-size: 11px; }
+.hwp-use:hover { border-color: var(--t3); }
+.hwp-use.is-active { border-color: var(--volt); background: rgba(74,124,247,.12); box-shadow: 0 0 0 1px var(--volt); }
+.hwp-use:focus-visible, .hwp-chip:focus-visible, .hwp-slot:focus-visible, .pp-btn:focus-visible, .hwp-link:focus-visible {
+    outline: 2px solid var(--volt); outline-offset: 2px;
+}
+.hwp-wire { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t1); line-height: 1.45; }
+.hwp-wire li::marker { color: var(--t3); }
+.hwp-go { align-self: stretch; padding: 8px 12px; font-size: 13px; }
+.hwp-ex, .hwp-muted code, .hwp-panel code { font: 11px var(--mono); color: var(--t1); background: var(--bg-1); padding: 1px 4px; border-radius: 3px; }
+
+.hwp-details { font-size: 12px; color: var(--t2); }
+.hwp-details summary { cursor: pointer; color: var(--t2); font-size: 11px; user-select: none; }
+.hwp-details summary:hover { color: var(--t1); }
+.hwp-details[open] summary { margin-bottom: 6px; }
+.hwp-details > * + * { margin-top: 6px; }
+
+.hwp-acts .pp-btn.is-active { border-color: var(--volt); color: var(--t1); background: var(--bg-3); }
+.hwp-panel { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg-1); border-radius: var(--r-2); }
+.hwp-panel[hidden] { display: none; }
+.hwp-row { display: flex; gap: 6px; align-items: center; }
+.hwp-row .hwp-name { flex: 1; }
+
+.hwp-hint-h { font: 600 13px var(--sans); color: var(--t1); margin-bottom: 8px; }
+.hwp-hint ol { margin: 0 0 12px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; color: var(--t2); }
+.hwp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #6cc070; vertical-align: -1px; }
+.hwp-recs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
+.hwp-recs[hidden] { display: none; }
+.hwp-recs span { color: var(--t2); font-size: 12px; }
+.hwp-recs .hwp-chip { font-family: var(--mono); border-color: rgba(108,192,112,.5); }
+.hwp-recs .hwp-chip:hover { background: rgba(108,192,112,.12); color: var(--t1); }
+/* While a card is open on the Board tab it gets the column; the list
+   shrinks (and scrolls) underneath. */
+.bv-side .hwp-card:not(.is-empty) { flex: 0 1 auto; }
+.bv-side .hwp-card:not(.is-empty) + .hwp-list { flex: 1 1 0; min-height: 0; }
+.hwp-status.is-good { flex-direction: row; gap: 6px; padding: 6px 10px; }
+.hwp-tip em { font-style: normal; color: var(--t3); font-size: 11px; line-height: 1.4; }
+
+/* ---- Add part picker (part-picker.js) ---- */
+.pk-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh;
+    background: rgba(0,0,0,.45); animation: pk-fade .12s ease-out;
+}
+@keyframes pk-fade { from { opacity: 0; } to { opacity: 1; } }
+.pk {
+    width: min(640px, calc(100vw - 32px)); max-height: 70vh; display: flex; flex-direction: column;
+    background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5); overflow: hidden;
+}
+.pk-head { display: flex; flex-direction: column; gap: 8px; padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
+.pk-title { font: 600 13px var(--sans); color: var(--t1); }
+.pk-search {
+    width: 100%; padding: 9px 12px; font: 14px var(--sans); color: var(--t1);
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-2); outline: none;
+}
+.pk-search:focus { border-color: var(--volt); }
+.pk-list { flex: 1; overflow-y: auto; padding: 6px; }
+.pk-group { padding: 10px 10px 4px; font: 600 10px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--t3); }
+.pk-row {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 10px;
+    padding: 8px 10px; border-radius: var(--r-2); cursor: pointer;
+}
+.pk-row b { font: 600 13px var(--sans); color: var(--t1); white-space: nowrap; }
+.pk-sub { color: var(--t2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-meta { color: var(--t3); font-size: 11px; white-space: nowrap; }
+.pk-row.is-active { background: rgba(74,124,247,.16); box-shadow: inset 2px 0 0 var(--volt); }
+.pk-empty { padding: 24px; text-align: center; color: var(--t3); }
+.pk-foot { display: flex; gap: 14px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--t3); }
+.pk-foot-r { margin-left: auto; }
+.pk-foot kbd, .hwp-hint kbd {
+    font: 10px var(--mono); padding: 1px 4px; margin-right: 2px; border-radius: 3px;
+    background: var(--bg-1); border: 1px solid var(--border-strong); color: var(--t2);
+}
+
+/* ---- Hardware cards: name-as-title, add button, address chips ---- */
+.hwp-namehead { gap: 8px; }
+.hwp-title-name {
+    flex: 1; min-width: 0; font: 600 14px var(--mono); color: var(--t1);
+    background: transparent; border: 1px solid transparent; border-radius: var(--r-1); padding: 2px 6px; margin-left: -6px; outline: none;
+}
+.hwp-title-name:hover { border-color: var(--border-strong); }
+.hwp-title-name:focus { border-color: var(--volt); background: var(--bg-1); }
+.hwp-title-name.is-dirty { border-color: #d7b65e; }
+.hwp-title-name.is-bad { border-color: #e0776f; }
+.bv-add { margin: 0 0 0 12px; padding: 4px 12px; }
+.hwp-hint-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.hwp-hint-row .pp-btn { margin: 0; }
+.hwp-addr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hwp-addr .pp-section-title { margin: 0 4px 0 0; }
+.hwp-chip.is-taken { text-decoration: line-through; opacity: .6; }
+.hwp-toast-note { color: #e0a84e; }
+
+/* + Add pin / + Add device on the `hardware {` line (hardware-editor.js) */
+.hw-inline-actions { display: flex; gap: 6px; margin-left: 14px; height: 100%; align-items: center; }
+.hw-inline-actions button {
+    font: 500 11px var(--sans); line-height: 1; padding: 3px 9px; cursor: pointer; white-space: nowrap;
+    color: var(--t1); background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: 999px;
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.hw-inline-actions button:hover { background: rgba(74,124,247,.16); border-color: var(--volt); }
+.hw-inline-actions button:focus-visible { outline: 2px solid var(--volt); outline-offset: 1px; }
+.bv-add + .bv-add { margin-left: 6px; }
+.hwl-empty-acts { display: flex; justify-content: center; gap: 12px; }
+.hw-inline-actions { width: max-content; flex-wrap: nowrap; }
+/* Theme the inline hardware buttons like the IDE's own (accent, square-ish). */
+.hw-inline-actions button {
+    border-radius: var(--r-2);
+    color: var(--volt);
+    background: rgba(74,124,247,.12);
+    border-color: rgba(74,124,247,.4);
+}
+.hw-inline-actions button:hover { color: #fff; background: var(--volt); border-color: var(--volt); }
+/* Inline hardware buttons — same family as the toolbar's secondary buttons. */
+.hw-inline-actions { gap: 4px; margin-left: 12px; }
+.hw-inline-actions button {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 22px; padding: 0 8px 0 6px;
+    font: 500 var(--fs-12) var(--sans); letter-spacing: var(--tracking-snug);
+    color: var(--t2); background: var(--bg-3);
+    border: 1px solid var(--border); border-radius: var(--r-2);
+    box-shadow: none;
+}
+.hw-inline-actions button svg {
+    width: 13px; height: 13px; flex: none;
+    fill: none; stroke: var(--volt); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+}
+.hw-inline-actions button:hover { color: var(--t1); background: var(--bg-4); border-color: var(--border-strong); }
+.hw-inline-actions button:active { transform: translateY(0.5px); }
+
+/* Add pin dialog: 1 choose a free pin → 2 what's connected */
+.pk-pin { width: min(760px, calc(100vw - 32px)); }
+.pkp-body { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; flex: 1; overflow: hidden; }
+.pkp-col { display: flex; flex-direction: column; gap: 8px; padding: 14px; overflow-y: auto; }
+.pkp-right { border-left: 1px solid var(--border); }
+.pkp-step { display: flex; align-items: center; gap: 8px; font: 600 12px var(--sans); color: var(--t1); }
+.pkp-step span {
+    width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font: 600 10px var(--sans); color: #fff; background: var(--volt);
+}
+.pkp-step b { font-family: var(--mono); }
+.pkp-group { margin-top: 4px; font: 600 10px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--t3); }
+.pkp-pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; }
+.pkp-pin {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    height: 40px; cursor: pointer; color: var(--t1);
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-2);
+}
+.pkp-pin b { font: 600 13px var(--mono); }
+.pkp-pin span { font-size: 10px; color: var(--t3); }
+.pkp-pin.is-good  { border-left: 3px solid #6cc070; }
+.pkp-pin.is-ok    { border-left: 3px solid #d7b65e; }
+.pkp-pin.is-avoid { border-left: 3px dashed #e0776f; }
+.pkp-pin:hover { background: var(--bg-3); }
+.pkp-pin.is-active { background: rgba(74,124,247,.16); border-color: var(--volt); box-shadow: 0 0 0 1px var(--volt); }
+.pkp-pin:focus-visible { outline: 2px solid var(--volt); outline-offset: 2px; }
+.pkp-parts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pkp-info .hwp-status { margin-top: 6px; }
+
+/* Add pin — compact form */
+.pkf { width: min(420px, calc(100vw - 32px)); }
+.pkf-head { padding: 14px 16px 6px; font: 600 14px var(--sans); color: var(--t1); }
+.pkf-body { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 8px 10px; padding: 10px 16px; }
+.pkf-body label { font-size: 12px; color: var(--t2); }
+.pkf-body select, .pkf-body input {
+    height: 30px; padding: 0 8px; font: 13px var(--sans); color: var(--t1);
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-2); outline: none;
+}
+.pkf-body input { font-family: var(--mono); }
+.pkf-body select:focus, .pkf-body input:focus { border-color: var(--volt); }
+.pkf-body select:disabled, .pkf-body input:disabled { opacity: .5; }
+.pkf-note { font-size: 11px; color: var(--t3); line-height: 1.4; }
+.pkf-note:empty, .pkf-err:empty { display: none; }
+.pkf-err { font-size: 11px; color: #e0776f; }
+.pkf-preview { margin: 2px 16px 0; min-height: 26px; }
+.pkf-preview code { font: 12px var(--mono); color: var(--t2); }
+.pkf-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 14px; }
+.pkf-foot .pp-btn { margin: 0; }
+.pkf-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pkf-field select, .pkf-field input { width: 100%; }
+
+/* ---- Hardware severity colours: issues red (--err), warnings orange (--warn) ---- */
+.pkf-note.is-issue { color: var(--err); }
+.pkf-note.is-warning { color: var(--warn); }
+.hwp-err, .pkf-err { color: var(--err); }
+.hwp-status.is-avoid { background: hsla(0,68%,52%,.08); border-color: hsla(0,68%,52%,.35); }
+.hwp-status.is-avoid b { color: var(--err); }
+.hwp-status.is-ok { background: hsla(38,85%,52%,.08); border-color: hsla(38,85%,52%,.3); }
+.hwp-status.is-ok b { color: var(--warn); }
+.hwl-warn { color: var(--warn); }
+.hwl-warn.is-error { color: var(--err); }
+.bp-warn-mark { fill: var(--warn); }
+.pinout-pin.has-error .bp-warn-mark { fill: var(--err); }
+.pp-warn { color: var(--warn); background: hsla(38,85%,52%,.08); }
+.pinout-pin.safe-caution .bp-pin-outer { stroke: var(--warn); }
+.pinout-pin.safe-risky .bp-pin-outer { stroke: var(--err); }
+.bv-legend i.ring.caution { border-color: var(--warn); }
+.bv-legend i.ring.risky { border-color: var(--err); }
+.hwp-toast-note { color: var(--warn); }
+.hwp-name.is-bad, .hwp-title-name.is-bad { border-color: var(--err); }
+.pp-btn-danger { color: var(--err); border-color: hsla(0,68%,52%,.4); }
+.pp-btn-danger:hover { background: hsla(0,68%,52%,.14); }
+.hwp-slot em.is-warn { color: var(--warn); }
+.hwp-addr .hwp-chip.is-taken { color: var(--err); }
+
+/* Quick adds floating bottom-right of the editor (hardware-editor.js):
+   borderless chips, styled tooltip, press = sink, fade while typing. */
+.code-quick-adds {
+    display: flex; gap: 4px; margin: 0 22px 16px 0;
+    transition: opacity .18s var(--ease-out);
+}
+.code-quick-adds.is-typing { opacity: .12; }
+.code-quick-adds.is-typing:hover { opacity: 1; }
+.code-quick-adds button {
+    position: relative; display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px 0 8px; cursor: pointer; white-space: nowrap;
+    font: 500 var(--fs-12) var(--sans); letter-spacing: var(--tracking-snug);
+    color: var(--t2); background: var(--bg-3); border: 0; border-radius: var(--r-2);
+    box-shadow: 0 2px 8px rgba(0,0,0,.28);
+    transition: background .12s var(--ease-out), color .12s var(--ease-out), transform .08s var(--ease-out);
+}
+.code-quick-adds svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+.code-quick-adds button:hover { color: #fff; background: rgba(74,124,247,.22); }
+.code-quick-adds button:hover svg { opacity: 1; }
+.code-quick-adds button:active { transform: translateY(1px) scale(.97); background: rgba(74,124,247,.32); }
+.code-quick-adds button.is-done { color: #fff; background: var(--volt); }
+.code-quick-adds button:focus-visible { outline: 2px solid var(--volt); outline-offset: 1px; }
+/* Styled tooltip above the chip, after a short hover. */
+.code-quick-adds button::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); right: 0;
+    padding: 5px 8px; border-radius: var(--r-2); white-space: nowrap; pointer-events: none;
+    font: 400 11px var(--sans); color: var(--t1); background: var(--bg-1); border: 1px solid var(--border-strong);
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    opacity: 0; transform: translateY(3px); transition: opacity .12s, transform .12s;
+}
+.code-quick-adds button:hover::after { opacity: 1; transform: none; transition-delay: .35s; }

@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("volt", {
     checkCode: (source) => ipcRenderer.invoke("check_code", source),
     formatCode: (source) => ipcRenderer.invoke("format_code", source),
     pinTable: (chip) => ipcRenderer.invoke("pin_table", chip),
+    busPins: (chip) => ipcRenderer.invoke("bus_pins", chip),
     findSymbols: (source) => ipcRenderer.invoke("find_symbols", source),
     stateDiagram: (source) => ipcRenderer.invoke("state_diagram", source),
     systemGraph: (source, expanded) => ipcRenderer.invoke("system_graph", source, expanded),

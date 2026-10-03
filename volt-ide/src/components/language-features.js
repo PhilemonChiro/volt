@@ -63,14 +63,15 @@ export function register() {
             var r = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
                 startColumn: w.startColumn, endColumn: w.endColumn };
             return hwEditor.complete(model, position, before, r).then(function (hw) {
-                return hw ? { suggestions: hw } : general(model, position);
+                // "(" triggers only for hardware argument lists.
+                return hw ? { suggestions: hw } : /\($/.test(before) ? { suggestions: [] } : general(model, position);
             }, function () { return general(model, position); });
         };
     }
 
     // ---- completionProvider ----
     monaco.languages.registerCompletionItemProvider("volt", {
-        triggerCharacters: [".", " ", ":"],
+        triggerCharacters: [".", " ", ":", "("],
         provideCompletionItems: hardwareFirst(function (model, position) {
             var line = model.getLineContent(position.lineNumber);
             var textBefore = line.substring(0, position.column - 1);
@@ -680,7 +681,7 @@ export function register() {
                     seen[key] = true;
                     var title = f.title;
                     if (several) {
-                        var decl = model.getLineContent(f.line).match(/^\s*(?:pin|bus|device)\s+(\w+)/);
+                        var decl = model.getLineContent(f.line).match(/^\s*(?:pin|bus|device|i2c|spi|uart)\s+(\w+)/);
                         if (decl) title = decl[1] + ": " + title;
                     }
                     actions.push({

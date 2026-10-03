@@ -178,7 +178,7 @@ export function init(container, { onContentChange, onCursorChange }) {
         },
         automaticLayout: true,
         minimap: { enabled: false },
-        padding: { top: 12, bottom: 12 },
+        padding: { top: 12, bottom: 64 },   // room for the floating quick-add row
         scrollBeyondLastLine: false,
         cursorBlinking: "smooth",
         smoothScrolling: true,

@@ -3,6 +3,7 @@
   "category": "motion",
   "interface": "i2c",
   "default_address": "0x0D",
+  "addresses": ["0x0D"],
   "description": "Digital compass / magnetometer",
   "c_prefix": "qmc5883l",
   "c_source": "sensor_qmc5883l.c",

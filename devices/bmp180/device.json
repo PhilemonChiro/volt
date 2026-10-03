@@ -3,6 +3,7 @@
   "category": "sensor",
   "interface": "i2c",
   "default_address": "0x77",
+  "addresses": ["0x77"],
   "description": "Barometric pressure and temperature",
   "c_prefix": "bmp180",
   "c_source": "sensor_bmp180.c",

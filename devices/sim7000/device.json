@@ -2,6 +2,7 @@
   "name": "SIM7000",
   "category": "rf",
   "interface": "uart",
+  "params": {"baud": {"type": "int", "default": 115200}},
   "default_address": "",
   "description": "SIMCom SIM7000 LTE-M/NB-IoT/GSM modem \u2014 SMS (send, receipts, incoming commands), USSD and HTTP POST over GPRS, with retries and recovery",
   "c_prefix": "sim7000",

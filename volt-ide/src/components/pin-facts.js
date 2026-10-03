@@ -66,3 +66,44 @@ export function tagFor(info) {
     if (info.safety === "safe") return "free";
     return info.safety === "risky" ? info.reason + " ⚠" : info.reason;
 }
+
+// Suggested pins for a new bus: { i2c: { sda, scl }, spi: {...}, uart: {...} }.
+const _busPins = {}, _busPinsNow = {};
+export function busPins() {
+    const c = chip();
+    if (!_busPins[c]) _busPins[c] = window.volt.busPins(c).then(t => t || {}).catch(() => ({}))
+        .then(t => (_busPinsNow[c] = t));
+    return _busPins[c];
+}
+// Synchronous view for the source parser (implicit buses use these pins);
+// null until busPins() has resolved for the current chip.
+export function busPinsNow() {
+    return _busPinsNow[chip()] || null;
+}
+
+// Device facts by lower-cased type: { iface, pins, params, addr }. The
+// parser needs them to tell pins from params and to place implicit buses.
+let _devFacts = null, _devFactsNow = null;
+export function deviceFacts() {
+    if (!_devFacts) _devFacts = window.volt.devicesList().catch(() => []).then(list => {
+        const m = {};
+        for (const d of list || []) {
+            if (!d || !d.name) continue;
+            m[d.name.toLowerCase()] = { iface: (d.interface || "i2c").toLowerCase(), pins: d.pins || {},
+                params: d.params || {}, addr: d.default_address || "" };
+        }
+        return (_devFactsNow = m);
+    });
+    return _devFacts;
+}
+export function deviceFactsNow() {
+    return _devFactsNow;
+}
+
+// Signals per bus type; `out` = the signal drives the line (needs an output).
+export const BUS_SIGNALS = {
+    i2c:  [{ role: "sda", out: true }, { role: "scl", out: true }],
+    spi:  [{ role: "mosi", out: true }, { role: "miso", out: false }, { role: "clk", out: true }],
+    uart: [{ role: "tx", out: true }, { role: "rx", out: false }],
+};
+export const SIGNAL_NAMES = ["sda", "scl", "mosi", "miso", "clk", "sck", "cs", "tx", "rx"];

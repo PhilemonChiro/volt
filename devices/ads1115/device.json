@@ -3,6 +3,7 @@
   "category": "analog",
   "interface": "i2c",
   "default_address": "0x48",
+  "addresses": ["0x48", "0x49", "0x4A", "0x4B"],
   "description": "16-bit 4-channel ADC",
   "c_prefix": "ads1115",
   "c_source": "sensor_ads1115.c",

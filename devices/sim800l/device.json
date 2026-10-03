@@ -2,6 +2,7 @@
   "name": "SIM800L",
   "category": "rf",
   "interface": "uart",
+  "params": {"baud": {"type": "int", "default": 9600}},
   "default_address": "",
   "description": "Quad-band GSM/GPRS modem — send SMS, check signal and network registration",
   "c_prefix": "sim800l",

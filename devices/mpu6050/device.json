@@ -3,6 +3,7 @@
   "category": "motion",
   "interface": "i2c",
   "default_address": "0x68",
+  "addresses": ["0x68", "0x69"],
   "description": "6-axis accelerometer and gyroscope",
   "c_prefix": "mpu6050",
   "c_source": "sensor_mpu6050.c",

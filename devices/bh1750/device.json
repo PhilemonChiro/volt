@@ -3,6 +3,7 @@
   "category": "light",
   "interface": "i2c",
   "default_address": "0x23",
+  "addresses": ["0x23", "0x5C"],
   "description": "Ambient light sensor",
   "c_prefix": "bh1750",
   "c_source": "sensor_bh1750.c",

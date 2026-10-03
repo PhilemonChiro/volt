@@ -3,6 +3,7 @@
   "category": "light",
   "interface": "i2c",
   "default_address": "0x39",
+  "addresses": ["0x39"],
   "description": "Gesture, proximity, RGB color sensor",
   "c_prefix": "apds9960",
   "c_source": "sensor_apds9960.c",
