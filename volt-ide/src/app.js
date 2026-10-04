@@ -86,6 +86,8 @@ let editorReady = false;
 function showWelcome() {
     document.getElementById("welcome").style.display = "flex";
     document.getElementById("editorArea").style.display = "none";
+    // Board / Diagrams are project views: never left over the welcome page.
+    for (const id of ["diagramsView", "boardView"]) document.getElementById(id).style.display = "none";
 }
 
 function showEditor() {
@@ -638,9 +640,8 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "e") { e.preventDefault(); onExport(); }
     if (e.ctrlKey && e.key === "w") { e.preventDefault(); closeProject(); }
     if (e.ctrlKey && e.key === "1") { e.preventDefault(); sidePanel.toggle("hardware"); }
-    if (e.ctrlKey && e.key === "2") { e.preventDefault(); sidePanel.toggle("tasks"); }
-    if (e.ctrlKey && e.key === "3") { e.preventDefault(); sidePanel.toggle("outline"); }
-    if (e.ctrlKey && e.key === "4") { e.preventDefault(); sidePanel.toggle("library"); }
+    if (e.ctrlKey && e.key === "2") { e.preventDefault(); sidePanel.toggle("outline"); }
+    if (e.ctrlKey && e.key === "3") { e.preventDefault(); sidePanel.toggle("library"); }
     if (e.ctrlKey && e.key === "5") { e.preventDefault(); diagramsView.showView("board"); }
     // Add a part from anywhere: Board tab → its card; Code view → Hardware panel.
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {

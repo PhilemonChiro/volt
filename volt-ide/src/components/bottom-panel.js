@@ -481,6 +481,8 @@ let elkRegistered = false;  // whether the ELK layout engine loaded (else dagre)
 let diagramSeq = 0;        // guards against out-of-order state-diagram renders
 let systemSeq = 0;         // ditto for the system map
 let lastDiagramKey = null; // last-rendered state-diagram source (skip no-op re-renders → preserve pan/zoom)
+let systemRenderSeq = 0;   // system-map mermaid renders started
+let systemRendering = null; // source of the render in flight, if any
 let lastSystemKey = null;  // last-rendered system-map source
 let expandedLoops = new Set();   // System-Map loop ids currently expanded
 let allLoops = [];               // loop ids in the current map
@@ -556,6 +558,11 @@ function ensureMermaid() {
                 }
                 window.mermaid.initialize({
                     startOnLoad: false,
+                    // Defaults (50k chars / 500 edges) are too small for a
+                    // big project's System Map — it showed "Maximum text
+                    // size in diagram exceeded" instead of the diagram.
+                    maxTextSize: 2000000,
+                    maxEdges: 5000,
                     securityLevel: "loose",   // needed for click bindings (Phase 2)
                     theme: "base",
                     themeVariables: diagramTheme(),
@@ -567,6 +574,9 @@ function ensureMermaid() {
                     // at the node, keeping every arrowhead on the end of its arrow.
                     flowchart: { curve: "linear", nodeSpacing: 40, rankSpacing: 64, padding: 12, useMaxWidth: false },
                     state: { useMaxWidth: false },
+                    // Natural size (not stretched to the panel), participants
+                    // drawn once at the top — no mirrored row at the bottom.
+                    sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 48, messageMargin: 32 },
                 });
                 resolve(window.mermaid);
             } catch (e) { reject(e); }
@@ -579,7 +589,7 @@ function ensureMermaid() {
 
 export async function renderDiagram(force = false) {
     const el = document.getElementById("dgStateMachine");
-    if (!el) return;
+    if (!el || tooBig(el)) return;
     const seq = ++diagramSeq;
 
     let data;
@@ -636,12 +646,71 @@ export async function renderDiagram(force = false) {
     }
 }
 
+// Past this many source lines no diagram is drawn: the result is too dense
+// to read and slow to lay out.
+const DIAGRAM_MAX_LINES = 1000;
+
+// True (and the panel says why) when the program is too big to draw.
+function tooBig(el) {
+    const n = editor.getValue().split("\n").length;
+    if (n <= DIAGRAM_MAX_LINES) return false;
+    if (!el.querySelector(".bp-toobig")) {
+        el.innerHTML = `<div class="bp-empty bp-toobig">This program is too big to draw (${n.toLocaleString()} lines).<br>
+            Diagrams work best under ${DIAGRAM_MAX_LINES.toLocaleString()} lines.</div>`;
+    }
+    return true;
+}
+
+// Sequence diagram — the whole program in order (ide.SequenceDiagram).
+let seqSeq = 0, lastSeqKey = null;
+
+export async function renderSequence(force = false) {
+    const el = document.getElementById("dgSequence");
+    if (!el || tooBig(el)) return;
+    const seq = ++seqSeq;
+    let data;
+    try {
+        data = await window.volt.sequenceDiagram(editor.getValue());
+    } catch (_) {
+        data = { mermaid: "" };
+    }
+    if (seq !== seqSeq) return;
+    const key = (data && data.mermaid) || "";
+    if (!force && key === lastSeqKey && el.querySelector("svg")) return;
+    lastSeqKey = key;
+    if (!key) {
+        el.innerHTML = `<div class="bp-empty">Nothing to show — add <code>setup</code>, a <code>task</code> or a <code>machine</code>.</div>`;
+        return;
+    }
+    let mermaid;
+    try {
+        mermaid = await ensureMermaid();
+    } catch (_) {
+        el.innerHTML = `<div class="bp-empty">Couldn't load the diagram renderer.</div>`;
+        return;
+    }
+    if (seq !== seqSeq) return;
+    try {
+        const { svg } = await mermaid.render(`voltseq-${seq}`, key);
+        if (seq !== seqSeq) return;
+        // Pan / zoom on the full-size panel (a wrapper sized to the diagram
+        // would clip it as soon as it is dragged or zoomed).
+        el.classList.add("bp-seq-graph");
+        el.innerHTML = svg;
+        attachPanZoom(el);
+    } catch (e) {
+        el.innerHTML = `<div class="bp-empty">Diagram error: ${esc(String((e && e.message) || e))}</div>`;
+    } finally {
+        document.getElementById(`dvoltseq-${seq}`)?.remove();
+    }
+}
+
 // System / causal map — a single Mermaid flowchart of the whole program:
 // concurrent units (tasks, machines, setup, functions) and the resources they
 // touch (channels, shared vars, pins, services).
 export async function renderSystemMap(force = false) {
     const el = document.getElementById("dgSystemMap");
-    if (!el) return;
+    if (!el || tooBig(el)) return;
     const seq = ++systemSeq;
 
     let data;
@@ -666,8 +735,10 @@ export async function renderSystemMap(force = false) {
     }
 
     const key = (data && data.mermaid) || "";
-    // Skip a no-op re-render so periodic auto-refresh preserves pan/zoom.
-    if (!force && key === lastSystemKey && el.querySelector("svg")) return;
+    // Skip a no-op re-render so periodic auto-refresh preserves pan/zoom —
+    // and don't restart a render of the same graph that's still running (a
+    // big map takes longer than the refresh interval and would never land).
+    if (!force && key === lastSystemKey && (el.querySelector("svg") || systemRendering === key)) return;
     lastSystemKey = key;
 
     if (!key) {
@@ -690,8 +761,18 @@ export async function renderSystemMap(force = false) {
         const src = elkRegistered
             ? '%%{init: {"layout": "elk"}}%%\n' + data.mermaid
             : data.mermaid;
-        const { svg, bindFunctions } = await mermaid.render(`voltsys-${seq}`, src);
-        if (seq !== systemSeq) return;
+        const rseq = ++systemRenderSeq;
+        systemRendering = key;
+        let out;
+        try {
+            out = await mermaid.render(`voltsys-${rseq}`, src);
+        } finally {
+            if (systemRendering === key && rseq === systemRenderSeq) systemRendering = null;
+            // Mermaid leaves its scratch node behind when a render is superseded.
+            document.getElementById(`dvoltsys-${rseq}`)?.remove();
+        }
+        if (rseq !== systemRenderSeq) return;
+        const { svg, bindFunctions } = out;
         el.innerHTML = svg;
         // Activate Mermaid click bindings (loop expand/collapse), then pan/zoom.
         if (bindFunctions) { try { bindFunctions(el); } catch (_) {} }
@@ -924,10 +1005,11 @@ export function resetDiagrams() {
     closeMenu();
     lastDiagramKey = null;
     lastSystemKey = null;
+    lastSeqKey = null;
     expandedLoops = new Set();
     allLoops = [];
     expandInited = false;
-    for (const id of ["dgSystemMap", "dgStateMachine"]) {
+    for (const id of ["dgSystemMap", "dgStateMachine", "dgSequence"]) {
         const el = document.getElementById(id);
         if (el) {
             if (el._panzoom) el._panzoom.destroy();

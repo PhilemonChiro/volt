@@ -140,7 +140,6 @@
                 <span class="side-panel-title" id="sidePanelTitle">Hardware</span>
             </div>
             <div class="side-panel-body" id="panelHardware" style="display:none"></div>
-            <div class="side-panel-body" id="panelTasks" style="display:none"></div>
             <div class="side-panel-body" id="panelOutline" style="display:none"></div>
             <div class="side-panel-body" id="panelLibrary" style="display:none"></div>
         </div>
@@ -151,15 +150,11 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
                 <span class="activity-label">Hardware</span>
             </button>
-            <button class="activity-btn" id="toggleTasks" title="Tasks (Ctrl+2)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <span class="activity-label">Tasks</span>
-            </button>
-            <button class="activity-btn" id="toggleOutline" title="Outline (Ctrl+3)">
+            <button class="activity-btn" id="toggleOutline" title="Outline (Ctrl+2)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 <span class="activity-label">Outline</span>
             </button>
-            <button class="activity-btn" id="toggleLibrary" title="Device library (Ctrl+4)">
+            <button class="activity-btn" id="toggleLibrary" title="Device library (Ctrl+3)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11l9-4M12 11l-9-4M12 11v10"/></svg>
                 <span class="activity-label">Library</span>
             </button>
@@ -174,6 +169,7 @@
         <div class="dv-tabs">
             <button class="dv-tab active" data-dv="systemmap">System Map</button>
             <button class="dv-tab" data-dv="statemachine" style="display:none">State Machine</button>
+            <button class="dv-tab" data-dv="sequence">Sequence</button>
             <button class="dv-toolbtn" id="dvExpandLoops" title="Expand or collapse all loop bodies" style="display:none">Expand loops</button>
             <button class="dv-toolbtn" id="dvFreeze" title="Freeze or resume the diagram animation" style="display:none"></button>
             <button class="dv-refresh" id="dvRefresh" title="Refresh diagram">
@@ -183,6 +179,7 @@
         <div class="dv-body">
             <div class="dv-content bp-systemmap active" id="dgSystemMap"></div>
             <div class="dv-content bp-systemmap" id="dgStateMachine"></div>
+            <div class="dv-content bp-systemmap" id="dgSequence"></div>
         </div>
     </div>
 

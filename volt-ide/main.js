@@ -930,6 +930,14 @@ ipcMain.handle("state_diagram", async (_, source) => {
     }
 });
 
+ipcMain.handle("sequence_diagram", async (_, source) => {
+    try {
+        return await workerCall("sequence_diagram", { source }, 5000);
+    } catch (_) {
+        return { mermaid: "" };
+    }
+});
+
 ipcMain.handle("system_graph", async (_, source, expanded) => {
     try {
         return await workerCall("system_graph", { source, expanded: expanded || [] }, 5000);

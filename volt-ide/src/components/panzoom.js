@@ -38,7 +38,8 @@ export function attachPanZoom(host) {
         if (!(s > 0) || !isFinite(s)) s = 1;
         scale = s;
         tx = (cr.width - sr.width * s) / 2;
-        ty = (cr.height - sr.height * s) / 2;
+        // A diagram that fits sits near the top, not floating mid-panel.
+        ty = s === 1 ? pad : (cr.height - sr.height * s) / 2;
         apply();
     }
 

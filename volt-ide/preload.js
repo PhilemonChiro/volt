@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld("volt", {
     findSymbols: (source) => ipcRenderer.invoke("find_symbols", source),
     stateDiagram: (source) => ipcRenderer.invoke("state_diagram", source),
     systemGraph: (source, expanded) => ipcRenderer.invoke("system_graph", source, expanded),
+    sequenceDiagram: (source) => ipcRenderer.invoke("sequence_diagram", source),
 
     // Serial
     scanDevices: () => ipcRenderer.invoke("scan_devices"),

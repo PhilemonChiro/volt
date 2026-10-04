@@ -1,13 +1,15 @@
-// Side panel — Hardware, Tasks, Outline views (VS Code style)
+// Side panel — Hardware, Outline, Library views (VS Code style)
 // Activity bar icons on right edge toggle panels open/closed.
 // Panels update live from compiler AST as user types.
+
+import { outline } from "./outline.js";
 
 let activePanel = null;
 let lastAST = null;
 
 export function init() {
-    const ids = ["toggleHardware", "toggleTasks", "toggleOutline", "toggleLibrary"];
-    const panels = ["hardware", "tasks", "outline", "library"];
+    const ids = ["toggleHardware", "toggleOutline", "toggleLibrary"];
+    const panels = ["hardware", "outline", "library"];
 
     ids.forEach((id, i) => {
         const btn = document.getElementById(id);
@@ -94,18 +96,17 @@ export function open(panel) {
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    const btnMap = { hardware: "toggleHardware", tasks: "toggleTasks", outline: "toggleOutline", library: "toggleLibrary" };
+    const btnMap = { hardware: "toggleHardware", outline: "toggleOutline", library: "toggleLibrary" };
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
     // Swap visible body — fade-in via .is-active class (CSS keyframe)
-    ["panelHardware", "panelTasks", "panelOutline", "panelLibrary"].forEach(id => {
+    ["panelHardware", "panelOutline", "panelLibrary"].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
     const bodyMap = {
         hardware: "panelHardware",
-        tasks:    "panelTasks",
         outline:  "panelOutline",
         library:  "panelLibrary",
     };
@@ -117,7 +118,7 @@ export function open(panel) {
     }
 
     // Title
-    const titles = { hardware: "Hardware", tasks: "Tasks", outline: "Outline", library: "Library" };
+    const titles = { hardware: "Hardware", outline: "Outline", library: "Library" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
@@ -174,119 +175,72 @@ export function update(ast) {
 
 function render(ast) {
     if (!ast) return;
-    if (activePanel === "tasks") renderTasks(ast);
-    else if (activePanel === "outline") renderOutline(ast);
+    if (activePanel === "outline") renderOutline();
     // Hardware intentionally NOT driven from the AST path — the editor's
     // onContentChange feeds hardware-panel.refresh with the live source;
     // a pin-only AST payload would make annotations flicker.
 }
 
 // ============================================================
-// Tasks panel
+// Outline panel — what runs, the data it keeps, functions. Read from the
+// live source (outline.js) so it follows every keystroke.
 // ============================================================
 
-function renderTasks(ast) {
-    const el = document.getElementById("panelTasks");
-    if (!el) return;
+let _outlineHooked = false, _outlineTimer = 0;
 
-    const tasks = ast.tasks || [];
-    const machines = ast.machines || [];
-    const channels = ast.channels || [];
-
-    if (tasks.length === 0 && machines.length === 0 && channels.length === 0) {
-        el.innerHTML = `<div class="panel-empty">
-            <svg class="empty-illustration" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <div class="empty-title">No tasks running</div>
-            <div class="empty-hint">Add a <code>task</code> or <code>every</code> block to schedule work.</div>
-        </div>`;
-        return;
-    }
-
-    let html = "";
-
-    if (tasks.length > 0) {
-        html += '<div class="hw-section"><div class="hw-section-title">Tasks</div>';
-        for (const task of tasks) {
-            const tier = task.tier || "background";
-            html += `<div class="task-item" data-line="${task.line || 1}">
-                <span class="task-tier ${esc(tier)}">${esc(tier)}</span>
-                <span class="task-name">${esc(task.name)}</span>
-            </div>`;
-        }
-        html += "</div>";
-    }
-
-    if (machines.length > 0) {
-        html += '<div class="hw-section"><div class="hw-section-title">State Machines</div>';
-        for (const m of machines) {
-            html += `<div class="task-item" data-line="${m.line || 1}">
-                <span class="task-tier background">machine</span>
-                <span class="task-name">${esc(m.name)}</span>
-                <span class="hw-detail">${(m.states || []).length} states</span>
-            </div>`;
-            for (const state of (m.states || [])) {
-                html += `<div class="hw-item is-nested">
-                    <span class="hw-icon">·</span>
-                    <span class="hw-name">${esc(state)}</span>
-                </div>`;
-            }
-        }
-        html += "</div>";
-    }
-
-    if (channels.length > 0) {
-        html += '<div class="hw-section"><div class="hw-section-title">Channels</div>';
-        for (const ch of channels) {
-            html += `<div class="hw-item">
-                <span class="hw-icon">C</span>
-                <span class="hw-name">${esc(ch.name)}</span>
-                <span class="hw-badge">${esc(ch.elem_type)}[${ch.capacity || 1}]</span>
-            </div>`;
-        }
-        html += "</div>";
-    }
-
-    el.innerHTML = html;
-    bindLineClicks(el);
+function editorNow() {
+    return typeof monaco !== "undefined" ? monaco.editor.getEditors()[0] : null;
 }
 
-// ============================================================
-// Outline panel
-// ============================================================
-
-function renderOutline(ast) {
+function renderOutline() {
     const el = document.getElementById("panelOutline");
+    const ed = editorNow();
     if (!el) return;
+    if (ed && !_outlineHooked) {
+        _outlineHooked = true;
+        const again = () => {
+            clearTimeout(_outlineTimer);
+            _outlineTimer = setTimeout(() => { if (activePanel === "outline") renderOutline(); }, 150);
+        };
+        ed.onDidChangeModelContent(again);
+        ed.onDidChangeModel(again);
+    }
+    const { runs, data, funcs } = outline(ed && ed.getModel() ? ed.getModel().getValue() : "");
 
-    const items = [];
-    for (const pin of (ast.pins || []))
-        items.push({ icon: "P", cls: "pin", name: pin.name, detail: pin.mode || "Output", line: 0 });
-    for (const en of (ast.enums || []))
-        items.push({ icon: "E", cls: "enum", name: en.name, detail: `${en.variants.length} variants`, line: 0 });
-    for (const task of (ast.tasks || []))
-        items.push({ icon: "T", cls: "task", name: task.name, detail: task.tier || "background", line: task.line || 1 });
-    for (const m of (ast.machines || []))
-        items.push({ icon: "M", cls: "machine", name: m.name, detail: `${(m.states || []).length} states`, line: m.line || 1 });
-    for (const ch of (ast.channels || []))
-        items.push({ icon: "C", cls: "var", name: ch.name, detail: `channel<${ch.elem_type}>`, line: 0 });
-
-    if (items.length === 0) {
+    if (!runs.length && !data.length && !funcs.length) {
         el.innerHTML = `<div class="panel-empty">
             <svg class="empty-illustration" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            <div class="empty-title">Nothing to outline</div>
-            <div class="empty-hint">Symbols appear here as you declare pins, tasks, machines, and enums.</div>
+            <div class="empty-title">Nothing to outline yet</div>
+            <div class="empty-hint">Add <code>setup</code>, <code>every</code>, a <code>task</code> or a <code>func</code> — they show up here.</div>
         </div>`;
         return;
     }
 
-    el.innerHTML = items.map(it => `
-        <div class="outline-item" data-line="${it.line}">
-            <span class="outline-icon ${it.cls}">${it.icon}</span>
-            <span class="outline-name">${esc(it.name)}</span>
-            <span class="outline-detail">${esc(it.detail)}</span>
-        </div>
-    `).join("");
+    // Task tiers come from the compiler when it has run.
+    const tiers = Object.fromEntries(((lastAST && lastAST.tasks) || []).map(t => [t.name, t.tier]));
+    const ICON = { setup: ["S", "task"], loop: ["L", "task"], every: ["E", "task"], task: ["T", "task"], on: ["O", "task"],
+        machine: ["M", "machine"], var: ["V", "var"], shared: ["V", "var"], storage: ["D", "var"], channel: ["C", "var"],
+        struct: ["S", "enum"], enum: ["E", "enum"], func: ["ƒ", "fn"] };
+    const row = (kind, name, detail, line, badge) => {
+        const [icon, cls] = ICON[kind] || ["·", "var"];
+        return `<div class="outline-item" data-line="${line}">
+            <span class="outline-icon ${cls}">${icon}</span>
+            <span class="outline-name">${esc(name)}</span>
+            ${badge ? `<span class="task-tier ${esc(badge)}">${esc(badge)}</span>` : ""}
+            <span class="outline-detail">${esc(detail || "")}</span>
+        </div>`;
+    };
+    const section = (title, items) => items.length
+        ? `<div class="hw-section"><div class="hw-section-title hwl-title">${title}<span class="hwl-count">${items.length}</span></div>${items.join("")}</div>` : "";
 
+    el.innerHTML =
+        section("Runs", runs.map(r => {
+            const tier = r.kind === "task" && tiers[r.name] && tiers[r.name] !== "background" ? tiers[r.name] : "";
+            return row(r.kind, r.name, r.detail, r.line, tier) + r.children.map(c =>
+                `<div class="outline-item is-nested" data-line="${c.line}"><span class="outline-name">${esc(c.name)}</span></div>`).join("");
+        })) +
+        section("Data", data.map(d => row(d.kind, d.name, d.detail, d.line))) +
+        section("Functions", funcs.map(f => row("func", f.name, f.detail, f.line)));
     bindLineClicks(el);
 }
 

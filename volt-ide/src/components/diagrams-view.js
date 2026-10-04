@@ -76,6 +76,9 @@ function updateFreezeBtn() {
 
 // view = "code" | "board" | "diagrams"
 export function showView(view) {
+    // No project open (welcome page showing): nothing to switch to.
+    const welcome = document.getElementById("welcome");
+    if (welcome && getComputedStyle(welcome).display !== "none") return;
     diagramsVisible = view === "diagrams";
     const editorArea = document.getElementById("editorArea");
     const diagramsView = document.getElementById("diagramsView");
@@ -100,6 +103,7 @@ function showDiagram(name) {
     activeDiagram = name;
     document.getElementById("dgSystemMap").classList.toggle("active", name === "systemmap");
     document.getElementById("dgStateMachine").classList.toggle("active", name === "statemachine");
+    document.getElementById("dgSequence").classList.toggle("active", name === "sequence");
     document.querySelectorAll(".dv-tab").forEach(t =>
         t.classList.toggle("active", t.dataset.dv === name));
     updateExpandBtn();
@@ -109,6 +113,7 @@ function showDiagram(name) {
 
 function renderActive(force) {
     if (activeDiagram === "systemmap") bp.renderSystemMap(force);
+    else if (activeDiagram === "sequence") bp.renderSequence(force);
     else bp.renderDiagram(force);
 }
 
@@ -137,6 +142,7 @@ export function reset() {
     if (bv) bv.style.display = "none";
     document.getElementById("dgSystemMap")?.classList.add("active");
     document.getElementById("dgStateMachine")?.classList.remove("active");
+    document.getElementById("dgSequence")?.classList.remove("active");
     document.querySelectorAll(".view-tab").forEach(t =>
         t.classList.toggle("active", t.dataset.view === "code"));
     document.querySelectorAll(".dv-tab").forEach(t =>

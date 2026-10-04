@@ -5327,3 +5327,18 @@ kbd {
     opacity: 0; transform: translateY(3px); transition: opacity .12s, transform .12s;
 }
 .code-quick-adds button:hover::after { opacity: 1; transform: none; transition-delay: .35s; }
+
+/* Outline: a machine's states / a task's blocks, under their parent. */
+.outline-item.is-nested { padding-left: 42px; min-height: 24px; }
+.outline-item.is-nested .outline-name { color: var(--t2); font-size: var(--fs-12); }
+.outline-item.is-nested::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--t3); margin-right: 8px; flex: none; }
+
+
+/* Sequence notes (state titles, transitions) in the IDE palette, not Mermaid yellow. */
+.bp-seq-graph rect.note { fill: rgba(122, 58, 192, 0.22) !important; stroke: rgba(122, 58, 192, 0.6) !important; }
+.bp-seq-graph text.noteText, .bp-seq-graph .noteText tspan { fill: var(--t1) !important; }
+
+/* Mermaid draws into a scratch <div id="d<id>"> on <body> while it lays a
+   diagram out. Keep it measurable (no display:none) but off-screen, so a
+   half-drawn diagram never shows up below the status bar. */
+body > div[id^="dvolt"] { position: fixed !important; left: -100000px !important; top: 0 !important; visibility: hidden !important; pointer-events: none; }
