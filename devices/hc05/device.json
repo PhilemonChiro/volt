@@ -7,42 +7,19 @@
   "description": "Driver for HC-05 Bluetooth module using UART with extended AT command support.",
   "init_args": "{uart_id}",
   "interface": "uart",
-  "params": {"baud": {"type": "int", "default": 9600}},
+  "params": {
+    "baud": {
+      "type": "int",
+      "default": 9600
+    }
+  },
   "methods": {
-    "read_at_response": {
-      "description": "Reads the response from an AT command.",
-      "params": [
-        {
-          "name": "response",
-          "type": "char *"
-        },
-        {
-          "name": "max_len",
-          "type": "uint16_t"
-        }
-      ],
-      "returns": "int"
-    },
-    "receive_data": {
-      "description": "Receives data over Bluetooth.",
-      "params": [
-        {
-          "name": "buffer",
-          "type": "char *"
-        },
-        {
-          "name": "max_len",
-          "type": "uint16_t"
-        }
-      ],
-      "returns": "int"
-    },
     "send_at_command": {
       "description": "Sends an AT command to the HC-05 module.",
       "params": [
         {
           "name": "command",
-          "type": "const char *"
+          "type": "string"
         }
       ],
       "returns": "void"
@@ -68,11 +45,11 @@
       "returns": "void"
     },
     "set_name": {
-      "description": "Sets the name of the HC-05 module.",
+      "description": "Set the module's Bluetooth name (AT mode).",
       "params": [
         {
           "name": "name",
-          "type": "const char *"
+          "type": "string"
         }
       ],
       "returns": "void"
@@ -82,10 +59,40 @@
       "params": [
         {
           "name": "password",
-          "type": "const char *"
+          "type": "string"
         }
       ],
       "returns": "void"
+    },
+    "send": {
+      "description": "Send text over Bluetooth.",
+      "params": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "void"
+    },
+    "send_line": {
+      "description": "Send text followed by CR LF.",
+      "params": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "void"
+    },
+    "available": {
+      "description": "True when received bytes are waiting.",
+      "params": [],
+      "returns": "bool"
+    },
+    "read_line": {
+      "description": "Next complete received line without CR/LF, or \"\" if none yet (never blocks).",
+      "params": [],
+      "returns": "string"
     }
   },
   "name": "HC05"

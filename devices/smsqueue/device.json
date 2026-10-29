@@ -1,0 +1,31 @@
+{
+  "name": "SmsQueue",
+  "category": "communication",
+  "interface": "gpio",
+  "pins": {"led": {"dir": "out"}},
+  "default_address": "",
+  "description": "Outgoing-SMS queue fed by MQTT: receives 'id|number|text' messages on a topic, validates them and hands them out one at a time (ESP32)",
+  "c_prefix": "smsqueue",
+  "c_source": "driver.c",
+  "init_args": "{led}",
+  "methods": {
+    "subscribe": {"returns": "bool", "params": [{"name": "topic", "type": "string"}], "description": "Subscribe to the topic that carries outgoing SMS; call once after mqtt.connect (re-subscribed automatically on reconnect)"},
+    "next": {"returns": "bool", "params": [], "description": "Take the next queued message; false if none. Its fields are then read with id(), number(), text(), is_valid(), error(), is_duplicate()"},
+    "id": {"returns": "string", "params": [], "description": "Message id of the current message"},
+    "number": {"returns": "string", "params": [], "description": "Destination number of the current message (+ and 5-15 digits)"},
+    "text": {"returns": "string", "params": [], "description": "SMS text of the current message (printable ASCII, max 160 chars)"},
+    "is_valid": {"returns": "bool", "params": [], "description": "true if the current message passed validation"},
+    "error": {"returns": "string", "params": [], "description": "Why the current message was rejected (empty when valid)"},
+    "is_duplicate": {"returns": "bool", "params": [], "description": "true if the current message id was already sent since boot (server redelivery)"},
+    "mark_sent": {"returns": "void", "params": [], "description": "Remember the current message id as sent, for duplicate detection"},
+    "pending": {"returns": "int", "params": [], "description": "Messages waiting in the queue"},
+    "dropped": {"returns": "int", "params": [], "description": "Messages dropped since boot (queue full, or no usable id)"},
+    "led": {"returns": "void", "params": [{"name": "on", "type": "int"}], "description": "Activity LED on (1) or off (0)"}
+  },
+  "manufacturer": "local",
+  "specs": {"queue": "8 messages", "payload": "id|number|text, id 1-32 chars [A-Za-z0-9_-]", "chip": "ESP32 only (uses FreeRTOS queues)"},
+  "wiring": {"pins": [
+    {"label": "LED", "type": "data", "note": "Activity LED via 330 ohm to GND"}
+  ]},
+  "tips": ["Messages are buffered in RAM only: the server must redeliver anything not acknowledged within its timeout.", "Text longer than 160 chars or numbers with letters are rejected, not truncated."]
+}

@@ -1,0 +1,14 @@
+# Device libraries built into volt and installed on first run. Everything else
+# comes from the Grid. One library folder (under volt/devices) per line; a
+# variant (dht22, lcd16x2) brings its shared driver and that driver's other
+# variants with it. Read by cli/scripts/embedsdk.
+aht20
+bh1750
+bme280
+dht22
+ds3231
+hcsr04
+lcd16x2
+mpu6050
+neopixel
+ssd1306

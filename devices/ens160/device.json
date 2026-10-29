@@ -1,0 +1,114 @@
+{
+  "addresses": [
+    "0x53",
+    "0x52"
+  ],
+  "alternatives": [
+    {
+      "name": "SGP30",
+      "note": "Similar TVOC/eCO2, no AQI index."
+    },
+    {
+      "name": "SCD4x",
+      "note": "True NDIR CO2 in ppm."
+    }
+  ],
+  "c_prefix": "ens160",
+  "c_source": "driver.c",
+  "category": "sensor",
+  "datasheet": "https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf",
+  "default_address": "0x53",
+  "description": "Air quality: AQI 1-5 (UBA), TVOC (ppb) and equivalent CO2 (ppm), with temperature/humidity compensation",
+  "init_args": "{bus_id}, {addr}",
+  "interface": "i2c",
+  "manufacturer": "ScioSense",
+  "methods": {
+    "aqi": {
+      "description": "Air quality index 1 (excellent) to 5 (unhealthy), UBA scale; 0 if unreadable.",
+      "params": [],
+      "returns": "int"
+    },
+    "eco2": {
+      "description": "Equivalent CO2 in ppm.",
+      "params": [],
+      "returns": "int"
+    },
+    "ready": {
+      "description": "True when readings are valid (status 0).",
+      "params": [],
+      "returns": "bool"
+    },
+    "set_compensation": {
+      "description": "Ambient temperature (°C) and relative humidity (%) used for compensation.",
+      "params": [
+        {
+          "name": "temp_c",
+          "type": "float"
+        },
+        {
+          "name": "rh",
+          "type": "float"
+        }
+      ],
+      "returns": "void"
+    },
+    "status": {
+      "description": "Validity: 0 normal, 1 warm-up, 2 initial start-up (first 24 h), 3 invalid output, -1 no answer.",
+      "params": [],
+      "returns": "int"
+    },
+    "tvoc": {
+      "description": "Total volatile organic compounds in ppb.",
+      "params": [],
+      "returns": "int"
+    }
+  },
+  "name": "ENS160",
+  "specs": {
+    "aqi": "1 excellent - 5 unhealthy (UBA)",
+    "current": "~30 mA in standard mode",
+    "eco2": "400 - 65000 ppm",
+    "sample_rate": "1 Hz",
+    "tvoc": "0 - 65000 ppb",
+    "voltage": "1.71V - 1.98V die (breakouts regulate 3.3V/5V)"
+  },
+  "tips": [
+    "status() is 0 when readings are valid, 1 during the ~3 min warm-up after each power-up, 2 during the first 24 h of the sensor's life.",
+    "Feed it the real air temperature and humidity with set_compensation() (e.g. from the AHT21 on combo boards) for better accuracy.",
+    "Common ENS160+AHT21 boards put both chips on the same I2C bus: declare an AHT20 next to it."
+  ],
+  "wiring": {
+    "pins": [
+      {
+        "label": "VIN",
+        "note": "3.3V or 5V on breakouts with a regulator",
+        "type": "power"
+      },
+      {
+        "label": "GND",
+        "note": "",
+        "type": "ground"
+      },
+      {
+        "label": "SDA",
+        "note": "I2C data, pull-up on most breakouts",
+        "type": "data"
+      },
+      {
+        "label": "SCL",
+        "note": "I2C clock",
+        "type": "clock"
+      },
+      {
+        "label": "ADD",
+        "note": "VCC = 0x53 (most breakouts), GND = 0x52",
+        "type": "config"
+      },
+      {
+        "label": "CS",
+        "note": "Tie high for I2C",
+        "type": "config"
+      }
+    ]
+  }
+}

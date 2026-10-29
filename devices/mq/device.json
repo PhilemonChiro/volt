@@ -1,0 +1,155 @@
+{
+  "alternatives": [
+    {
+      "name": "SCD4x",
+      "note": "Calibrated CO2 in ppm."
+    },
+    {
+      "name": "ENS160",
+      "note": "Digital, low-power VOC / eCO2 / AQI."
+    }
+  ],
+  "c_prefix": "mq",
+  "c_source": "driver.c",
+  "category": "sensor",
+  "datasheet": "https://www.winsen-sensor.com/d/files/semiconductor/mq-2.pdf",
+  "default_address": "",
+  "description": "MQ-series analog gas sensors (MQ-2, MQ-3, MQ-4, MQ-5, MQ-7, MQ-8, MQ-9, MQ-135...): sensor resistance, Rs/R0 ratio, clean-air calibration and ppm from the datasheet curve",
+  "init_args": "{pin}",
+  "interface": "gpio",
+  "manufacturer": "Winsen / Hanwei (generic modules)",
+  "methods": {
+    "calibrate": {
+      "description": "Sample for ~5 s in clean air and set R0 = Rs / clean_air_ratio (ratios in tips); returns R0 in kOhm.",
+      "params": [
+        {
+          "name": "clean_air_ratio",
+          "type": "float"
+        }
+      ],
+      "returns": "float"
+    },
+    "ppm": {
+      "description": "Concentration from the datasheet curve ppm = a * (Rs/R0)^b (constants in tips).",
+      "params": [
+        {
+          "name": "a",
+          "type": "float"
+        },
+        {
+          "name": "b",
+          "type": "float"
+        }
+      ],
+      "returns": "float"
+    },
+    "r0": {
+      "description": "Current R0 in kOhm (save it to storage after calibrating).",
+      "params": [],
+      "returns": "float"
+    },
+    "ratio": {
+      "description": "Rs/R0: 1 at the calibration point, falls as gas increases.",
+      "params": [],
+      "returns": "float"
+    },
+    "raw": {
+      "description": "ADC reading 0-4095, averaged over 16 samples.",
+      "params": [],
+      "returns": "int"
+    },
+    "resistance": {
+      "description": "Sensor resistance Rs in kOhm.",
+      "params": [],
+      "returns": "float"
+    },
+    "set_divider": {
+      "description": "Voltage divider factor between AO and the pin, e.g. 1.5 for 10k over 20k (default 1 = no divider).",
+      "params": [
+        {
+          "name": "factor",
+          "type": "float"
+        }
+      ],
+      "returns": "void"
+    },
+    "set_load": {
+      "description": "Load resistor RL on the module in kOhm (default 10).",
+      "params": [
+        {
+          "name": "rl_kohm",
+          "type": "float"
+        }
+      ],
+      "returns": "void"
+    },
+    "set_r0": {
+      "description": "Restore a saved R0 in kOhm.",
+      "params": [
+        {
+          "name": "r0",
+          "type": "float"
+        }
+      ],
+      "returns": "void"
+    },
+    "set_supply": {
+      "description": "Sensor supply voltage in V (default 5).",
+      "params": [
+        {
+          "name": "volts",
+          "type": "float"
+        }
+      ],
+      "returns": "void"
+    },
+    "voltage": {
+      "description": "Module output voltage in V (corrected for the divider).",
+      "params": [],
+      "returns": "float"
+    }
+  },
+  "name": "MQ",
+  "pins": {
+    "pin": {
+      "dir": "in"
+    }
+  },
+  "specs": {
+    "load_resistor": "RL usually 1k (newer) or 10k (older) on modules - check the SMD marked 102 or 103",
+    "output": "0 - 5V analog (AO); use a divider for the 3.3V ADC",
+    "preheat": "24-48 h burn-in when new, then ~1-3 min after each power-up",
+    "voltage": "5V heater (~150 mA, ~800 mW)"
+  },
+  "tips": [
+    "Curve constants for ppm(a, b) from the datasheet log-log graphs: MQ-2 LPG a=574.25 b=-2.222, smoke a=3616.1 b=-2.675; MQ-3 alcohol (mg/L) a=0.3934 b=-1.504; MQ-4 CH4 a=1012.7 b=-2.786; MQ-5 LPG a=80.897 b=-2.431; MQ-7 CO a=99.042 b=-1.518; MQ-8 H2 a=976.97 b=-0.688; MQ-9 CO a=599.65 b=-2.244; MQ-135 CO2 a=110.47 b=-2.862, NH3 a=102.2 b=-2.473.",
+    "Clean-air Rs/R0 for calibrate(): MQ-2 9.83, MQ-3 60, MQ-4 4.4, MQ-5 6.5, MQ-7 27.5, MQ-8 70, MQ-9 9.6, MQ-135 3.6.",
+    "Calibrate outdoors or in fresh air after warm-up, save r0() to storage, and restore it with set_r0() at boot.",
+    "Readings shift with temperature and humidity; treat ppm as an estimate, good for thresholds and trends.",
+    "MQ-7 and MQ-9 are specified with a cycling 5V/1.4V heater; on a constant 5V module their CO reading is only indicative."
+  ],
+  "wiring": {
+    "pins": [
+      {
+        "label": "VCC",
+        "note": "5V - the heater needs it",
+        "type": "power"
+      },
+      {
+        "label": "GND",
+        "note": "",
+        "type": "ground"
+      },
+      {
+        "label": "AO",
+        "note": "Analog out to an ADC pin through a divider (e.g. 10k/20k -\u003e set_divider(1.5)); 5V on an ESP32 pin damages it",
+        "type": "data"
+      },
+      {
+        "label": "DO",
+        "note": "Comparator output, threshold set by the trimmer (not used by this driver)",
+        "type": "data"
+      }
+    ]
+  }
+}

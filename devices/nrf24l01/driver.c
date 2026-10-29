@@ -1,3 +1,4 @@
+#include <string.h>
 #include "volt/spi_devices.h"
 /* nRF24L01+ 2.4GHz Wireless Transceiver (SPI Mode 0, CSN + CE pins) */
 
@@ -83,7 +84,7 @@ volt_error_t nrf24l01_init(nrf24l01_t *dev, uint8_t bus_id,
     return VOLT_OK;
 }
 
-int nrf24l01_send(nrf24l01_t *dev, const uint8_t *data, uint8_t len)
+int nrf24l01_send_bytes(nrf24l01_t *dev, const uint8_t *data, uint8_t len)
 {
     if (len > 32) len = 32;
 
@@ -140,4 +141,12 @@ int nrf24l01_available(nrf24l01_t *dev)
 {
     uint8_t status = nrf_read_reg(dev, NRF_STATUS);
     return (status & 0x40) ? 1 : 0;
+}
+
+// send(text) is what Volt programs call (device.json: send(data: string)):
+// the text's bytes as one payload, up to 32.
+int nrf24l01_send(nrf24l01_t *dev, const char *text)
+{
+    size_t n = strlen(text);
+    return nrf24l01_send_bytes(dev, (const uint8_t *)text, (uint8_t)(n > 32 ? 32 : n));
 }

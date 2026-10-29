@@ -1,0 +1,125 @@
+{
+  "addresses": [
+    "0x62"
+  ],
+  "alternatives": [
+    {
+      "name": "SGP30",
+      "note": "Cheaper, but eCO2 is estimated from VOCs, not measured."
+    },
+    {
+      "name": "ENS160",
+      "note": "VOC-based AQI / eCO2."
+    }
+  ],
+  "c_prefix": "scd4x",
+  "c_source": "driver.c",
+  "category": "sensor",
+  "datasheet": "https://sensirion.com/media/documents/48C4B7FB/64C134E7/Sensirion_SCD4x_Datasheet.pdf",
+  "default_address": "0x62",
+  "description": "True CO2 (photoacoustic NDIR) in ppm plus temperature and humidity: SCD40 / SCD41",
+  "init_args": "{bus_id}, {addr}",
+  "interface": "i2c",
+  "manufacturer": "Sensirion",
+  "methods": {
+    "calibrate": {
+      "description": "Forced recalibration to a known CO2 level in ppm (e.g. 420 outdoors) after 3 min of stable readings; returns the correction applied in ppm, or -32768 on failure.",
+      "params": [
+        {
+          "name": "target_ppm",
+          "type": "int"
+        }
+      ],
+      "returns": "int"
+    },
+    "co2": {
+      "description": "CO2 concentration in ppm.",
+      "params": [],
+      "returns": "int"
+    },
+    "humidity": {
+      "description": "Relative humidity %.",
+      "params": [],
+      "returns": "float"
+    },
+    "ready": {
+      "description": "True once the first measurement has been read.",
+      "params": [],
+      "returns": "bool"
+    },
+    "set_auto_calibration": {
+      "description": "Turn automatic self-calibration on or off (on by default).",
+      "params": [
+        {
+          "name": "on",
+          "type": "bool"
+        }
+      ],
+      "returns": "void"
+    },
+    "set_pressure": {
+      "description": "Ambient pressure in hPa for pressure compensation (e.g. from a BME280); can be called at any time.",
+      "params": [
+        {
+          "name": "hpa",
+          "type": "int"
+        }
+      ],
+      "returns": "void"
+    },
+    "set_temperature_offset": {
+      "description": "Self-heating offset in °C subtracted from the temperature reading (default 4).",
+      "params": [
+        {
+          "name": "offset",
+          "type": "float"
+        }
+      ],
+      "returns": "void"
+    },
+    "temperature": {
+      "description": "Temperature in °C.",
+      "params": [],
+      "returns": "float"
+    }
+  },
+  "name": "SCD4x",
+  "specs": {
+    "co2": "SCD40: 400 - 2000 ppm ±(50 ppm + 5%); SCD41: 400 - 5000 ppm ±(40 ppm + 5%)",
+    "current": "~15 mA average in periodic mode (peaks 175 mA)",
+    "humidity": "0 - 100% RH ±6%",
+    "sample_rate": "one measurement every 5 s",
+    "temp": "-10 to 60 °C ±0.8 °C",
+    "voltage": "2.4V - 5.5V"
+  },
+  "tips": [
+    "A new value arrives every 5 s; reading more often returns the last value. ready() is false until the first one (about 5 s after boot).",
+    "Automatic self-calibration assumes it sees fresh outdoor air (~420 ppm) at least once a week; turn it off with set_auto_calibration(false) in rooms that never get that, and use calibrate(420) outdoors instead.",
+    "calibrate(), set_temperature_offset() and set_auto_calibration() pause measurements for about 1 s and are not kept across power loss.",
+    "Self-heating makes it read 2-4 °C warm in an enclosure; correct it with set_temperature_offset()."
+  ],
+  "wiring": {
+    "pins": [
+      {
+        "label": "VDD",
+        "note": "3.3V or 5V; needs a solid supply for the 175 mA peaks",
+        "type": "power"
+      },
+      {
+        "label": "GND",
+        "note": "",
+        "type": "ground"
+      },
+      {
+        "label": "SDA",
+        "note": "I2C data, pull-up on most breakouts",
+        "type": "data"
+      },
+      {
+        "label": "SCL",
+        "note": "I2C clock",
+        "type": "clock"
+      }
+    ]
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "addresses": [
+    "0x58"
+  ],
+  "alternatives": [
+    {
+      "name": "ENS160",
+      "note": "Adds an AQI 1-5 index; similar TVOC/eCO2 estimates."
+    },
+    {
+      "name": "SCD4x",
+      "note": "True NDIR CO2 in ppm."
+    }
+  ],
+  "c_prefix": "sgp30",
+  "c_source": "driver.c",
+  "category": "sensor",
+  "datasheet": "https://sensirion.com/media/documents/984E0DD5/61644B8B/Sensirion_Gas_Sensors_Datasheet_SGP30.pdf",
+  "default_address": "0x58",
+  "description": "Air quality: TVOC (ppb) and equivalent CO2 (ppm), with humidity compensation and baseline save/restore",
+  "init_args": "{bus_id}, {addr}",
+  "interface": "i2c",
+  "manufacturer": "Sensirion",
+  "methods": {
+    "baseline_eco2": {
+      "description": "Current eCO2 baseline, to save to storage.",
+      "params": [],
+      "returns": "int"
+    },
+    "baseline_tvoc": {
+      "description": "Current TVOC baseline, to save to storage.",
+      "params": [],
+      "returns": "int"
+    },
+    "eco2": {
+      "description": "Equivalent CO2 in ppm (400-60000).",
+      "params": [],
+      "returns": "int"
+    },
+    "ready": {
+      "description": "False during the 15 s warm-up after init, or if the last read failed.",
+      "params": [],
+      "returns": "bool"
+    },
+    "set_baseline": {
+      "description": "Restore baselines saved earlier (call in setup, after a fresh boot).",
+      "params": [
+        {
+          "name": "eco2",
+          "type": "int"
+        },
+        {
+          "name": "tvoc",
+          "type": "int"
+        }
+      ],
+      "returns": "void"
+    },
+    "set_humidity": {
+      "description": "Humidity compensation from air temperature (°C) and relative humidity (%), e.g. from an SHT31 or BME280. Call whenever they change.",
+      "params": [
+        {
+          "name": "temp_c",
+          "type": "float"
+        },
+        {
+          "name": "rh",
+          "type": "float"
+        }
+      ],
+      "returns": "void"
+    },
+    "tvoc": {
+      "description": "Total volatile organic compounds in ppb (0-60000).",
+      "params": [],
+      "returns": "int"
+    }
+  },
+  "name": "SGP30",
+  "specs": {
+    "current": "48 mA while measuring",
+    "eco2": "400 - 60000 ppm",
+    "sample_rate": "1 Hz (the on-chip algorithm expects it)",
+    "tvoc": "0 - 60000 ppb",
+    "voltage": "1.62V - 1.98V die (breakouts regulate 3.3V/5V)"
+  },
+  "tips": [
+    "Read it once per second: the baseline algorithm depends on a steady 1 Hz rate. The driver measures at most once per second however often you call it.",
+    "For the first 15 s after power-up it reports 400 ppm eCO2 and 0 ppb TVOC (warming up); ready() is false until then.",
+    "Save baseline_eco2()/baseline_tvoc() to storage about once an hour and restore them with set_baseline() at boot; a stored baseline older than 7 days should be discarded.",
+    "eCO2 is estimated from hydrogen, not measured; use an SCD4x for true CO2."
+  ],
+  "wiring": {
+    "pins": [
+      {
+        "label": "VIN",
+        "note": "3.3V or 5V on breakouts with a regulator",
+        "type": "power"
+      },
+      {
+        "label": "GND",
+        "note": "",
+        "type": "ground"
+      },
+      {
+        "label": "SDA",
+        "note": "I2C data, pull-up on most breakouts",
+        "type": "data"
+      },
+      {
+        "label": "SCL",
+        "note": "I2C clock",
+        "type": "clock"
+      }
+    ]
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "alternatives": [
+    {
+      "name": "SIM7000",
+      "note": "Full driver: delivery receipts, whitelist/SMS command helpers, network time, operator name."
+    },
+    {
+      "name": "SIM800L",
+      "note": "2G only, SMS basics."
+    }
+  ],
+  "c_prefix": "sim7000lite",
+  "c_source": "driver.c",
+  "category": "rf",
+  "datasheet": "https://www.simcom.com/product/SIM7000X.html",
+  "default_address": "",
+  "description": "SIMCom SIM7000 modem, lean API: SMS send/receive, HTTP POST over GPRS, USSD, and self-recovery via maintain()",
+  "init_args": "{uart_id}",
+  "interface": "uart",
+  "manufacturer": "SIMCom",
+  "methods": {
+    "http_post": {
+      "blocking": true,
+      "description": "POST a form body over GPRS; up to 3 attempts on failure or 5xx; returns the HTTP status or -1",
+      "params": [
+        {
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "name": "body",
+          "type": "string"
+        }
+      ],
+      "returns": "int"
+    },
+    "maintain": {
+      "blocking": true,
+      "description": "Call periodically: recovers a silent or off-network modem; returns true when registered",
+      "params": [],
+      "returns": "bool"
+    },
+    "next_sms": {
+      "blocking": true,
+      "description": "Read the oldest received SMS (then deleted from the SIM); false if none",
+      "params": [],
+      "returns": "bool"
+    },
+    "ready": {
+      "blocking": true,
+      "description": "true if the modem answers AT",
+      "params": [],
+      "returns": "bool"
+    },
+    "registered": {
+      "blocking": true,
+      "description": "true when registered on the home or a roaming network",
+      "params": [],
+      "returns": "bool"
+    },
+    "send_sms": {
+      "blocking": true,
+      "description": "Send an SMS (max 160 chars); retries twice only if refused before sending",
+      "params": [
+        {
+          "name": "number",
+          "type": "string"
+        },
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "bool"
+    },
+    "set_apn": {
+      "description": "Operator APN used for GPRS (http_post)",
+      "params": [
+        {
+          "name": "apn",
+          "type": "string"
+        }
+      ],
+      "returns": "void"
+    },
+    "set_pwrkey": {
+      "description": "GPIO driving PWRKEY and its polarity; enables power-cycling in maintain()",
+      "params": [
+        {
+          "name": "pin",
+          "type": "int"
+        },
+        {
+          "name": "active_high",
+          "type": "bool"
+        }
+      ],
+      "returns": "void"
+    },
+    "signal": {
+      "blocking": true,
+      "description": "Signal quality 0-31 (99 = unknown); 10+ is usable",
+      "params": [],
+      "returns": "int"
+    },
+    "sms_from": {
+      "description": "Sender of the SMS read by next_sms()",
+      "params": [],
+      "returns": "string"
+    },
+    "sms_text": {
+      "description": "Text of the SMS read by next_sms()",
+      "params": [],
+      "returns": "string"
+    },
+    "ussd": {
+      "blocking": true,
+      "description": "Send a USSD code (e.g. *125#) and return the reply text, \"\" on failure",
+      "params": [
+        {
+          "name": "code",
+          "type": "string"
+        }
+      ],
+      "returns": "string"
+    }
+  },
+  "name": "SIM7000Lite",
+  "params": {
+    "baud": {
+      "default": 115200,
+      "type": "int"
+    }
+  },
+  "specs": {
+    "bands": "LTE-M / NB-IoT / GSM (driver uses GSM)",
+    "uart": "115200 baud default, 3.3V logic on most boards",
+    "voltage": "3.0V - 4.3V (Li-ion); peaks up to 2 A during GSM transmit"
+  },
+  "tips": [
+    "Call maintain() every 30-60 s: it soft-resets a modem that stops answering or stays off the network for 3 minutes, and power-cycles it through PWRKEY if set_pwrkey() was called.",
+    "send_sms() retries only when the modem refused before sending, so a message is never sent twice.",
+    "Incoming SMS: loop on next_sms() and act on sms_from()/sms_text() in your program; each message is deleted from the SIM once read.",
+    "Call set_apn() with your operator's APN before http_post().",
+    "Brown-outs during transmit are the usual cause of random resets: use a proper battery or a 2 A supply with a large capacitor."
+  ],
+  "wiring": {
+    "pins": [
+      {
+        "label": "VBAT",
+        "note": "Li-ion cell or 4V supply that can deliver 2 A peaks",
+        "type": "power"
+      },
+      {
+        "label": "GND",
+        "note": "Common with the ESP32",
+        "type": "ground"
+      },
+      {
+        "label": "TX",
+        "note": "Modem TX -\u003e ESP32 RX",
+        "type": "data"
+      },
+      {
+        "label": "RX",
+        "note": "Modem RX \u003c- ESP32 TX",
+        "type": "data"
+      },
+      {
+        "label": "PWRKEY",
+        "note": "Optional: lets maintain() power-cycle a hung modem (set_pwrkey)",
+        "type": "data"
+      }
+    ]
+  }
+}

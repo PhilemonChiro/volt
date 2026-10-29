@@ -63,3 +63,40 @@ volt_error_t hc05_set_password(hc05_t *dev, const char *password) {
     snprintf(command, sizeof(command), "AT+PSWD=%s", password);
     return hc05_send_at_command(dev, command);
 }
+
+// ── text interface for Volt programs ─────────────────────────────────────
+
+volt_error_t hc05_send(hc05_t *dev, const char *text) {
+    return volt_uart_print(dev->uart_id, text);
+}
+
+volt_error_t hc05_send_line(hc05_t *dev, const char *text) {
+    volt_error_t err = volt_uart_print(dev->uart_id, text);
+    if (err != VOLT_OK) return err;
+    return volt_uart_print(dev->uart_id, "\r\n");
+}
+
+bool hc05_available(hc05_t *dev) {
+    return volt_uart_available(dev->uart_id) > 0;
+}
+
+// read_line never blocks: it gathers bytes as they arrive and returns a whole
+// line (without CR/LF) once one is complete, "" until then. One buffer is
+// shared, so use a single HC-05 per program.
+const char *hc05_read_line(hc05_t *dev) {
+    static char line[128], done[128];
+    static uint16_t len = 0;
+    while (volt_uart_available(dev->uart_id) > 0) {
+        int c = volt_uart_read_byte(dev->uart_id);
+        if (c < 0) break;
+        if (c == '\r') continue;
+        if (c == '\n') {
+            line[len] = '\0';
+            memcpy(done, line, len + 1);
+            len = 0;
+            return done;
+        }
+        if (len < sizeof(line) - 1) line[len++] = (char)c;
+    }
+    return "";
+}
