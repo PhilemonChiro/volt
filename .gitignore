@@ -84,3 +84,4 @@ package-lock.json
 
 # Hardcoded paths in CLI/extension (machine-specific)
 # Users will configure their own paths after cloning
+!volt-ide/build/

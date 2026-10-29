@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .volt/
-build/
+build/*
+!build/entitlements.mac.plist
 sdk/
 bin/
