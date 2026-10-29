@@ -21,7 +21,7 @@ against a key pinned inside the code-signed app** — the same trust model the
 
 | Source | Trusted? | How |
 |--------|----------|-----|
-| Baked-in `FALLBACK_MANIFEST` (in `toolchain-mirror.js`) | ✅ implicitly | It shipped inside the code-signed app bundle. No signature needed. |
+| Built-in manifest (`cli/internal/toolchain/fallback-manifest.json`, embedded in `volt`) | ✅ implicitly | It shipped inside the code-signed app bundle. No signature needed. |
 | Remote `manifest.json` (mirror/CDN) | ⚠️ only if signed | Must carry a valid Ed25519 signature from a key in `toolchain-keys.json` **and** be at/above the rollback floor. |
 | On-disk cache (`~/.volt/cache/manifest.json`) | ⚠️ re-verified | Written only after a successful verify; re-verified on read to defend against local tampering. |
 | Each downloaded tarball | ✅ by SHA256 | Checked against the (now signed) manifest before extraction. |
@@ -78,23 +78,24 @@ Commit `toolchain-keys.json` (public key only) and ship it inside the app.
 
 ### Every publish
 
-1. Bump `FALLBACK_MANIFEST.manifest_version` in `toolchain-mirror.js` (monotonic).
-2. Publish + sign in one step — the private key is read from `--key` or
-   `$VOLT_TOOLCHAIN_SIGNING_KEY`:
+Toolchain files live only in the Cloudflare R2 bucket `volt-dl`, served at
+`https://dl.voltembedded.com/<tag>/<file>`. The manifest's source of truth is
+the CLI's built-in copy, `cli/internal/toolchain/fallback-manifest.json`.
+
+1. Upload any new file: `npx wrangler r2 object put volt-dl/<tag>/<file> --file <file> --remote`,
+   and add its asset (filename, `sha256`, `size_bytes`, …) to `fallback-manifest.json`.
+2. Sign and publish (bumps `manifest_version` past the live one, signs with
+   `$VOLT_TOOLCHAIN_SIGNING_KEY` or `~/.volt/secrets/volt-toolchain-signing.pem`,
+   checks the signature against `keys.json`, writes the CLI copy, uploads `manifest.json`):
 
    ```bash
    cd volt-ide
-   VOLT_TOOLCHAIN_SIGNING_KEY=/secure/volt-signing-private.pem \
-     npm run publish:toolchains
-   # or: node scripts/publish-toolchains.js --key=/secure/volt-signing-private.pem
+   npm run publish:toolchain-manifest -- --dry-run
+   npm run publish:toolchain-manifest
    ```
 
-   Publishing **fails fast** (before any 280 MB download) if no key is provided.
-   `--allow-unsigned` exists only for a keyless bootstrap; clients with a pinned
-   key will reject an unsigned manifest.
-
-3. Keep the baked-in `FALLBACK_MANIFEST` in sync with what you published, so an
-   offline first-run still works.
+3. Rebuild `volt` (`npm run build:volt`) so the binary's built-in manifest is the
+   one published, and an offline first run still works.
 
 ### Rotating / revoking a key
 
@@ -105,44 +106,16 @@ Commit `toolchain-keys.json` (public key only) and ship it inside the app.
   an IDE update (revocation reaches clients via the pinned, app-shipped keyfile,
   not the network — so it works even if the mirror is compromised).
 
-## Where to host — self-hosted VPS (Dokploy)
+## Where it's hosted — Cloudflare R2
 
-Hosting is on **our own VPS via Dokploy**. Signing makes this purely an
-availability/latency decision — a tampered origin (or edge cache) just fails
-verification. Self-hosting actually raises the stakes on signing: a single VPS
-is a more concentrated compromise target than GitHub, so **the pinned-key
-signature is what keeps a popped VPS from serving a backdoored compiler.** Never
-run this origin unsigned.
-
-**Serving it (Dokploy):**
-- Deploy a static file service (nginx / Caddy container) or **MinIO** (S3-style,
-  good for content-addressed storage) that serves the release directory +
-  `manifest.json`.
-- Point `MIRROR_BASE` in `toolchain-mirror.js` at the service domain, e.g.
-  `https://toolchains.<domain>/<tag>`. No code change beyond that constant.
-- Serve immutable, **content-addressed** assets (tarball named with its sha256)
-  so a file is never mutated in place — the equivalent of dropping GitHub's
-  `--clobber`.
-
-**Egress / latency (the one caveat):** toolchains are ~280 MB each. A VPS has
-finite bandwidth and one region — a distant customer pulling 280 MB direct is
-slow, and an install burst can saturate the uplink. Put **Cloudflare (free tier)
-in front of the Dokploy origin**: it edge-caches the large immutable tarballs
-(zero egress, global speed) and hides the origin IP. The VPS stays source of
-truth; because every byte is SHA256-checked against a signed manifest, the edge
-cache is untrusted anyway — this is free security-wise.
-
-**Failover is built in:** each asset supports a `mirrors: []` list. The client
-tries `url` → `mirrors[]` → `upstream`, SHA256-checking each — so you can list
-the Cloudflare URL, the direct VPS URL, and the original upstream, and clients
-degrade gracefully if one is down. Changing hosts is a manifest edit, not a
-re-architecture.
-
-**Origin hardening (because it's now yours):** lock down the upload path (only
-the publish box / CI can write the release dir), keep the signing **private key
-off the VPS entirely** (sign locally, upload the already-signed manifest), and
-treat the VPS as replaceable — the trust root is the pinned key in the app, not
-the server.
+All toolchain files and `manifest.json` are in R2 (`volt-dl`) behind
+`dl.voltembedded.com`, the same bucket as IDE and CLI releases: no egress
+charges, served from Cloudflare's edge, no server of our own to run. Each asset
+has one Volt URL (`url`) plus `upstream`, the vendor's original download, as a
+last resort. Signing makes hosting purely an availability question: a tampered
+file fails its SHA256, a tampered manifest fails its signature. Upload access
+is the wrangler login of the publishing account; the signing key never leaves
+the publisher's machine.
 
 ## ESP32 compiler-cache artifacts
 
@@ -168,7 +141,7 @@ Flow:
    ```json
    {
      "filename": "volt-prebuilt-esp32-ccache.tar.gz",
-     "url": "https://toolchains.example.com/toolchains-2026.05/volt-prebuilt-esp32-ccache.tar.gz",
+     "url": "https://dl.voltembedded.com/toolchains-2026.05/volt-prebuilt-esp32-ccache.tar.gz",
      "source_file": "/tmp/volt-prebuilt-esp32-ccache.tar.gz",
      "sha256": "...",
      "size_bytes": 123,
@@ -215,8 +188,9 @@ a correctness dependency.
 
 | File | Role |
 |------|------|
-| `src/main/toolchain-trust.js` | Ed25519 sign/verify, fail-closed |
-| `src/main/toolchain-keys.json` | Pinned **public** keys (ships empty) |
-| `src/main/toolchain-mirror.js` | Manifest load + verify + rollback + mirror failover + tarball SHA256 |
-| `scripts/publish-toolchains.js` | Publishes + **signs** the manifest |
-| `test/toolchain-trust.test.js` | Offline crypto tests (`npm run test:trust`) |
+| `cli/internal/toolchain/fallback-manifest.json` | The manifest (built into `volt`, published to R2) |
+| `cli/internal/toolchain/manifest.go` | Fetch + verify + rollback floor (CLI) |
+| `cli/internal/toolchain/keys.json` | Pinned **public** keys |
+| `volt-ide/scripts/publish-toolchain-manifest.js` | Signs + publishes the manifest |
+| `volt-ide/src/main/toolchain-trust.js` | Ed25519 sign/verify used by the publisher |
+| `volt-ide/test/toolchain-trust.test.js` | Offline crypto tests (`npm run test:trust`) |
