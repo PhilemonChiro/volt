@@ -1,6 +1,12 @@
 // Volt IDE v2 — entry point
 
 import * as toolbar from "./components/toolbar.js";
+import * as agentOverlay from "./components/agent-overlay.js";
+import * as libReview from "./components/lib-review.js";
+import * as sdkUpdates from "./components/sdk-updates.js";
+import * as voltCommand from "./components/volt-command.js";
+import * as history from "./components/history.js";
+import "./components/publish-dialog.js"; // review-status notices
 import * as welcome from "./components/welcome.js";
 import * as wizard from "./components/wizard.js";
 import * as editor from "./components/editor.js";
@@ -19,6 +25,7 @@ import * as onboarding from "./components/onboarding.js";
 import * as library from "./components/library.js";
 import { startTour } from "./components/guided-tour.js";
 import { readFile, saveFile } from "./services/projects.js";
+import * as agent from "./agent.js";
 
 // Hydrate the settings cache as early as possible so other components can
 // read get() synchronously by the time they need it.
@@ -93,6 +100,7 @@ function showWelcome() {
 function showEditor() {
     document.getElementById("welcome").style.display = "none";
     document.getElementById("editorArea").style.display = "flex";
+    diagramsView.placeBottomPanel("code");
     if (!editorReady) {
         const container = document.getElementById("editorContainer");
         editor.init(container, {
@@ -118,6 +126,7 @@ function showEditor() {
         import("./components/hardware-panel.js").then(m => m.initBoard(document.getElementById("boardView")))
             .catch(e => console.warn("[hardware-panel]", e));
         editorReady = true;
+        history.init();
     }
     editor.focus();
 }
@@ -177,7 +186,10 @@ async function loadProject(projectPath, file) {
         const content = await readFile(voltFile);
         showEditor();
         editor.openFile(voltFile, content);
+        window.volt.watchOpenFile(voltFile);
+        history.opened(projectPath);
         toolbar.setProjectOpen(true);
+        window.volt.setMenuState({ projectOpen: true });
         toolbar.setSaveUnsaved(false);
         setFileModified(false);
         await chipSelector.loadFromProject(projectPath);
@@ -274,6 +286,7 @@ async function onSave({ quiet = false } = {}) {
         }
         await saveFile(currentFile, editor.getValue());
         editor.markSaved();
+        history.afterSave(currentFile);
         toolbar.setSaveUnsaved(false);
         setFileModified(false);
         if (!quiet) bottomPanel.appendOutput("Saved: " + currentFile, "success");
@@ -306,6 +319,52 @@ toolbar.init({
     },
 });
 
+function ctxProjectOpen() { return document.getElementById("editorArea")?.style.display === "flex"; }
+
+// ---- Wire the macOS menu bar (same handlers as the toolbar/shortcuts) ----
+const menuActions = {
+    installVolt: () => voltCommand.offer(true),
+    checkUpdates: () => window.volt.updates.check(),
+    new:      () => wizard.show((path) => loadProject(path)),
+    open:     () => openProject(),
+    openRecent: (path) => loadProject(path),
+    save:     () => onSave(),
+    export:   () => onExport(),
+    close:    () => closeProject(),
+    format:   () => monaco.editor.getEditors()[0]?.getAction("editor.action.formatDocument")?.run(),
+    check:    () => onCheck(),
+    run:      () => onRun(),
+    monitor:  () => onMonitor(),
+    settings: () => settingsDialog.show(),
+    "panel:hardware": () => sidePanel.toggle("hardware"),
+    "panel:outline":  () => sidePanel.toggle("outline"),
+    "panel:library":  () => sidePanel.toggle("library"),
+    "panel:history": () => sidePanel.open("history"),
+    board:    () => diagramsView.showView("board"),
+    libraryView: () => import("./components/library-view.js").then(m => m.openLibrary()),
+    addPart:  () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "A", ctrlKey: true, shiftKey: true })),
+    help:     () => window.volt.openExternal("https://volt.dev/docs/GETTING_STARTED.md"),
+    tour:     () => startTour(() => {}),
+};
+window.volt.onMenuAction(({ action, arg }) => menuActions[action]?.(arg));
+// AI note action buttons run the same commands (agent-overlay.js RUNNABLE).
+document.addEventListener("volt:run-action", (e) => menuActions[e.detail]?.());
+
+// ---- Outside edits to the open file (an AI agent's own file tools, another editor) ----
+window.volt.onOpenFileChanged(({ path: changed, content }) => {
+    if (changed !== editor.getCurrentFile() || content === editor.getValue()) return; // our own save
+    const name = basename(changed);
+    if (!editor.isUnsaved()) {
+        editor.replaceFromDisk(content);
+        setFileModified(false);
+        history.outsideEdit(changed);
+        bottomPanel.appendOutput(`${name} was changed outside Volt IDE — reloaded it (click to undo)`, "warn", { onClick: () => editor.undo() });
+    } else {
+        bottomPanel.appendOutput(`${name} was changed outside Volt IDE while you have unsaved edits — click to load the version on disk (your edits stay in Undo)`, "warn",
+            { onClick: () => { editor.replaceFromDisk(content); setFileModified(false); } });
+    }
+});
+
 // ---- Wire welcome ----
 welcome.init(document.getElementById("welcome"), {
     onNew:        () => wizard.show((path) => loadProject(path)),
@@ -332,6 +391,10 @@ async function closeProject() {
     diagramsView.reset();
     showWelcome();
     toolbar.setProjectOpen(false);
+    agentOverlay.cancelInteractive("closed");
+    history.closed();
+    agentOverlay.clearPoints();
+    window.volt.setMenuState({ projectOpen: false });
     // Refresh recent projects list
     welcome.init(document.getElementById("welcome"), {
         onNew:        () => wizard.show((path) => loadProject(path)),
@@ -654,6 +717,22 @@ document.addEventListener("keydown", (e) => {
 
 // Init panels
 bottomPanel.init(document.getElementById("bottomPanel"));
+libReview.init();
+sdkUpdates.init();
+voltCommand.init();
+window.volt.updates.onEvent((msg) => {
+    if (msg.kind === "info") { bottomPanel.appendOutput(msg.text, "info"); return; }
+    if (msg.kind !== "ready") return;
+    document.querySelector(".upd-toast")?.remove();
+    const t = document.createElement("div");
+    t.className = "pb-toast upd-toast";
+    t.setAttribute("role", "status");
+    t.innerHTML = `<span class="pb-toast-ic" aria-hidden="true">↑</span><div><b>Volt IDE ${String(msg.version).replace(/[^\w.-]/g, "")} is ready.</b><br>Restart to update — or it installs when you quit.</div>
+        <button type="button" class="lr-btn primary" data-go>Restart now</button><button type="button" class="lr-btn" data-later>Later</button>`;
+    document.body.appendChild(t);
+    t.querySelector("[data-later]").onclick = () => t.remove();
+    t.querySelector("[data-go]").onclick = () => window.volt.updates.install();
+});
 diagramsView.init();
 sidePanel.init();
 
@@ -798,6 +877,18 @@ window.volt.onBuild("progress", ({ stage, message, percent, size }) => {
         if (verboseOutput() || !run) bottomPanel.appendOutput(message, "info");
         statusBar.setBuild(message);
     }
+});
+
+// AI agents connected through `volt mcp` work in this window (src/agent.js).
+agent.init({
+    getProject: () => currentProject,
+    getFile: () => (editorReady ? currentFile : null),
+    loadProject,
+    onSave,
+    onCheck,
+    onRun,
+    deviceSelector,
+    chipSelector,
 });
 
 console.log("[volt] app.js ready");

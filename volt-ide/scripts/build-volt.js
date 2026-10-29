@@ -14,6 +14,10 @@ const GOOS = { darwin: "darwin", linux: "linux", win32: "windows" };
 const GOARCH = { arm64: "arm64", x64: "amd64" };
 const CLI = path.resolve(__dirname, "..", "..", "..", "cli");
 
+// The framework, device examples and default device libraries ship inside volt
+// (the one shipped copy; it updates ~/.volt/sdk): refresh them from the repo first.
+execFileSync("go", ["run", "./scripts/embedsdk"], { cwd: CLI, stdio: "inherit" });
+
 const targets = process.argv.slice(2);
 if (!targets.length) targets.push(`${process.platform}-${process.arch}`);
 

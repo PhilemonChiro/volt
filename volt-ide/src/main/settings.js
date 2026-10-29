@@ -37,6 +37,8 @@ const SCHEMA = {
                               label: "Render whitespace" },
             formatOnSave:   { type: "bool",   default: false,
                               label: "Format on save", hint: "Run the Volt formatter when you save." },
+            askOnSelect:    { type: "bool",   default: true,
+                              label: "Show Ask AI when selecting code", hint: "A small ✦ Ask button appears beside code you select (or press ⌘I / Ctrl+I)." },
         },
     },
     registry: {
@@ -67,6 +69,14 @@ const SCHEMA = {
                               ],
                               label: "Toolchain download source",
                               hint: "Mirror = pinned, controlled versions from the Volt GitHub release. Upstream = official vendor sites." },
+        },
+    },
+    agent: {
+        label: "AI agents",
+        items: {
+            allowControl: { type: "bool", default: true,
+                            label: "Allow AI agents to control the IDE",
+                            hint: "Agents connected through `volt mcp` (Claude Code, Cursor, VS Code…) can read and edit the open program, switch views, take screenshots, build, flash (after you allow it) and read the serial monitor." },
         },
     },
     serial: {

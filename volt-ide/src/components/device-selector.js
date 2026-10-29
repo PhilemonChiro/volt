@@ -91,6 +91,15 @@ export function getDevices() {
     return devices;
 }
 
+// selectPort makes the board on `port` the selected one; false if absent.
+export function selectPort(port) {
+    const i = devices.findIndex(d => d.port === port);
+    if (i < 0) return false;
+    selectedIndex = i;
+    updateUI();
+    return true;
+}
+
 function updateUI() {
     const label = document.getElementById("deviceLabel");
     const dot = document.getElementById("deviceDot");

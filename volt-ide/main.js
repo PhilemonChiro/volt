@@ -1,5 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, screen, session } = require("electron");
 const logger = require("./src/main/logger");
+const appMenu = require("./src/main/app-menu");
+const libTrust = require("./src/main/lib-trust");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -225,6 +227,7 @@ app.whenReady().then(() => {
     });
 
     win.loadFile("index.html");
+    appMenu.install(win, loadRecents);
 
     // Once the renderer is live, replay a deep link that arrived early — either
     // parked by open-url before the window existed, or passed in argv on a cold
@@ -279,7 +282,12 @@ ipcMain.handle("app_version", () => app.getVersion());
 // ============================================================
 // Projects
 // ============================================================
-ipcMain.handle("create_project", (_, name, chip, template) => {
+ipcMain.handle("create_project", (_, name, chip, template) => createProject(name, chip, template));
+
+// createProject makes <projectsDir>/<name> with main.volt from a template (or
+// the given source) and volt.toml; returns its path. Used by the wizard and by
+// AI agents (ide_new_project).
+function createProject(name, chip, template, source) {
     // Validate project name — no path traversal, no shell-breaking chars
     if (!name || !/^[a-zA-Z0-9_\- ]+$/.test(name)) {
         throw new Error("Invalid project name — use letters, numbers, dashes, underscores only");
@@ -299,15 +307,19 @@ ipcMain.handle("create_project", (_, name, chip, template) => {
         : template === "door-lock" ? `hardware {\n    pin led = 2\n    pin relay = 4\n    pin button: PullUpInput = 15\n    pin buzzer: PWM = 18\n}\n\nenum DoorState { locked, unlocked, alert }\nvar door: DoorState = DoorState.locked\n\nmachine door_lock {\n    state locked {\n        enter { relay.off(); led.off() }\n        after 1s -> locked\n    }\n    state unlocked {\n        enter { relay.on(); led.on() }\n        after 30s -> locked\n    }\n    state alert {\n        enter { buzzer.beep_alarm() }\n        after 60s -> locked\n    }\n}\n\nevery 100ms {\n    if button.read() == 0 {\n        door_lock.send(button_press)\n    }\n}\n`
         : `hardware {\n    pin led = ${led}\n}\n\nevery 500ms {\n    led.toggle()\n}\n`;  // blink (default)
 
-    fs.writeFileSync(path.join(dir, "main.volt"), mainVolt);
+    fs.writeFileSync(path.join(dir, "main.volt"), typeof source === "string" && source.trim() ? source : mainVolt);
     fs.writeFileSync(path.join(dir, "volt.toml"),
         `[project]\nname = "${name}"\nchip = "${chip}"\n`);
     fs.writeFileSync(path.join(dir, ".gitignore"), "build/\n.volt/\n");
 
     return dir;
-});
+}
 
-ipcMain.handle("list_projects", () => {
+ipcMain.handle("list_projects", () => listProjects());
+
+// listProjects is every project in the projects folder plus recently opened
+// ones elsewhere, newest first.
+function listProjects() {
     const seen = new Set();
     const results = [];
 
@@ -340,17 +352,39 @@ ipcMain.handle("list_projects", () => {
     }
 
     return results.sort((a, b) => b.modified - a.modified);
-});
+}
 
 ipcMain.handle("save_recent", (_, projectPath) => {
     saveRecent(projectPath);
+    appMenu.refresh(); // Open Recent
 });
+
+ipcMain.on("menu:state", (_, state) => appMenu.setState(state));
 
 // Allowed file extensions for read/write — prevents arbitrary file access
 // while allowing projects stored anywhere on disk (cross-platform)
 const SAFE_EXTENSIONS = new Set([".volt", ".toml", ".gitignore", ".json", ".txt", ".c", ".h"]);
 
 ipcMain.handle("file_exists", (_, filePath) => fs.existsSync(filePath));
+
+// Watch the open file so edits made outside the IDE (an AI agent's own file
+// tools, another editor) show up instead of being overwritten on the next save.
+let _watched = null;
+ipcMain.on("watch_open_file", (_, filePath) => {
+    if (_watched) { _watched.close(); _watched = null; }
+    if (!filePath || !fs.existsSync(filePath)) return;
+    let timer = null;
+    try {
+        _watched = fs.watch(filePath, () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                let content;
+                try { content = fs.readFileSync(filePath, "utf-8"); } catch (_) { return; }
+                if (win && !win.isDestroyed()) win.webContents.send("open_file:changed", { path: filePath, content });
+            }, 250);
+        });
+    } catch (_) {}
+});
 
 ipcMain.handle("create_toml", (_, projectPath, chip) => {
     const toml = path.join(projectPath, "volt.toml");
@@ -496,7 +530,9 @@ ipcMain.handle("devices_list", () => {
 // device.json + driver.c + a struct/prototypes block into every catalog copy.
 ipcMain.handle("create_device", (_, spec) => {
     const { createDevice } = require("./src/main/device-creator");
-    return createDevice(spec, path.join(__dirname, ".."));
+    const res = createDevice(spec, path.join(__dirname, ".."));
+    // The user wrote it here, in the IDE: approve it (and the spliced headers).
+    return libTrust.approveOwnWrite([res.dir], "local").then(() => res, () => res);
 });
 
 // ---- Secure library import (.vlib) ----------------------------------------
@@ -535,19 +571,23 @@ ipcMain.handle("vlib_install", (_, token) => {
     const { install } = require("./src/main/vlib-import");
     const res = install(envelope, path.join(__dirname, ".."));  // re-verifies internally
     _pendingVlib.delete(token);
-    return res;
+    const v = require("./src/main/vlib-verify").verify(envelope);
+    return libTrust.approveOwnWrite([res.prefix], "registry:" + (v.keyId || "unknown"), res.version || "").then(() => res, () => res);
 });
 
 ipcMain.handle("vlib_installed_list", () => require("./src/main/vlib-import").list());
 
-ipcMain.handle("vlib_uninstall", (_, prefix) =>
-    require("./src/main/vlib-import").uninstall(prefix, path.join(__dirname, "..")));
+ipcMain.handle("vlib_uninstall", async (_, prefix) => {
+    const res = require("./src/main/vlib-import").uninstall(prefix, path.join(__dirname, ".."));
+    await libTrust.approveOwnWrite([], "local").catch(() => {}); // re-sign the trimmed headers
+    return res;
+});
 
 // ---- Grid (registry) browse + install ----
 // Fuse browses the Grid catalog over HTTP and installs signed Cells directly —
 // the SAME verify + hardened import as file import; only the transport differs.
 function gridUrl() {
-    try { return require("./src/main/settings").get("registry.gridUrl") || "http://127.0.0.1:8080"; }
+    try { return (require("./src/main/settings").get("registry.gridUrl") || "http://127.0.0.1:8080").replace(/\/+$/, ""); }
     catch (_) { return "http://127.0.0.1:8080"; }
 }
 
@@ -555,6 +595,14 @@ ipcMain.handle("grid_list", async () => {
     const r = await fetch(`${gridUrl()}/api/v1/libraries`);
     if (!r.ok) throw new Error(`Grid unreachable (${r.status})`);
     const { data } = await r.json();
+    return data || [];
+});
+
+// Versions curators withdrew, and why — installed copies get a warning.
+ipcMain.handle("grid_yanked", async () => {
+    const r = await fetch(`${gridUrl()}/api/v1/libraries/yanked`).catch(() => null);
+    if (!r || !r.ok) return [];
+    const { data } = await r.json().catch(() => ({}));
     return data || [];
 });
 
@@ -595,31 +643,56 @@ async function getSessionToken() {
 
 // Open a modal window to the Grid's GitHub OAuth; when it lands back on the web
 // app the session cookie is set — grab it and close.
-ipcMain.handle("auth_login", async () => {
+// Sign in through the system browser (RFC 8252 loopback): the user's own
+// browser has their GitHub session, password manager and passkeys. A one-time
+// local page receives a code, which Grid exchanges for the session token.
+async function browserLogin() {
+    const http = require("http");
+    const { shell } = require("electron");
+    const state = require("crypto").randomBytes(16).toString("hex");
     return await new Promise((resolve) => {
-        const authWin = new BrowserWindow({
-            // Not modal: on macOS a modal child is a sheet with no title bar, so the
-            // user couldn't back out of signing in. A normal window has a close button.
-            width: 520, height: 720, parent: win, modal: false, show: true, title: "Sign in to VoltGrid",
-            webPreferences: { nodeIntegration: false, contextIsolation: true },
+        let finished = false;
+        const page = (title, text) => `<!doctype html><meta charset="utf-8"><title>${title}</title>
+            <body style="font:15px -apple-system,system-ui,sans-serif;background:#111418;color:#e8ecf2;display:grid;place-items:center;height:100vh;margin:0">
+            <div style="text-align:center;max-width:420px"><div style="font-size:40px">⚡</div><h2 style="margin:8px 0">${title}</h2><p style="color:#9aa4b2">${text}</p></div>`;
+        const srv = http.createServer(async (req, res) => {
+            const u = new URL(req.url, "http://127.0.0.1");
+            if (u.pathname !== "/callback") { res.writeHead(404); return res.end(); }
+            const ok = u.searchParams.get("state") === state && u.searchParams.get("code");
+            let token = null;
+            if (ok) {
+                try {
+                    const r = await fetch(`${gridUrl()}/auth/ide/exchange`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: u.searchParams.get("code") }) });
+                    const j = await r.json();
+                    token = (j.data || j).token || null;
+                } catch (_) {}
+            }
+            res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(token ? page("You're signed in to Volt", "You can close this tab and go back to Volt IDE.")
+                : page("Sign-in didn't finish", "Go back to Volt IDE and try again."));
+            if (token) {
+                sessionToken = token;
+                try { await session.defaultSession.cookies.set({ url: gridUrl(), name: "volt_session", value: token, httpOnly: true, expirationDate: Date.now() / 1000 + 30 * 86400 }); } catch (_) {}
+                if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); app.focus({ steal: true }); }
+            }
+            finish({ ok: !!token });
         });
-        authWin.webContents.on("before-input-event", (e, input) => {
-            if (input.type === "keyDown" && input.key === "Escape") { e.preventDefault(); authWin.close(); }
+        const finish = (r) => { if (finished) return; finished = true; clearTimeout(timer); srv.close(); resolve(r); };
+        const timer = setTimeout(() => finish({ ok: false, reason: "timeout" }), 5 * 60_000);
+        srv.listen(0, "127.0.0.1", () => {
+            const redirect = `http://127.0.0.1:${srv.address().port}/callback`;
+            shell.openExternal(`${gridUrl()}/auth/ide/start?${new URLSearchParams({ redirect, state })}`);
         });
-        let done = false;
-        const grab = async () => {
-            try {
-                const cs = await authWin.webContents.session.cookies.get({ name: "volt_session" });
-                if (cs && cs[0] && cs[0].value) { sessionToken = cs[0].value; return true; }
-            } catch (_) {}
-            return false;
-        };
-        authWin.webContents.on("did-navigate", async () => {
-            if (await grab()) { done = true; authWin.close(); }
-        });
-        authWin.on("closed", async () => { if (!done) await grab(); resolve({ ok: !!sessionToken }); });
-        authWin.loadURL(`${gridUrl()}/auth/github/login`);
     });
+}
+
+ipcMain.handle("auth_login", async () => {
+    // Always the system browser (RFC 8252): the user signs in where their
+    // GitHub session, passkeys and password manager already are.
+    const probe = await fetch(`${gridUrl()}/auth/ide/start`, { redirect: "manual" }).catch(() => null);
+    if (!probe) return { ok: false, error: "Couldn't reach the Grid — check your connection." };
+    if (probe.status !== 400) return { ok: false, error: "The Grid doesn't support browser sign-in yet (it needs updating)." };
+    return browserLogin();
 });
 
 ipcMain.handle("auth_status", async () => {
@@ -637,6 +710,106 @@ ipcMain.handle("auth_logout", async () => {
     sessionToken = null;
     try { await session.defaultSession.cookies.remove(`${gridUrl()}`, "volt_session"); } catch (_) {}
     return { ok: true };
+});
+
+// ---- Publish a library to the Grid (every public library is maintainer-reviewed) ----
+const libPublish = require("./src/main/lib-publish");
+async function publishTarget(prefix) {
+    const at = await libTrust.whereIs(String(prefix || ""));
+    if (!at) throw new Error(`No device library “${prefix}” on this computer.`);
+    const builtin = at.source === "sdk-baseline" || at.matchesBundled || at.bundled;
+    const fromGrid = at.source.startsWith("registry:");
+    return { ...at, builtin, fromGrid, aiAssisted: at.source === "ai" };
+}
+async function gridLogin() {
+    const tok = await getSessionToken();
+    if (!tok) return { token: null, login: null };
+    try {
+        const r = await fetch(`${gridUrl()}/api/v1/me`, { headers: { Authorization: `Bearer ${tok}` } });
+        if (!r.ok) return { token: null, login: null };
+        const j = await r.json();
+        const u = j.data || j;
+        return { token: tok, login: u.login || u.Login || null };
+    } catch (_) { return { token: null, login: null } ; }
+}
+ipcMain.handle("publish:prepare", async (_, prefix, opts = {}) => {
+    const t = await publishTarget(prefix);
+    if (t.builtin) return { prefix, builtin: true };
+    if (t.fromGrid) return { prefix, fromGrid: true };
+    const { device } = libPublish.readLibrary(t.dir);
+    const { token, login } = await gridLogin();
+    const mine = token ? await libPublish.mine(gridUrl(), token) : [];
+    const submitted = mine.filter(x => x.prefix === prefix);
+    const version = opts.version || libPublish.nextVersion(mine, prefix, device.version);
+    const description = opts.description ?? device.description ?? "";
+    const res = await libPublish.check(gridUrl(), t.dir, { version, description, aiAssisted: t.aiAssisted });
+    return {
+        prefix, name: device.name || prefix, version, description, aiAssisted: t.aiAssisted,
+        approved: t.state === "approved", signedIn: !!token, login, submitted,
+        errors: res.errors, warnings: res.warnings, capabilities: res.capabilities, interface: device.interface,
+    };
+});
+ipcMain.handle("publish:submit", async (_, prefix, opts = {}) => {
+    const t = await publishTarget(prefix);
+    if (t.builtin || t.fromGrid) throw new Error("Only libraries you made can be published.");
+    if (t.state !== "approved") throw new Error("Approve this library in Volt IDE first — only reviewed code can be published.");
+    const { token } = await gridLogin();
+    if (!token) throw new Error("Sign in with GitHub to publish.");
+    if (!/^\d+\.\d+\.\d+$/.test(String(opts.version || ""))) throw new Error("Use a version like 1.0.0.");
+    const res = await libPublish.check(gridUrl(), t.dir, { version: opts.version, description: opts.description, aiAssisted: t.aiAssisted });
+    if (res.errors.length) throw new Error(res.errors[0]);
+    return libPublish.submit(gridUrl(), token, res.submission);
+});
+// publish:list — your libraries joined with their Grid status (the Mine tab).
+ipcMain.handle("publish:list", async () => {
+    const own = await libTrust.ownLibraries();
+    const { token, login } = await gridLogin();
+    const mine = token ? await libPublish.mine(gridUrl(), token) : [];
+    const rank = { published: 3, pending: 2, rejected: 1 };
+    const libs = own.map(l => {
+        let device = {};
+        try { device = libPublish.readLibrary(l.dir).device; } catch (_) {}
+        const subs = mine.filter(x => x.prefix === l.name);
+        const semver = (v) => String(v).split(".").map(Number);
+        const newer = (a, b) => { const x = semver(a.version), y = semver(b.version); return y[0] - x[0] || y[1] - x[1] || y[2] - x[2]; };
+        const latest = subs.slice().sort(newer)[0] || null;
+        const pubs = subs.filter(x => x.status === "published").sort(newer);
+        const published = pubs.length ? pubs[0].version : null;
+        return { prefix: l.name, name: device.name || l.name, description: device.description || "", interface: device.interface || "",
+            state: l.state, aiAssisted: l.source === "ai", published, latest, best: subs.sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0))[0] || null };
+    });
+    return { signedIn: !!token, login, libs };
+});
+// library_files — a library's own files, for the Library view's Code page.
+ipcMain.handle("library_files", async (_, prefix) => {
+    const at = await libTrust.whereIs(String(prefix || ""));
+    if (!at) return [];
+    const out = [];
+    for (const name of ["driver.c", "header.h", "device.json"]) {
+        try { out.push({ name, text: fs.readFileSync(path.join(at.dir, name), "utf8") }); } catch (_) {}
+    }
+    return out;
+});
+// library_examples — complete example programs for a device: its own
+// device.json "examples", then the one Volt ships in examples/devices/.
+ipcMain.handle("library_examples", async (_, prefix, name) => {
+    const out = [];
+    const at = await libTrust.whereIs(String(prefix || "")).catch(() => null);
+    if (at) {
+        try {
+            const d = JSON.parse(fs.readFileSync(path.join(at.dir, "device.json"), "utf8"));
+            for (const e of d.examples || []) if (e && e.code) out.push({ title: e.title || "Example", description: e.description || "", code: e.code });
+        } catch (_) {}
+    }
+    for (const root of trustRoots()) {
+        const f = path.join(path.dirname(root), "examples", "devices", `${name}.volt`);
+        if (fs.existsSync(f)) { out.push({ title: "Example", description: "", code: fs.readFileSync(f, "utf8"), shipped: true }); break; }
+    }
+    return out;
+});
+ipcMain.handle("publish:mine", async () => {
+    const { token } = await gridLogin();
+    return token ? libPublish.mine(gridUrl(), token) : [];
 });
 
 ipcMain.handle("collection_list", async () => {
@@ -669,20 +842,16 @@ ipcMain.handle("collection_install", async (_, prefix, version) => {
 // Read a device driver's C source (read-only viewer). chip is the target
 // platform ("esp32" / "rp2040" / etc.), sourceFile is the c_source field
 // from the device JSON (e.g. "sensor_bme280.c").
-ipcMain.handle("device_source", (_, chip, sourceFile) => {
+ipcMain.handle("device_source", (_, chip, sourceFile, prefix) => {
     if (!sourceFile || !/^[a-zA-Z0-9_.-]+\.c$/.test(sourceFile)) {
         throw new Error("Invalid device source filename");
     }
     const c = (chip || "esp32").toLowerCase();
     const platform = c.includes("rp2040") || c.includes("pico") ? "rp2040" : "esp32";
+    // A device library's own folder first (devices/<prefix>/driver.c), then
+    // the framework's built-in drivers.
     const candidates = [
-        // dev mode
-        path.join(__dirname, "..", "framework", platform, "src", sourceFile),
-        // packaged app
-        ...(process.resourcesPath
-            ? [path.join(process.resourcesPath, "sdk", "framework", platform, "src", sourceFile)]
-            : []),
-        // installed SDK
+        ...(prefix && /^[a-z0-9_]+$/.test(prefix) ? [path.join(devicesDir(), prefix, sourceFile), path.join(devicesDir(), prefix, "driver.c")] : []),
         path.join(os.homedir(), ".volt", "sdk", "framework", platform, "src", sourceFile),
     ];
     for (const candidate of candidates) {
@@ -690,30 +859,42 @@ ipcMain.handle("device_source", (_, chip, sourceFile) => {
             return { path: candidate, content: fs.readFileSync(candidate, "utf-8") };
         }
     }
-    throw new Error(`Source not found: ${sourceFile} (looked in framework/${platform}/src)`);
+    throw new Error(`Source not found: ${sourceFile}${prefix ? ` (looked in devices/${prefix} and framework/${platform}/src)` : ` (looked in framework/${platform}/src)`}`);
 });
 
+// The one device library everything uses: ~/.volt/sdk/devices. The bundled
+// volt carries the only shipped copy and updates it when volt is a new
+// version (`volt sdk sync --auto`); libraries changed locally wait for the
+// user (sdk:take / sdk:keep), see components/sdk-updates.js.
 function devicesDir() {
-    // dev → repo/devices, packaged → resources/sdk/devices, installed → ~/.volt/sdk/devices
-    const dev = path.join(__dirname, "..", "devices");
-    if (fs.existsSync(dev)) return dev;
-    if (process.resourcesPath) {
-        const bundled = path.join(process.resourcesPath, "sdk", "devices");
-        if (fs.existsSync(bundled)) return bundled;
-    }
     return path.join(os.homedir(), ".volt", "sdk", "devices");
 }
+function sdkSync(args) {
+    const out = require("child_process").execFileSync(require("./src/main/volt-cli").bin(),
+        ["sdk", "sync", "--json", ...args], { encoding: "utf8", timeout: 60_000 });
+    return JSON.parse(out.trim().split("\n").pop());
+}
+let sdkStartup;
+try { sdkStartup = sdkSync(["--auto"]); } catch (e) { sdkStartup = { error: e.message, kept: [] }; }
+app.whenReady().then(() => logger.log(sdkStartup.error ? "error" : "info", "sdk", `library update: ${JSON.stringify(sdkStartup)}`));
+ipcMain.handle("sdk:pending", () => sdkSync(["--dry-run"]).kept || []);
+ipcMain.handle("sdk:take", (_e, names) => sdkSync(["--take", names.join(",")]));
+ipcMain.handle("sdk:keep", (_e, names) => sdkSync(["--keep", names.join(",")]));
+// One volt per computer: the terminal's and AI apps' volt is this IDE's.
+const voltCommand = require("./src/main/volt-command");
+ipcMain.handle("voltcmd:state", () => voltCommand.state());
+ipcMain.handle("voltcmd:install", (_e, opts) => voltCommand.install(opts));
+// Volt IDE updates itself (with its volt and device library).
+const updater = require("./src/main/updater");
+app.whenReady().then(() => updater.start({ getWin: () => win, logger }));
+ipcMain.handle("update:check", () => updater.check(true));
+ipcMain.handle("update:install", () => updater.install());
 
 // Every device root that may hold catalog entries — the built-ins AND the
 // user-installed tree. devices_list reads all of them so installed libraries
 // (public or private) show up in the catalog and detail view.
 function deviceReadRoots() {
-    const roots = [
-        path.join(__dirname, "..", "devices"),
-        process.resourcesPath ? path.join(process.resourcesPath, "sdk", "devices") : null,
-        path.join(os.homedir(), ".volt", "sdk", "devices"),
-    ].filter(Boolean);
-    return roots.filter((r, i, a) => a.indexOf(r) === i && fs.existsSync(r));
+    return [devicesDir()].filter(r => fs.existsSync(r));
 }
 
 function examplesDir() {
@@ -938,22 +1119,21 @@ ipcMain.handle("sequence_diagram", async (_, source) => {
     }
 });
 
-ipcMain.handle("system_graph", async (_, source, expanded) => {
-    try {
-        return await workerCall("system_graph", { source, expanded: expanded || [] }, 5000);
-    } catch (_) {
-        return { mermaid: "", units: [], loops: [] };
-    }
-});
-
 // ============================================================
 // Serial, toolchain and build — all through the `volt` CLI. ESP32 only
 // (the pre-volt RP2040 / STM32 / ESP8266 code is in git history).
 // ============================================================
 const volt = require("./src/main/volt-cli");
 
+// sendHooks see everything main sends the renderer (the agent bridge reads
+// build results and serial lines from it).
+const sendHooks = new Set();
+
 function send(channel, data) {
     if (win) win.webContents.send(channel, data);
+    for (const hook of sendHooks) {
+        try { hook(channel, data); } catch (_) {}
+    }
 }
 
 // The serial port is held by at most one volt child: `volt monitor`, or the
@@ -1198,3 +1378,65 @@ app.on("before-quit", () => {
         if (p && p.child) try { p.child.kill("SIGTERM"); } catch (_) {}
     }
 });
+
+// ---- Project history (volt history: a private git history per project) ----
+function voltHistory(args) {
+    return new Promise((resolve, reject) => {
+        require("child_process").execFile(require("./src/main/volt-cli").bin(), ["history", ...args], { maxBuffer: 32 << 20 }, (err, stdout) => {
+            let out = null;
+            try { out = JSON.parse(stdout); } catch (_) {}
+            if (out && out.error) return reject(new Error(out.error));
+            if (err && !out) return reject(err);
+            resolve(out);
+        });
+    });
+}
+const opt = (k, v) => (v === undefined || v === null || v === "" ? [] : [`--${k}`, String(v)]);
+ipcMain.handle("history:record", (_, project, author, message) =>
+    voltHistory(["record", project, ...opt("author", author), ...opt("message", message), "--coalesce"]));
+ipcMain.handle("history:log", (_, project, file, limit) => voltHistory(["log", project, ...opt("file", file), ...opt("limit", limit || 200)]));
+ipcMain.handle("history:show", (_, project, hash) => voltHistory(["show", project, "--hash", hash]));
+ipcMain.handle("history:blame", (_, project, file) => voltHistory(["blame", project, "--file", file]));
+ipcMain.handle("history:restore", (_, project, hash, file) => voltHistory(["restore", project, "--hash", hash, ...opt("file", file), "--author", "You"]));
+ipcMain.handle("history:undo", (_, project, hash) => voltHistory(["undo", project, "--hash", hash, "--author", "You"]));
+ipcMain.handle("history:last-agent", () => lastAgent);
+
+// ---- Library approvals: the review sheet for new/changed device libraries ----
+let lastAgent = null; // { at, client } — the last AI agent call, for "who changed it"
+function trustRoots() {
+    return [devicesDir()].filter(r => fs.existsSync(r) && fs.existsSync(path.join(path.dirname(r), "framework")));
+}
+app.whenReady().then(() => libTrust.start({ getWin: () => win, roots: trustRoots, logger, lastAgent: () => lastAgent }));
+ipcMain.handle("libtrust:info", () => libTrust.info());
+ipcMain.handle("libtrust:origins", () => libTrust.origins());
+ipcMain.handle("libtrust:pending", () => libTrust.pending());
+ipcMain.handle("libtrust:details", (_, root, name) => libTrust.details(root, name));
+ipcMain.handle("libtrust:decide", (_, d) => libTrust.decide(d));
+ipcMain.handle("libtrust:reset", () => libTrust.reset());
+ipcMain.on("libtrust:review-open", (_, open) => libTrust.setReviewOpen(open));
+
+// ---- AI agent bridge: lets agents connected through `volt mcp` work in the IDE ----
+const agentBridge = require("./src/main/agent-bridge");
+let stopAgentBridge = null;
+app.whenReady().then(() => {
+    stopAgentBridge = agentBridge.start({
+        onActivity: (client) => { lastAgent = { at: Date.now(), client }; },
+        extraMethods: {
+            library_request_approval: ({ prefix }) => libTrust.requestApproval(String(prefix || "")),
+            library_paths: () => ({ devices: trustRoots(), ide_builds_use: devicesDir() }),
+            projects: () => ({ projects_dir: projectsDir(), projects: listProjects().map(p => ({ ...p, modified: new Date(p.modified * 1000).toISOString() })) }),
+            new_project: ({ name, chip, template, source }) => {
+                chip = String(chip || "esp32").toLowerCase();
+                if (!/^[a-z0-9]+$/.test(chip)) throw new Error("chip must be a name like esp32 or rp2040");
+                return { path: createProject(String(name || ""), chip, template || "blink", source) };
+            },
+        },
+        getWin: () => win,
+        settings,
+        version: app.getVersion(),
+        logger,
+        onSend: (fn) => { sendHooks.add(fn); return () => sendHooks.delete(fn); },
+        isMonitoring: () => monitoring,
+    });
+});
+app.on("will-quit", () => { if (stopAgentBridge) stopAgentBridge(); });

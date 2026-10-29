@@ -248,6 +248,14 @@ export function init(container, { onContentChange, onCursorChange }) {
         run: (ed) => ed.trigger("keyboard", "editor.action.blockComment", null),
     });
 
+    editor.addAction({
+        id: "volt.history.who",
+        label: "Who Changed This Line?",
+        contextMenuGroupId: "navigation",
+        contextMenuOrder: 1,
+        run: () => import("./history.js").then(m => m.whoChanged()),
+    });
+
     return editor;
 }
 
@@ -271,7 +279,24 @@ export function isUnsaved() {
     return unsavedChanges;
 }
 
+// editSource says who is changing the buffer right now: "agent" (an AI
+// edit), "outside" (reloaded from disk) or null (the user typing).
+let editSource = null;
+export function getEditSource() { return editSource; }
+export function onContentChange(fn) { if (editor) editor.onDidChangeModelContent(() => fn(editSource)); }
+
 export function markSaved() {
+    unsavedChanges = false;
+}
+
+// replaceFromDisk swaps in the file's new content as one undoable edit.
+export function replaceFromDisk(content) {
+    if (!editor) return;
+    const model = editor.getModel();
+    editor.pushUndoStop();
+    editSource = "outside";
+    try { model.pushEditOperations([], [{ range: model.getFullModelRange(), text: content }], () => null); } finally { editSource = null; }
+    editor.pushUndoStop();
     unsavedChanges = false;
 }
 
@@ -293,3 +318,73 @@ export function gotoLine(line) {
     }]);
     setTimeout(() => { if (editor) editor.deltaDecorations(ids, []); }, 1400);
 }
+
+// ---- AI agent edits and marks (src/agent.js) ----
+
+let agentLineIds = [];
+
+// applyAgentEdit replaces the buffer with text, or applies ranged edits
+// ({start_line, start_col?, end_line?, end_col?, text}, 1-based), as one
+// undo step. Returns the first line it touched.
+export function applyAgentEdit({ text, edits }) {
+    if (!editor) throw new Error("No file is open in the editor.");
+    const model = editor.getModel();
+    let ops;
+    if (typeof text === "string") {
+        ops = [{ range: model.getFullModelRange(), text }];
+    } else {
+        ops = (edits || []).map((e) => {
+            const endLine = e.end_line || e.start_line;
+            return {
+                range: new monaco.Range(e.start_line, e.start_col || 1, endLine,
+                    e.end_col || model.getLineMaxColumn(endLine)),
+                text: e.text || "",
+            };
+        });
+    }
+    editor.pushUndoStop();
+    editSource = "agent";
+    try { editor.executeEdits("agent", ops); } finally { editSource = null; }
+    editor.pushUndoStop();
+    const first = ops.length ? Math.min(...ops.map(o => o.range.startLineNumber)) : 1;
+    editor.revealLineInCenterIfOutsideViewport(first);
+    return first;
+}
+
+export function undo() {
+    if (editor) editor.trigger("agent", "undo", null);
+}
+
+// highlightLines marks 1-based lines until the next call (an empty list
+// clears them); note shows on hover.
+export function highlightLines(lines, note) {
+    if (!editor) throw new Error("No file is open in the editor.");
+    // Each line carries a text label, not just a colour.
+    const model = editor.getModel();
+    agentLineIds = editor.deltaDecorations(agentLineIds, (lines || []).map((ln, i) => ({
+        range: new monaco.Range(ln, 1, ln, model.getLineMaxColumn(ln)),
+        options: {
+            isWholeLine: true,
+            className: "volt-agent-line",
+            hoverMessage: note ? { value: note } : undefined,
+            overviewRuler: { color: "#3A8DC4", position: monaco.editor.OverviewRulerLane.Full },
+            after: i === 0
+                ? { content: "  \u2190 AI" + (note ? ": " + note : ""), inlineClassName: "volt-agent-note" }
+                : undefined,
+        },
+    })));
+    if (lines && lines.length) editor.revealLineInCenter(lines[0]);
+}
+
+export function getCursor() {
+    if (!editor) return null;
+    const p = editor.getPosition();
+    const s = editor.getSelection();
+    const cursor = p ? { line: p.lineNumber, col: p.column } : null;
+    const selection = s && !s.isEmpty()
+        ? { start_line: s.startLineNumber, start_col: s.startColumn, end_line: s.endLineNumber, end_col: s.endColumn,
+            text: editor.getModel().getValueInRange(s) }
+        : null;
+    return { cursor, selection };
+}
+

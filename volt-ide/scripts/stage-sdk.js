@@ -66,14 +66,15 @@ function dirSize(dir) {
 console.log("[stage-sdk] cleaning sdk/");
 // Only clean the dirs stage-sdk owns (src/ and python/ are left over from the
 // Python compiler).
-for (const sub of ["src", "python", "devices", "framework"]) {
+for (const sub of ["src", "python", "devices", "framework", "examples"]) {
     rmTree(path.join(OUT, sub));
 }
 fs.mkdirSync(OUT, { recursive: true });
 
+// Only the starter projects: the device library and framework ship inside the
+// bundled volt binary (cli/internal/sdkfiles), the one shipped copy.
 const targets = [
-    { from: path.join(REPO, "devices"),   to: path.join(OUT, "devices"),   label: "devices" },
-    { from: path.join(REPO, "framework"), to: path.join(OUT, "framework"), label: "framework" },
+    { from: path.join(REPO, "examples"),  to: path.join(OUT, "examples"),  label: "examples" },
 ];
 
 for (const t of targets) {

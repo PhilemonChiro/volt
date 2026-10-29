@@ -8,8 +8,8 @@ let activePanel = null;
 let lastAST = null;
 
 export function init() {
-    const ids = ["toggleHardware", "toggleOutline", "toggleLibrary"];
-    const panels = ["hardware", "outline", "library"];
+    const ids = ["toggleHardware", "toggleOutline", "toggleLibrary", "toggleHistory"];
+    const panels = ["hardware", "outline", "library", "history"];
 
     ids.forEach((id, i) => {
         const btn = document.getElementById(id);
@@ -69,6 +69,7 @@ export function init() {
 }
 
 export function toggle(panel) {
+    if (panel === "library") return open(panel); // a dialog, not a panel
     if (activePanel === panel) {
         close();
     } else {
@@ -77,6 +78,8 @@ export function toggle(panel) {
 }
 
 export function open(panel) {
+    // The Library is a full dialog now (library-view.js), not a side panel.
+    if (panel === "library") { import("./library-view.js").then(m => m.openLibrary()); return; }
     activePanel = panel;
 
     // Reveal side panel (CSS transitions width 0 → 280)
@@ -96,12 +99,12 @@ export function open(panel) {
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    const btnMap = { hardware: "toggleHardware", outline: "toggleOutline", library: "toggleLibrary" };
+    const btnMap = { hardware: "toggleHardware", outline: "toggleOutline", library: "toggleLibrary", history: "toggleHistory" };
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
     // Swap visible body — fade-in via .is-active class (CSS keyframe)
-    ["panelHardware", "panelOutline", "panelLibrary"].forEach(id => {
+    ["panelHardware", "panelOutline", "panelLibrary", "panelHistory"].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
@@ -109,6 +112,7 @@ export function open(panel) {
         hardware: "panelHardware",
         outline:  "panelOutline",
         library:  "panelLibrary",
+        history: "panelHistory",
     };
     const body = document.getElementById(bodyMap[panel]);
     if (body) {
@@ -118,11 +122,13 @@ export function open(panel) {
     }
 
     // Title
-    const titles = { hardware: "Hardware", outline: "Outline", library: "Library" };
+    const titles = { hardware: "Hardware", outline: "Outline", library: "Library", history: "History" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
-    if (panel === "library") {
+    if (panel === "history") {
+        import("./history.js").then(m => m.renderInto(body));
+    } else if (panel === "library") {
         // Library is data-driven by the device catalog, not the editor AST
         import("./library.js").then(m => m.renderInto(body));
     } else if (panel === "hardware") {
@@ -267,3 +273,4 @@ function bindLineClicks(container) {
 function esc(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+

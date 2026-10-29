@@ -15,17 +15,17 @@
     "dev": "electron . --dev --no-sandbox",
     "test:vlib": "node test/vlib/gen.js && node test/vlib/run.js",
     "test:trust": "node test/toolchain-trust.test.js",
-    "sign:manifest": "node deploy/toolchain-mirror/sign-manifest.js",
-    "postinstall": "node scripts/fix-sandbox.js",
+    "postinstall": "node scripts/fix-sandbox.js && node scripts/dev-app-name.js",
     "stage:sdk": "node scripts/stage-sdk.js",
     "build:icons": "node scripts/build-icons.js",
     "build:volt": "node scripts/build-volt.js",
-    "publish:toolchains": "node scripts/publish-toolchains.js",
+    "publish:toolchain-manifest": "node scripts/publish-toolchain-manifest.js",
     "prepack": "npm run stage:sdk && npm run build:icons",
     "pack:linux": "npm run prepack && npm run build:volt -- linux-x64 && electron-builder --linux",
     "pack:win": "npm run prepack && npm run build:volt -- win32-x64 && electron-builder --win",
     "pack:mac": "npm run prepack && npm run build:volt -- darwin-arm64 darwin-x64 && electron-builder --mac",
-    "pack:all": "npm run prepack && npm run build:volt -- linux-x64 win32-x64 && electron-builder --linux --win"
+    "pack:all": "npm run prepack && npm run build:volt -- linux-x64 win32-x64 && electron-builder --linux --win",
+    "release:ide": "sh scripts/release-ide.sh"
   },
   "devDependencies": {
     "electron": "^41.2.0",
@@ -107,7 +107,7 @@
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
@@ -132,6 +132,13 @@
             "arm64",
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ],
       "category": "public.app-category.developer-tools",
@@ -146,6 +153,16 @@
         "role": "Editor",
         "mimeType": "text/x-volt"
       }
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://dl.voltembedded.com/ide",
+        "channel": "latest"
+      }
     ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

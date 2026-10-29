@@ -66,6 +66,12 @@ export const SNIPPETS = [
     { label: "sleep", detail: "Suspend task for duration", insert: "sleep(${0:500ms})", "_kind": "Function" },
     { label: "deep_sleep", detail: "Deep sleep (timer wake)", insert: "deep_sleep(${0:60s})", "_kind": "Function" },
     { label: "light_sleep", detail: "Light sleep (fast wake)", insert: "light_sleep(${0:10s})", "_kind": "Function" },
+    { label: "len", detail: "String length", insert: "len(${0:text})", "_kind": "Function" },
+    { label: "contains", detail: "String contains part", insert: "contains(${1:text}, \"${0:part}\")", "_kind": "Function" },
+    { label: "starts_with", detail: "String starts with prefix", insert: "starts_with(${1:text}, \"${0:prefix}\")", "_kind": "Function" },
+    { label: "ends_with", detail: "String ends with suffix", insert: "ends_with(${1:text}, \"${0:suffix}\")", "_kind": "Function" },
+    { label: "to_int", detail: "Parse string as int", insert: "to_int(${0:text})", "_kind": "Function" },
+    { label: "to_float", detail: "Parse string as float", insert: "to_float(${0:text})", "_kind": "Function" },
 ];
 
 
@@ -289,6 +295,12 @@ export const KEYWORD_DOCS = {
     sleep:    { sig: "sleep(duration)", desc: "Suspend the current task for a duration.", detail: "This is a yield point — other tasks run while this one sleeps. Only works in tasks, not in main.\n\nExamples: `sleep(500ms)`, `sleep(2s)`", cat: "Builtin Function" },
     deep_sleep: { sig: "deep_sleep(duration)", desc: "Put the entire chip into deep sleep.", detail: "Wakes via timer. All RAM is lost — execution restarts from main. Use `storage` to persist data across deep sleep cycles.", cat: "Builtin Function" },
     light_sleep: { sig: "light_sleep(duration)", desc: "Light sleep — faster wake, RAM preserved.", cat: "Builtin Function" },
+    len:         { sig: "len(text: string) -> int", desc: "Number of characters in a string.", cat: "Builtin Function" },
+    contains:    { sig: "contains(text: string, part: string) -> bool", desc: "True if `part` appears in `text`.", cat: "Builtin Function" },
+    starts_with: { sig: "starts_with(text: string, prefix: string) -> bool", desc: "True if `text` begins with `prefix`.", cat: "Builtin Function" },
+    ends_with:   { sig: "ends_with(text: string, suffix: string) -> bool", desc: "True if `text` ends with `suffix`.", cat: "Builtin Function" },
+    to_int:      { sig: "to_int(text: string) -> int", desc: "Parse a decimal integer (0 if not a number).", cat: "Builtin Function" },
+    to_float:    { sig: "to_float(text: string) -> float", desc: "Parse a decimal number (0.0 if not a number).", cat: "Builtin Function" },
 };
 
 
@@ -381,6 +393,12 @@ export const METHOD_SIGS = {
     "sleep":             { label: "sleep(duration: Duration)", params: [{ label: "duration: Duration", doc: "e.g. 500ms, 2s" }] },
     "deep_sleep":        { label: "deep_sleep(duration: Duration)", params: [{ label: "duration: Duration", doc: "All RAM lost. Restarts from main on wake." }] },
     "light_sleep":       { label: "light_sleep(duration: Duration)", params: [{ label: "duration: Duration", doc: "RAM preserved. Faster wake than deep_sleep." }] },
+    "len":               { label: "len(text: string) -> int", params: [{ label: "text: string", doc: "String to measure" }] },
+    "contains":          { label: "contains(text: string, part: string) -> bool", params: [{ label: "text: string", doc: "String to search" }, { label: "part: string", doc: "Text to find" }] },
+    "starts_with":       { label: "starts_with(text: string, prefix: string) -> bool", params: [{ label: "text: string", doc: "String to test" }, { label: "prefix: string", doc: "Expected start" }] },
+    "ends_with":         { label: "ends_with(text: string, suffix: string) -> bool", params: [{ label: "text: string", doc: "String to test" }, { label: "suffix: string", doc: "Expected end" }] },
+    "to_int":            { label: "to_int(text: string) -> int", params: [{ label: "text: string", doc: "Decimal digits, e.g. \"42\"" }] },
+    "to_float":          { label: "to_float(text: string) -> float", params: [{ label: "text: string", doc: "Decimal number, e.g. \"1.5\"" }] },
     // pin methods
     "write":    { label: "write(level: int)", params: [{ label: "level: int", doc: "HIGH (1) or LOW (0)" }] },
     "blink":    { label: "blink(interval: Duration)", params: [{ label: "interval: Duration", doc: "e.g. 500ms" }] },
@@ -422,7 +440,10 @@ export const METHOD_DOCS = {
     "mqtt.send":         { sig: "mqtt.send(topic: string, data: string) -> void", desc: "Publish a string message to an MQTT topic." },
     "mqtt.send_int":     { sig: "mqtt.send_int(topic: string, value: int) -> void", desc: "Publish an integer value to an MQTT topic." },
     "mqtt.send_float":   { sig: "mqtt.send_float(topic: string, value: float) -> void", desc: "Publish a float value (2 decimal places) to an MQTT topic." },
-    "mqtt.on_receive":   { sig: "mqtt.on_receive(topic: string) -> void", desc: "Subscribe to an MQTT topic. Supports `#` wildcard.", detail: "Max 16 subscriptions per device." },
+    "mqtt.on_receive":   { sig: "mqtt.on_receive(topic: string) -> void", desc: "Subscribe to an MQTT topic. Supports `#` wildcard.", detail: "Read messages with `mqtt.has_message()` / `mqtt.payload()`. Max 16 subscriptions per device." },
+    "mqtt.has_message":  { sig: "mqtt.has_message() -> bool", desc: "True when a subscribed message arrived and has not been read.", detail: "Use as `on mqtt.has_message() { ... }`." },
+    "mqtt.payload":      { sig: "mqtt.payload() -> string", desc: "The latest received message; marks it read." },
+    "mqtt.topic":        { sig: "mqtt.topic() -> string", desc: "Topic of the latest received message." },
     // http
     "http.get":          { sig: "http.get(url: string) -> string", desc: "HTTP GET request. Returns the response body as a string." },
     "http.post":         { sig: "http.post(url: string, body: string) -> string", desc: "HTTP POST request. Returns the response body." },
@@ -623,6 +644,9 @@ export const DOT_METHODS = {
         { label: "send_int", detail: "(topic: string, value: int) -> void", insert: "send_int(\"${1:topic}\", ${2:value})" },
         { label: "send_float", detail: "(topic: string, value: float) -> void", insert: "send_float(\"${1:topic}\", ${2:value})" },
         { label: "on_receive", detail: "(topic: string) -> void", insert: "on_receive(\"${1:topic}\")" },
+        { label: "has_message", detail: "() -> bool", insert: "has_message()" },
+        { label: "payload", detail: "() -> string", insert: "payload()" },
+        { label: "topic", detail: "() -> string", insert: "topic()" },
     ],
     http: [
         { label: "get", detail: "(url: string) -> string", insert: "get(\"${1:url}\")" },
@@ -651,7 +675,7 @@ export const DOT_METHODS = {
 
 export const BUILTIN_DOCS = {
     wifi:    { desc: "WiFi networking module", detail: "**Methods:**\n- `connect(ssid, password)` — connect to access point (auto-reconnects)\n- `disconnect()` — disconnect and stop reconnecting\n- `is_connected()` — returns bool\n- `get_ip()` — returns IP address string\n- `get_rssi()` — signal strength in dBm\n\nRequires WiFi-capable chip (ESP32, ESP8266). Forces task to Priority tier." },
-    mqtt:    { desc: "MQTT messaging module", detail: "**Methods:**\n- `connect(url)` — connect to broker (`mqtt://host` or `mqtts://host`)\n- `disconnect()`\n- `is_connected()` — returns bool\n- `send(topic, data)` — publish string\n- `send_int(topic, value)` — publish integer\n- `send_float(topic, value)` — publish float\n- `on_receive(topic)` — subscribe to topic\n\nRequires WiFi. Max 16 subscriptions." },
+    mqtt:    { desc: "MQTT messaging module", detail: "**Methods:**\n- `connect(url)` — connect to broker (`mqtt://host` or `mqtts://host`)\n- `disconnect()`\n- `is_connected()` — returns bool\n- `send(topic, data)` — publish string\n- `send_int(topic, value)` — publish integer\n- `send_float(topic, value)` — publish float\n- `on_receive(topic)` — subscribe to topic\n- `has_message()` / `payload()` / `topic()` — read the latest message\n\nRequires WiFi. Max 16 subscriptions." },
     http:    { desc: "HTTP client module", detail: "**Methods:**\n- `get(url)` — HTTP GET, returns response body\n- `post(url, body)` — HTTP POST, returns response body\n\nRequires WiFi. Forces task to Priority tier." },
     storage: { desc: "Persistent flash storage (NVS)", detail: "**Methods:**\n- `save(key, value)` — save to flash (buffered, flushed every 30s)\n- `load(key)` — load from flash\n- `push(list, value)` — append to named list (store-and-forward)\n- `drain(list)` — read and clear all entries\n- `list_count(list)` — count entries\n- `list_clear(list)` — clear without reading\n\nSurvives reboots and power loss." },
     system:  { desc: "System information and control", detail: "**Methods:**\n- `restart()` — reboot the device\n- `free_heap()` — available RAM in bytes\n- `uptime()` — seconds since boot\n- `id()` — chip/device ID" },
