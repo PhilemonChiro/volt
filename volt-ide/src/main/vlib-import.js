@@ -13,8 +13,10 @@ const NAME_RE = /^[a-z0-9_]{1,32}$/;
 const IFACES = new Set(["i2c", "gpio", "spi", "uart"]);
 const CAPS = new Set(["i2c", "spi", "gpio", "uart", "network", "storage"]);
 const RET_TYPES = new Set(["float", "int", "int32_t", "bool", "void", "const char *"]);
-const FIELD_TYPES = new Set(["uint8_t", "uint16_t", "uint32_t", "int8_t", "int16_t", "int32_t", "int", "float", "bool"]);
+const FIELD_TYPES = new Set(["uint8_t", "uint16_t", "uint32_t", "int8_t", "int16_t", "int32_t", "uint64_t", "int64_t", "int", "float", "bool", "char"]);
 const RET_MAP = { float: "float", int: "int32_t", bool: "bool", void: "void", string: "const char *" };
+// Exact C return types a header spec may carry (method c_ret).
+const C_RET_TYPES = new Set([...FIELD_TYPES, "void", "volt_error_t", "const char *"]);
 
 // Framework HAL symbols a driver may call. Anything a driver references beyond
 // these + C stdlib basics is flagged for review (or blocked). Capability-gated
@@ -24,34 +26,24 @@ const API_ALLOW = [
     /^hd44780_/, /^gpio_/, /^adc_/, /^dac_/, /^VOLT_/, /^GPIO_/, /^HIGH$/, /^LOW$/,
 ];
 const CAP_SYMS = {
-    network: [/^volt_wifi_/, /^volt_mqtt_/, /^volt_http_/, /^esp_wifi_/, /^socket/, /^connect\(/],
+    network: [/^volt_wifi_/, /^volt_mqtt_/, /^volt_http_/, /^wifi_/, /^mqtt_/, /^http_(get|post)/, /^esp_wifi_/, /^socket/, /^connect\(/],
     storage: [/^volt_storage_/, /^nvs_/, /^fopen/, /^fwrite/],
 };
 // Outright-forbidden — no legitimate device driver needs these.
 const FORBIDDEN = [
     /\bsystem\s*\(/, /\bexec[lv]/, /\bpopen\s*\(/, /\bfork\s*\(/, /\bdlopen\s*\(/,
-    /#\s*include\s*<\s*(stdlib|unistd|sys\/)/, /\b__asm__?\b/, /\bmmap\s*\(/,
+    /#\s*include\s*<\s*(unistd|sys\/)/, /\b(exit|_Exit|abort|quick_exit)\s*\(/, /\b__asm__?\b/, /\bmmap\s*\(/,
 ];
 
 function ident(s) { return String(s || "").trim().toLowerCase(); }
 
-// devices/ roots to write into (repo, bundled, runtime — whichever exist).
-function deviceRoots(repoRoot) {
-    return [
-        path.join(repoRoot, "devices"),
-        path.join(repoRoot, "volt-ide", "sdk", "devices"),
-        path.join(os.homedir(), ".volt", "sdk", "devices"),
-    ].filter((r, i, a) => a.indexOf(r) === i && fs.existsSync(r));
+// Installs go into the one live device library (see sdk-sync.js).
+function deviceRoots(_repoRoot) {
+    return [path.join(os.homedir(), ".volt", "sdk", "devices")].filter(r => fs.existsSync(r));
 }
-function includeRoots(repoRoot) {
-    // Must mirror deviceRoots one-for-one: the generated struct header has to
-    // land in the SAME tree as the driver, or the build compiles the driver
-    // (from devices/) against a sensor.h that lacks its <prefix>_t struct.
-    return [
-        path.join(repoRoot, "framework", "include", "volt"),
-        path.join(repoRoot, "volt-ide", "sdk", "framework", "include", "volt"),
-        path.join(os.homedir(), ".volt", "sdk", "framework", "include", "volt"),
-    ].filter((r, i, a) => a.indexOf(r) === i && fs.existsSync(r));
+function includeRoots(_repoRoot) {
+    // Mirrors deviceRoots: the struct header lands in the same tree as the driver.
+    return [path.join(os.homedir(), ".volt", "sdk", "framework", "include", "volt")].filter(r => fs.existsSync(r));
 }
 const HEADER_BY_IFACE = { i2c: "sensor.h", uart: "sensor.h", gpio: "gpio_devices.h", spi: "spi_devices.h" };
 const HEADER_FILES = ["sensor.h", "gpio_devices.h", "spi_devices.h"];
@@ -103,6 +95,9 @@ function validate(envelope) {
     });
     checkTypes(h.fields, "field", true);
     checkTypes(h.init_params, "init param", false);
+    for (const mm of h.methods || []) {
+        if (mm && mm.c_ret !== undefined && !C_RET_TYPES.has(mm.c_ret)) errors.push(`disallowed return type "${mm.c_ret}" for method "${mm.name}"`);
+    }
 
     // driver source (per-chip or common)
     const driver = envelope.driver || {};
@@ -150,6 +145,15 @@ const BUS_HEADER = { i2c: "i2c", spi: "spi", uart: "uart", gpio: "pin" };
 // error.h), the interface HAL, task/log, and the C stdlib bits drivers use.
 // Existing quoted / <volt/...> includes in the body are dropped first so the
 // canonical set is authoritative and never doubled with a stale path.
+// Platform headers a driver may keep (its own includes are otherwise replaced
+// by the framework preamble): FreeRTOS critical sections, the task watchdog,
+// and the RP2040 SDK's sync primitives.
+const PLATFORM_INCLUDES = new Set(["freertos/FreeRTOS.h", "freertos/task.h", "esp_task_wdt.h", "hardware/sync.h"]);
+
+// The framework's own headers (all include-guarded): a driver keeps the ones it
+// uses beyond the preamble, e.g. volt/storage.h.
+const FRAMEWORK_HEADER_RE = /^volt\/(ble|error|gpio_devices|http|i2c|log|mqtt|pin|sensor|servo|spi|spi_devices|storage|system|task|touch|uart|volt|wifi)\.h$/;
+
 function withFrameworkIncludes(driverC, prefix, iface, headerFile) {
     const bus = BUS_HEADER[iface];
     const preamble = [
@@ -165,7 +169,7 @@ function withFrameworkIncludes(driverC, prefix, iface, headerFile) {
         `#include "volt/log.h"`,
     ].filter(Boolean).join("\n") + "\n\n";
     const body = (driverC || "")
-        .replace(/^[ \t]*#\s*include\s+"[^"]*".*\n?/gm, "")        // quoted includes
+        .replace(/^[ \t]*#\s*include\s+"([^"]*)".*\n?/gm, (line, h) => PLATFORM_INCLUDES.has(h) || FRAMEWORK_HEADER_RE.test(h) ? line : "")  // quoted includes
         .replace(/^[ \t]*#\s*include\s+<volt\/[^>]*>.*\n?/gm, "")  // <volt/...>
         .replace(/^\n+/, "");
     return preamble + body;
@@ -176,7 +180,8 @@ function buildHeader(prefix, h) {
     const fields = (h.fields || []).map(nt).map(({ name, type, size }) => size ? `${type} ${name}[${size}];` : `${type} ${name};`).join(" ");
     const initP = (h.init_params || []).map(nt).map(({ name, type }) => `${type} ${name}`).join(", ");
     const methodDecls = (h.methods || []).map(mm => {
-        const ret = RET_MAP[mm.ret] || RET_TYPES.has(mm.ret) ? (RET_MAP[mm.ret] || mm.ret) : "int32_t";
+        const ret = C_RET_TYPES.has(mm.c_ret) ? mm.c_ret
+            : RET_MAP[mm.ret] || RET_TYPES.has(mm.ret) ? (RET_MAP[mm.ret] || mm.ret) : "int32_t";
         const ps = (mm.params || []).map(nt).map(({ name, type }) => `${type} ${name}`);
         return `${ret} ${prefix}_${mm.name}(${[`${prefix}_t *dev`, ...ps].join(", ")});`;
     });
@@ -210,6 +215,15 @@ function inspect(envelope, opts = {}) {
             fromTier: cur.tier, toTier: envelope.manifest.trustTier,
             capsAdded: (val.caps || []).filter(c => !(cur.capabilities || []).includes(c)),
         };
+    } else {
+        // A copy Volt shipped (no install record): installing replaces it.
+        for (const root of deviceRoots()) {
+            let dev = null;
+            try { dev = JSON.parse(fs.readFileSync(path.join(root, val.prefix, "device.json"), "utf8")); } catch (_) { continue; }
+            update = { fromVersion: dev.version || "shipped", toVersion: envelope.manifest.version,
+                fromTier: "official", toTier: envelope.manifest.trustTier, capsAdded: [] };
+            break;
+        }
     }
 
     return {
@@ -269,16 +283,11 @@ function install(envelope, repoRoot, opts = {}) {
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, "device.json"), deviceJson);
         fs.writeFileSync(path.join(dir, "driver.c"), driverC);
-        written.push(path.join(dir, "device.json"), path.join(dir, "driver.c"));
-    }
-    for (const inc of includeRoots(repoRoot)) {
-        const hp = path.join(inc, headerFile);
-        if (!fs.existsSync(hp)) continue;
-        const cur = fs.readFileSync(hp, "utf-8");
-        if (cur.includes(`${prefix}_t;`)) continue;
-        const idx = cur.lastIndexOf("#endif");
-        fs.writeFileSync(hp, idx >= 0 ? cur.slice(0, idx) + headerBlock + "\n" + cur.slice(idx) : cur + headerBlock);
-        written.push(hp);
+        // The library's own header (regenerated from the structured spec — never
+        // raw C). `volt build` includes it for programs that use the library, so
+        // installing never edits the shared framework headers.
+        fs.writeFileSync(path.join(dir, "header.h"), `#pragma once\n${headerBlock}`);
+        written.push(path.join(dir, "device.json"), path.join(dir, "driver.c"), path.join(dir, "header.h"));
     }
 
     // lockfile: pin version + content hash + capabilities so updates are explicit.

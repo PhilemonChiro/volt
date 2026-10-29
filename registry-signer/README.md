@@ -23,7 +23,7 @@ registry-signer/
 ```
 
 First launch opens **Settings** — fill in:
-- **Grid URL** — `https://grid.sigma.co.zw`
+- **Grid URL** — `https://grid.voltembedded.com`
 - **Admin secret** — the Grid's `ADMIN_SECRET`
 - **Signing key** — path to your Ed25519 private key (`~/.volt/secrets/vlib-signing.pem`)
 

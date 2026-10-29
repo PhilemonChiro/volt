@@ -4,6 +4,7 @@
 // trust; it only renders what main reports and passes back the opaque token.
 
 import * as dialog from "./dialog.js";
+import * as lib from "./library.js";
 
 const api = window.volt;
 const CAP_WARN = new Set(["network", "storage"]);
@@ -130,7 +131,7 @@ export function showResult(res, opts) {
     const errs = (res.errors || []).length
         ? `<div class="vlib-note vlib-err"><b>Rejected</b>${res.errors.map(e => `<div>${esc(e)}</div>`).join("")}</div>` : "";
     const banner = u
-        ? `<div class="vlib-note vlib-update"><b>Update available: v${esc(u.fromVersion)} → v${esc(u.toVersion)}</b>`
+        ? `<div class="vlib-note vlib-update"><b>Update available: ${/^\d/.test(u.fromVersion) ? "v" + esc(u.fromVersion) : "shipped copy"} → v${esc(u.toVersion)}</b>`
           + (u.capsAdded && u.capsAdded.length ? `<div>New capabilities requested: ${u.capsAdded.map(esc).join(", ")}</div>` : "")
           + (u.fromTier !== u.toTier ? `<div>Trust tier: ${esc(u.fromTier)} → ${esc(u.toTier)}</div>` : "")
           + `</div>` : "";
@@ -234,6 +235,13 @@ export function showResult(res, opts) {
     const btn = panel.querySelector("#vlibInstall");
     if (btn && canInstall) btn.onclick = async () => {
         const updating = installed;
+        if (u) {
+            const older = lib.verCmp(u.toVersion, u.fromVersion) < 0;
+            const ok = await dialog.confirm(`${older ? "Switch" : "Update"} ${res.name || res.prefix || "library"} to v${u.toVersion}?`, {
+                detail: `Replaces the installed ${/^\d/.test(u.fromVersion) ? "v" + u.fromVersion : "copy Volt shipped"}${older ? " with an older version" : ""}. Any changes you made to its files on this computer are overwritten.`,
+                okLabel: older ? `Switch to v${u.toVersion}` : `Update to v${u.toVersion}`, danger: older });
+            if (!ok) return;
+        }
         btn.disabled = true; btn.textContent = updating ? "Updating…" : "Installing…";
         try {
             const r = await api.vlibInstall(res.token);

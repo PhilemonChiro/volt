@@ -2,8 +2,8 @@
 // the UI wizard. A library is three coordinated pieces:
 //   1. devices/<name>/device.json  — catalog metadata (registry scans devices/)
 //   2. devices/<name>/driver.c     — the C: <prefix>_init + one fn per method
-//   3. a <prefix>_t struct + prototypes appended to the interface's header
-//      (i2c → sensor.h, gpio → gpio_devices.h, spi → spi_devices.h)
+//   3. devices/<name>/header.h     — its <prefix>_t struct + prototypes
+//      (volt build includes it for programs that use the library)
 // Everything is written to every copy that exists (repo, bundled, runtime) so
 // the catalog can't drift — the same class of divergence we just reconciled.
 
@@ -127,23 +127,9 @@ function buildHeaderBlock(spec, shape) {
     ].join("\n") + "\n";
 }
 
-// All devices/ roots that exist (repo, bundled, runtime).
-function deviceRoots(repoRoot) {
-    const roots = [
-        path.join(repoRoot, "devices"),
-        path.join(repoRoot, "volt-ide", "sdk", "devices"),
-        path.join(os.homedir(), ".volt", "sdk", "devices"),
-    ];
-    return [...new Set(roots)].filter(r => fs.existsSync(r));
-}
-
-// All framework include/ dirs that exist (for the header struct block).
-function includeRoots(repoRoot) {
-    const roots = [
-        path.join(repoRoot, "volt-ide", "sdk", "framework", "include", "volt"),
-        path.join(os.homedir(), ".volt", "sdk", "framework", "include", "volt"),
-    ];
-    return [...new Set(roots)].filter(r => fs.existsSync(r));
+// The one live device library (see sdk-sync.js).
+function deviceRoots(_repoRoot) {
+    return [path.join(os.homedir(), ".volt", "sdk", "devices")].filter(r => fs.existsSync(r));
 }
 
 // Create the library. Returns { created: [paths], device: name }.
@@ -157,7 +143,6 @@ function createDevice(spec, repoRoot) {
     const deviceJson = buildDeviceJson(spec, shape);
     const driverC = buildDriverC(spec, shape);
     const headerBlock = buildHeaderBlock(spec, shape);
-    const headerFile = (IFACE[spec.interface] || IFACE.gpio).header;
 
     const created = [];
 
@@ -173,22 +158,8 @@ function createDevice(spec, repoRoot) {
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, "device.json"), deviceJson);
         fs.writeFileSync(path.join(dir, "driver.c"), driverC);
-        created.push(path.join(dir, "device.json"), path.join(dir, "driver.c"));
-    }
-
-    // 3: struct + prototypes appended to the interface header (skip if already there)
-    for (const inc of includeRoots(repoRoot)) {
-        const hp = path.join(inc, headerFile);
-        if (!fs.existsSync(hp)) continue;
-        const cur = fs.readFileSync(hp, "utf-8");
-        if (cur.includes(`${spec.prefix}_t;`)) continue;
-        // insert before the final #endif if present, else append
-        const idx = cur.lastIndexOf("#endif");
-        const next = idx >= 0
-            ? cur.slice(0, idx) + headerBlock + "\n" + cur.slice(idx)
-            : cur + headerBlock;
-        fs.writeFileSync(hp, next);
-        created.push(hp);
+        fs.writeFileSync(path.join(dir, "header.h"), `#pragma once\n#include <stdint.h>\n#include <stdbool.h>\n#include "volt/error.h"\n${headerBlock}`);
+        created.push(path.join(dir, "device.json"), path.join(dir, "driver.c"), path.join(dir, "header.h"));
     }
 
     return { created, device: spec.name, dir: dirName };

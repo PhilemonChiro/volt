@@ -19,13 +19,17 @@ const CONFIG_PATH = path.join(os.homedir(), ".volt", "registry-signer.json");
 
 function defaultConfig() {
     return {
-        gridUrl: "https://grid.sigma.co.zw",
+        gridUrl: "https://grid.voltembedded.com",
         adminSecret: "",
         keyPath: path.join(os.homedir(), ".volt", "secrets", "vlib-signing.pem"),
     };
 }
 function loadConfig() {
-    try { return { ...defaultConfig(), ...JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8")) }; }
+    try {
+        const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+        for (const k of Object.keys(saved)) if (saved[k] === "" || saved[k] == null) delete saved[k]; // blank = default
+        return { ...defaultConfig(), ...saved };
+    }
     catch (_) { return defaultConfig(); }
 }
 function saveConfig(cfg) {
