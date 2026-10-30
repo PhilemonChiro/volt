@@ -231,10 +231,6 @@ function showChipPicker(projectPath) {
                         <span class="chip-option-name">RP2040</span>
                         <span class="chip-option-desc">Dual-core ARM, 264KB RAM</span>
                     </button>
-                    <button class="chip-option" data-chip="stm32f103">
-                        <span class="chip-option-name">STM32 Blue Pill</span>
-                        <span class="chip-option-desc">ARM Cortex-M3, 20KB RAM</span>
-                    </button>
                 </div>
                 <div class="dialog-actions">
                     <button class="dialog-btn" id="chipPickerCancel">Cancel</button>

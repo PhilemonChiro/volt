@@ -3,7 +3,7 @@
 // DO NOT EDIT MANUALLY — regenerate from the compiler's METHOD_TYPES/METHOD_MAP
 
 export const SNIPPETS = [
-    { label: "chip", detail: "Declare target chip", insert: "chip ${1|esp32,esp8266,rp2040,stm32f103|}", "_kind": "Keyword" },
+    { label: "chip", detail: "Declare target chip", insert: "chip ${1|esp32,esp8266,rp2040|}", "_kind": "Keyword" },
     { label: "hardware", detail: "Hardware pin block", insert: "hardware {\n\tpin ${1:name}: ${2|Output,Input,PullUpInput,PullDownInput,Analog,PWM,Servo,DAC,Touch|} = ${3:pin_number}\n}", "_kind": "Keyword" },
     { label: "setup", detail: "Runs once at boot", insert: "setup {\n\t$0\n}", "_kind": "Keyword" },
     { label: "loop", detail: "Super-loop, runs forever", insert: "loop {\n\t$0\n}", "_kind": "Keyword" },
@@ -222,7 +222,6 @@ export const CHIPS = [
     { label: "esp32", detail: "ESP32 WROOM-32 — dual-core, WiFi+BT, 520KB" },
     { label: "esp8266", detail: "ESP8266 — single-core, WiFi, 80KB" },
     { label: "rp2040", detail: "RP2040 Pico — dual-core ARM, 264KB, no WiFi" },
-    { label: "stm32f103", detail: "STM32 Blue Pill — Cortex-M3, 20KB" },
 ];
 
 
@@ -258,7 +257,7 @@ export const CONSTANTS = [
 
 
 export const KEYWORD_DOCS = {
-    chip:     { sig: "chip <target>", desc: "Declare the target microcontroller for this program.", detail: "The chip declaration tells the compiler which hardware to validate against. Pin numbers, capabilities (WiFi, Bluetooth, touch), and memory limits are all checked at compile time.\n\nSupported chips: esp32, esp8266, rp2040, stm32f103", cat: "Declaration" },
+    chip:     { sig: "chip <target>", desc: "Declare the target microcontroller for this program.", detail: "The chip declaration tells the compiler which hardware to validate against. Pin numbers, capabilities (WiFi, Bluetooth, touch), and memory limits are all checked at compile time.\n\nSupported chips: esp32, esp8266, rp2040", cat: "Declaration" },
     hardware: { sig: "hardware { ... }", desc: "Define all physical pin connections.", detail: "The hardware block declares every pin and device your project uses. The compiler validates pin numbers against the chip datasheet, checks for conflicts (duplicate pins), and warns about strapping pins or other hardware gotchas.", cat: "Declaration" },
     setup:    { sig: "setup { ... }", desc: "Runs once at boot before tasks start.", detail: "Use setup for initialization: WiFi/MQTT connections, initial pin states, configuration loading. After setup completes, all declared tasks auto-start.", cat: "Declaration" },
     loop:     { sig: "loop { ... }", desc: "Super-loop — runs forever.", detail: "Alternative to tasks for simple programs. Cannot be used with `task` declarations. Code runs in an infinite loop, use `sleep()` for timing.", cat: "Declaration" },

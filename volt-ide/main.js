@@ -301,10 +301,10 @@ function createProject(name, chip, template, source) {
     fs.mkdirSync(dir, { recursive: true });
     fs.mkdirSync(path.join(dir, "build"), { recursive: true });
 
-    const led = chip === "rp2040" ? "GP25" : chip === "stm32f103" ? "PC13" : "2";
+    const led = chip === "rp2040" ? "GP25" : "2";
     const mainVolt = template === "empty" ? `// ${name}\n\nhardware {\n    pin led = ${led}\n}\n`
         : template === "iot-sensor" ? `hardware {\n    pin led = 2\n    pin sensor: Analog = 36\n}\n\nsetup {\n    wifi.connect("MyNetwork", "password") or retry(10)\n    mqtt.connect("mqtt://broker.local") or retry(5)\n}\n\nevery 500ms { led.toggle() }\n\nevery 5s when wifi.is_connected() {\n    mqtt.send_int("data/sensor", sensor.read())\n}\n`
-        : template === "door-lock" ? `hardware {\n    pin led = 2\n    pin relay = 4\n    pin button: PullUpInput = 15\n    pin buzzer: PWM = 18\n}\n\nenum DoorState { locked, unlocked, alert }\nvar door: DoorState = DoorState.locked\n\nmachine door_lock {\n    state locked {\n        enter { relay.off(); led.off() }\n        after 1s -> locked\n    }\n    state unlocked {\n        enter { relay.on(); led.on() }\n        after 30s -> locked\n    }\n    state alert {\n        enter { buzzer.beep_alarm() }\n        after 60s -> locked\n    }\n}\n\nevery 100ms {\n    if button.read() == 0 {\n        door_lock.send(button_press)\n    }\n}\n`
+        : template === "door-lock" ? `hardware {\n    pin relay: Output = 4\n    pin button: PullUpInput = 23\n    pin buzzer: PWM = 18\n}\n\nvar request: bool = false\n\nvar failures: int = 0\n\nevery 50ms {\n    if button.is_pressed() {\n        request = true\n    }\n}\n\nmachine door {\n    initial state locked {\n        enter { relay.off() }\n        on request [failures < 3] -> unlocked\n        on failures >= 3 -> alarm\n    }\n\n    state unlocked {\n        enter { relay.on() }\n        exit { log("door", "relocking") }\n        after 10s -> locked\n    }\n\n    state alarm {\n        enter { buzzer.beep_alarm() }\n        after 30s -> locked { failures = 0 }\n    }\n}\n`
         : `hardware {\n    pin led = ${led}\n}\n\nevery 500ms {\n    led.toggle()\n}\n`;  // blink (default)
 
     fs.writeFileSync(path.join(dir, "main.volt"), typeof source === "string" && source.trim() ? source : mainVolt);

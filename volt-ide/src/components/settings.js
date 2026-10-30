@@ -208,7 +208,6 @@ export async function show() {
                             <option value="esp32">ESP32</option>
                             <option value="esp8266">ESP8266</option>
                             <option value="rp2040">RP2040 / Pico</option>
-                            <option value="stm32f103">STM32 Blue Pill</option>
                         </select>
                     </div>
                 </div>

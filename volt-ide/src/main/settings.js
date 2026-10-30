@@ -56,7 +56,6 @@ const SCHEMA = {
                                   {value: "esp32",     label: "ESP32"},
                                   {value: "esp8266",   label: "ESP8266"},
                                   {value: "rp2040",    label: "RP2040 / Pico"},
-                                  {value: "stm32f103", label: "STM32 Blue Pill"},
                               ],
                               label: "Default chip for new projects" },
             verboseBuild:   { type: "bool",   default: false,

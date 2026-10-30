@@ -7,7 +7,6 @@ const BOARDS = [
     { id: "esp32", label: "ESP32", desc: "WiFi + BLE, 520KB RAM" },
     { id: "rp2040", label: "RP2040 Pico", desc: "Dual-core ARM, 264KB" },
     { id: "esp8266", label: "ESP8266", desc: "WiFi, 80KB RAM" },
-    { id: "stm32f103", label: "STM32 Blue Pill", desc: "Cortex-M3, 20KB" },
 ];
 
 const TEMPLATES = [

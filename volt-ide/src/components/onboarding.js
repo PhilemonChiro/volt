@@ -10,7 +10,6 @@ const CHIPS = [
     { id: "esp32",    label: "ESP32",       desc: "WiFi + BLE",          ram: "520KB", flash: "4MB" },
     { id: "rp2040",   label: "RP2040 Pico", desc: "Dual-core ARM",       ram: "264KB", flash: "2MB" },
     { id: "esp8266",  label: "ESP8266",     desc: "WiFi only",           ram: "80KB",  flash: "4MB" },
-    { id: "stm32f103",label: "STM32 Blue Pill", desc: "Cortex-M3",       ram: "20KB",  flash: "64KB" },
 ];
 
 const TEMPLATES = [
