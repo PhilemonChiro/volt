@@ -379,4 +379,12 @@ Works on Linux, macOS, and Windows.
 
 ## License
 
-MIT
+Volt is dual-licensed.
+
+- The IDE and the rest of this repository: [GNU AGPL v3](LICENSE).
+- The runtime framework ([`framework/`](framework/LICENSE)) and the device drivers ([`devices/`](devices/LICENSE)):
+  [GNU GPL v3](framework/LICENSE). These are compiled into your firmware, so firmware you distribute is covered by the
+  GPL too.
+- A commercial licence is available for closed-source products: contact pchiro29@gmail.com.
+
+Contributions are made under the [Contributor License Agreement](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md).
