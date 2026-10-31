@@ -8,8 +8,8 @@ let activePanel = null;
 let lastAST = null;
 
 export function init() {
-    const ids = ["toggleHardware", "toggleOutline", "toggleLibrary", "toggleHistory"];
-    const panels = ["hardware", "outline", "library", "history"];
+    const ids = ["toggleHardware", "toggleOutline", "toggleLibrary", "toggleHistory", "toggleAssistant"];
+    const panels = ["hardware", "outline", "library", "history", "assistant"];
 
     ids.forEach((id, i) => {
         const btn = document.getElementById(id);
@@ -99,12 +99,12 @@ export function open(panel) {
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    const btnMap = { hardware: "toggleHardware", outline: "toggleOutline", library: "toggleLibrary", history: "toggleHistory" };
+    const btnMap = { hardware: "toggleHardware", outline: "toggleOutline", library: "toggleLibrary", history: "toggleHistory", assistant: "toggleAssistant" };
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
     // Swap visible body — fade-in via .is-active class (CSS keyframe)
-    ["panelHardware", "panelOutline", "panelLibrary", "panelHistory"].forEach(id => {
+    ["panelHardware", "panelOutline", "panelLibrary", "panelHistory", "panelAssistant"].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
@@ -113,6 +113,7 @@ export function open(panel) {
         outline:  "panelOutline",
         library:  "panelLibrary",
         history: "panelHistory",
+        assistant: "panelAssistant",
     };
     const body = document.getElementById(bodyMap[panel]);
     if (body) {
@@ -122,11 +123,13 @@ export function open(panel) {
     }
 
     // Title
-    const titles = { hardware: "Hardware", outline: "Outline", library: "Library", history: "History" };
+    const titles = { hardware: "Hardware", outline: "Outline", library: "Library", history: "History", assistant: "Assistant" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
-    if (panel === "history") {
+    if (panel === "assistant") {
+        import("./assistant-panel.js").then(m => m.renderInto(body));
+    } else if (panel === "history") {
         import("./history.js").then(m => m.renderInto(body));
     } else if (panel === "library") {
         // Library is data-driven by the device catalog, not the editor AST
@@ -140,6 +143,11 @@ export function open(panel) {
     }
 
     relayoutEditorThroughTransition();
+}
+
+/** refresh(panel) — redraw panel if it is the open one (e.g. the project changed). */
+export function refresh(panel) {
+    if (activePanel === panel) open(panel);
 }
 
 export function close() {

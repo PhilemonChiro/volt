@@ -5842,3 +5842,42 @@ body.lvd-open .vlib2-dock, body.lvd-open .overlay { z-index: 9100 !important; }
 .lv-ex-code { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 
 .ai-mini + .ai-mini { margin-left: 6px; }
+
+/* ---- Assistant panel (components/assistant-panel.js) ---- */
+.side-panel-chat { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.as-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.as-bar { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-2); border-bottom: 1px solid var(--border); }
+.as-model, .as-new { background: var(--bg-2); color: var(--t1); border: 1px solid var(--border); border-radius: var(--r-1); font: inherit; padding: 2px var(--s-2); }
+.as-new { margin-left: auto; cursor: pointer; }
+.as-new:hover { background: var(--bg-3); }
+.as-plan { color: var(--t3); font-size: var(--fs-11); }
+.as-log { flex: 1; overflow-y: auto; padding: var(--s-2); display: flex; flex-direction: column; gap: var(--s-2); }
+.as-msg { line-height: var(--lh-base); word-wrap: break-word; }
+.as-user { align-self: flex-end; max-width: 88%; background: var(--bg-3); padding: var(--s-1) var(--s-3); border-radius: var(--r-3); }
+.as-claude code, .as-q code { font-family: var(--mono); background: var(--bg-2); padding: 0 3px; border-radius: 3px; }
+.as-claude.is-live::after { content: "▍"; color: var(--t3); animation: as-blink 1s steps(1) infinite; }
+@keyframes as-blink { 50% { opacity: 0; } }
+.as-code, .as-step pre, .as-approve pre, .as-setup pre { font-family: var(--mono); font-size: var(--fs-11); background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--r-1); padding: var(--s-2); overflow-x: auto; white-space: pre-wrap; margin: var(--s-1) 0; }
+.as-error { color: var(--err); }
+.as-dim { color: var(--t3); font-size: var(--fs-11); }
+.as-step { color: var(--t2); font-size: var(--fs-11); }
+.as-step summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+.as-step summary::-webkit-details-marker { display: none; }
+.as-step pre:empty { display: none; }
+.as-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--t3); flex: none; }
+.as-step.is-running .as-dot { background: var(--warn); animation: as-blink 1s steps(1) infinite; }
+.as-step.is-ok .as-dot { background: var(--ok); }
+.as-step.is-fail .as-dot { background: var(--err); }
+.as-approve { border: 1px solid var(--warn); border-radius: var(--r-2); padding: var(--s-2); background: var(--bg-2); }
+.as-approve pre.as-content { max-height: 240px; overflow-y: auto; }
+.as-approve.is-allowed { border-color: var(--border); }
+.as-approve.is-denied { border-color: var(--border); opacity: 0.7; }
+.as-actions { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
+.as-actions button, .as-send, .as-retry { font: inherit; border-radius: var(--r-1); padding: 3px var(--s-3); cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg-3); color: var(--t1); }
+.as-allow, .as-send { background: var(--volt, var(--ok)); color: var(--bg-0); border-color: transparent; font-weight: 600; }
+.as-send.is-stop { background: var(--err); color: var(--t1); }
+.as-compose { display: flex; gap: var(--s-2); padding: var(--s-2); border-top: 1px solid var(--border); align-items: flex-end; }
+.as-compose textarea { flex: 1; resize: none; background: var(--bg-2); color: var(--t1); border: 1px solid var(--border); border-radius: var(--r-2); padding: var(--s-2); font: inherit; }
+.as-compose textarea:focus { outline: none; border-color: var(--border-strong); }
+.as-empty, .as-setup { padding: var(--s-3); color: var(--t2); line-height: var(--lh-base); }
+.as-setup h4 { margin: 0 0 var(--s-2); color: var(--t1); }

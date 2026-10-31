@@ -48,6 +48,16 @@ const SCHEMA = {
                        label: "Grid URL", hint: "Base URL of the Volt library registry (Grid) that Fuse installs signed Cells from." },
         },
     },
+    assistant: {
+        label: "Assistant",
+        items: {
+            model: { type: "enum", default: "sonnet",
+                     options: [{value: "sonnet", label: "Sonnet (faster, uses less of your plan)"}, {value: "opus", label: "Opus"}],
+                     label: "Model", hint: "The model Claude Code uses in the Assistant panel." },
+            claudePath: { type: "path", default: "",
+                          label: "Claude Code path", hint: "Leave empty to find `claude` automatically." },
+        },
+    },
     build: {
         label: "Build & Toolchain",
         items: {

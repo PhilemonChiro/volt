@@ -10,14 +10,10 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { ipcMain, dialog } = require("electron");
-const inbox = require("./inbox");
 
 const INFO_FILE = path.join(os.homedir(), ".volt", "ide.json");
 const SERIAL_MAX = 2000;
 const MINUTE = 60_000;
-
-// A wake hook that hasn't checked in for this long no longer gets questions addressed to its session.
-const LEASE_MS = 90_000;
 
 // Renderer methods and how long each may take.
 const RENDERER_TIMEOUTS = { build: 20 * MINUTE, run: 20 * MINUTE, open: MINUTE, walkthrough: 31 * MINUTE, ask: 31 * MINUTE };
@@ -107,37 +103,8 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
         logger.log("info", "agent", disconnected ? "agent disconnected by the user" : "agent reconnected by the user");
     });
 
-    // ---- questions about selected code (inbox.js): the editor posts over IPC,
-    // the agent reads over /rpc (`volt inbox-hook` wakes Claude Code with them) ----
-    async function openProject() {
-        const st = await callRenderer("status");
-        if (!st.project) throw new Error("No project is open in the Volt IDE.");
-        return st.project;
-    }
-    const waiting = new Map(); // session → {client, seen}: Claude Code sessions whose wake hook is listening
-    let workingSession = null;  // the session whose volt mcp last did real work in the IDE
-    const listening = (sid) => { const w = waiting.get(sid); return !!w && Date.now() - w.seen < LEASE_MS; };
-    // accept decides which questions a reader takes: one addressed to a session
-    // goes to that session while it is listening (else to any session of the
-    // same app); one without a session goes to its app.
-    const acceptFor = (client, session) => (m) => {
-        if (m.session && listening(m.session)) return m.session === session;
-        return !m.to || !client || inbox.family(m.to) === inbox.family(client);
-    };
-
     const methods = {
         ...(extraMethods || {}),
-        // The wake hook runs in every Claude Code session, so the first session
-        // holds the chat while its waiter keeps polling (lease); MCP tools carry
-        // no session and share it.
-        // Each Claude Code session's wake hook checks in before it waits.
-        "agent.attach": async ({ client, session } = {}) => {
-            if (session) waiting.set(String(session), { client: String(client || "agent"), seen: Date.now() });
-            return { ok: true };
-        },
-        "msg.list": async ({ since } = {}) => inbox.list(await openProject(), Number(since) || 0),
-        "msg.read": async ({ since, fresh, client, session } = {}, sid) => inbox.read(await openProject(), Number(since) || 0, !!fresh, acceptFor(client, session || sid)),
-        "msg.wait": async ({ since, timeout_s, fresh, client, session } = {}, sid) => inbox.wait(await openProject(), Number(since) || 0, timeout_s, !!fresh, acceptFor(client, session || sid)),
         hello: async () => ({ version }),
         agent_hello: async () => ({ version }), // `volt mcp` connected; the activity event names the app
 
@@ -236,13 +203,8 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
             }
             const { method, params } = call;
             const win = getWin();
-            // The wake hook's polling (agent.attach, msg.*) runs in every Claude
-            // Code session; it isn't the user's app working, so it doesn't count.
-            if (!/^(agent\.attach|msg\.)/.test(method || "")) {
-                if (req.headers["x-volt-session"]) workingSession = String(req.headers["x-volt-session"]);
-                if (win) win.webContents.send("agent:activity", { method, client: req.headers["x-volt-client"] || null });
-                if (onActivity) onActivity(req.headers["x-volt-client"] || null);
-            }
+            if (win) win.webContents.send("agent:activity", { method, client: req.headers["x-volt-client"] || null });
+            if (onActivity) onActivity(req.headers["x-volt-client"] || null);
             try {
                 const result = methods[method]
                     ? await methods[method](params || {}, req.headers["x-volt-session"] || null)

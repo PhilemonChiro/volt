@@ -1136,6 +1136,18 @@ function send(channel, data) {
     }
 }
 
+// ---- Assistant panel: the user's own Claude Code, one process per project ----
+const claudeHost = require("./src/main/claude-host");
+claudeHost.init({ send, bin: () => volt.bin(), setting: (k) => settings.get(k) });
+ipcMain.handle("assistant:status", () => claudeHost.status());
+ipcMain.handle("assistant:history", (_, project) => claudeHost.history(project));
+ipcMain.handle("assistant:send", (_, project, text) => claudeHost.send(project, text));
+ipcMain.handle("assistant:decide", (_, project, id, allow) => claudeHost.decide(project, id, allow));
+ipcMain.handle("assistant:stop", (_, project) => claudeHost.stop(project));
+ipcMain.handle("assistant:new", (_, project) => claudeHost.newChat(project));
+ipcMain.handle("assistant:close", (_, project) => claudeHost.close(project));
+app.on("will-quit", () => claudeHost.closeAll());
+
 // The serial port is held by at most one volt child: `volt monitor`, or the
 // monitor phase of `volt run`.
 let monitorProc = null;   // { child, done, port }

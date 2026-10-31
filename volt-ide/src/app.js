@@ -26,6 +26,7 @@ import * as library from "./components/library.js";
 import { startTour } from "./components/guided-tour.js";
 import { readFile, saveFile } from "./services/projects.js";
 import * as agent from "./agent.js";
+import * as assistantPanel from "./components/assistant-panel.js";
 
 // Hydrate the settings cache as early as possible so other components can
 // read get() synchronously by the time they need it.
@@ -164,6 +165,7 @@ function setFileModified(modified) {
 // ---- Actions ----
 async function loadProject(projectPath, file) {
     currentProject = projectPath;
+    sidePanel.refresh("assistant");
     const voltFile = file || joinPath(projectPath, "main.volt");
     currentFile = voltFile;
     // Drop the previous project's diagrams so a stale one never lingers.
@@ -383,6 +385,7 @@ async function closeProject() {
     );
     if (!ok) return;
     currentProject = null;
+    sidePanel.refresh("assistant");
     currentFile = null;
     diagramsView.reset();
     showWelcome();
@@ -701,6 +704,7 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "1") { e.preventDefault(); sidePanel.toggle("hardware"); }
     if (e.ctrlKey && e.key === "2") { e.preventDefault(); sidePanel.toggle("outline"); }
     if (e.ctrlKey && e.key === "3") { e.preventDefault(); sidePanel.toggle("library"); }
+    if (e.ctrlKey && e.key === "4") { e.preventDefault(); sidePanel.toggle("assistant"); }
     if (e.ctrlKey && e.key === "5") { e.preventDefault(); diagramsView.showView("board"); }
     // Add a part from anywhere: Board tab → its card; Code view → Hardware panel.
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
@@ -874,6 +878,8 @@ window.volt.onBuild("progress", ({ stage, message, percent, size }) => {
         statusBar.setBuild(message);
     }
 });
+
+assistantPanel.init({ getProject: () => currentProject });
 
 // AI agents connected through `volt mcp` work in this window (src/agent.js).
 agent.init({

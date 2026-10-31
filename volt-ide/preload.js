@@ -166,5 +166,15 @@ contextBridge.exposeInMainWorld("volt", {
     agentSetConnected: (on) => ipcRenderer.invoke("agent:setConnected", on),
     agentVoltPath: () => ipcRenderer.invoke("agent:voltPath"),
     agentAI: (...args) => ipcRenderer.invoke("agent:ai", args),
-    // Ask the connected AI app about selected code (src/main/inbox.js)
+    // Assistant panel: the user's own Claude Code (src/main/claude-host.js)
+    assistant: {
+        status:  () => ipcRenderer.invoke("assistant:status"),
+        history: (project) => ipcRenderer.invoke("assistant:history", project),
+        send:    (project, text) => ipcRenderer.invoke("assistant:send", project, text),
+        decide:  (project, id, allow) => ipcRenderer.invoke("assistant:decide", project, id, allow),
+        stop:    (project) => ipcRenderer.invoke("assistant:stop", project),
+        newChat: (project) => ipcRenderer.invoke("assistant:new", project),
+        close:   (project) => ipcRenderer.invoke("assistant:close", project),
+        onEvent: (callback) => ipcRenderer.on("assistant:event", (_, data) => callback(data)),
+    },
 });
