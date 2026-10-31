@@ -6,19 +6,14 @@
 #include "volt/task.h"
 
 #define MFRC522_COMMAND_REG     0x01
-#define MFRC522_COMIEN_REG      0x02
-#define MFRC522_DIVIEN_REG      0x03
 #define MFRC522_COMIRQ_REG      0x04
 #define MFRC522_ERROR_REG       0x06
 #define MFRC522_FIFO_DATA_REG   0x09
 #define MFRC522_FIFO_LEVEL_REG  0x0A
-#define MFRC522_CONTROL_REG     0x0C
 #define MFRC522_BIT_FRAMING_REG 0x0D
 #define MFRC522_MODE_REG        0x11
 #define MFRC522_TX_CONTROL_REG  0x14
 #define MFRC522_TX_ASK_REG      0x15
-#define MFRC522_CRC_RESULT_H    0x21
-#define MFRC522_CRC_RESULT_L    0x22
 #define MFRC522_TMODE_REG       0x2A
 #define MFRC522_TPRESCALER_REG  0x2B
 #define MFRC522_TRELOAD_H       0x2C
@@ -41,6 +36,42 @@ static void mfrc522_write_reg(mfrc522_t *dev, uint8_t reg, uint8_t val)
     volt_spi_cs_select(dev->cs_pin);
     volt_spi_write(dev->bus_id, tx, 2);
     volt_spi_cs_deselect(dev->cs_pin);
+}
+
+/* Send tx_len bytes to the card and read the reply into rx.
+ * last_bits: number of valid bits in the last tx byte (0 = all 8).
+ * Returns the number of reply bytes, or -1 on timeout or error. */
+static int mfrc522_transceive(mfrc522_t *dev, const uint8_t *tx, uint8_t tx_len,
+                              uint8_t *rx, uint8_t rx_max, uint8_t last_bits)
+{
+    mfrc522_write_reg(dev, MFRC522_COMMAND_REG, 0x00);      // idle
+    mfrc522_write_reg(dev, MFRC522_COMIRQ_REG, 0x7F);       // clear IRQ flags
+    mfrc522_write_reg(dev, MFRC522_FIFO_LEVEL_REG, 0x80);   // flush FIFO
+    for (uint8_t i = 0; i < tx_len; i++) {
+        mfrc522_write_reg(dev, MFRC522_FIFO_DATA_REG, tx[i]);
+    }
+    mfrc522_write_reg(dev, MFRC522_BIT_FRAMING_REG, last_bits & 0x07);
+    mfrc522_write_reg(dev, MFRC522_COMMAND_REG, 0x0C);      // transceive
+    mfrc522_write_reg(dev, MFRC522_BIT_FRAMING_REG, 0x80 | (last_bits & 0x07)); // start send
+
+    int done = 0;
+    for (int t = 0; t < 30; t++) {
+        uint8_t irq = mfrc522_read_reg(dev, MFRC522_COMIRQ_REG);
+        if (irq & 0x30) { done = 1; break; }   // RxIRq or IdleIRq
+        if (irq & 0x01) return -1;             // timer expired: no card answered
+        volt_delay_ms(1);
+    }
+    if (!done) return -1;
+
+    uint8_t err = mfrc522_read_reg(dev, MFRC522_ERROR_REG);
+    if (err & 0x1B) return -1;                 // buffer overflow, collision, parity, protocol
+
+    int n = mfrc522_read_reg(dev, MFRC522_FIFO_LEVEL_REG) & 0x7F;
+    if (n > rx_max) n = rx_max;
+    for (int i = 0; i < n; i++) {
+        rx[i] = mfrc522_read_reg(dev, MFRC522_FIFO_DATA_REG);
+    }
+    return n;
 }
 
 volt_error_t mfrc522_init(mfrc522_t *dev, uint8_t bus_id, uint8_t cs_pin)
@@ -75,42 +106,35 @@ volt_error_t mfrc522_init(mfrc522_t *dev, uint8_t bus_id, uint8_t cs_pin)
 
 int mfrc522_is_card_present(mfrc522_t *dev)
 {
-    // Send REQA command
-    mfrc522_write_reg(dev, MFRC522_BIT_FRAMING_REG, 0x07);
-    uint8_t cmd = 0x26;  // REQA
-    mfrc522_write_reg(dev, MFRC522_FIFO_LEVEL_REG, 0x80); // flush FIFO
-    mfrc522_write_reg(dev, MFRC522_FIFO_DATA_REG, cmd);
-    mfrc522_write_reg(dev, MFRC522_COMMAND_REG, 0x0C); // Transceive
-    mfrc522_write_reg(dev, MFRC522_BIT_FRAMING_REG, 0x87); // start send
-
-    volt_delay_ms(10);
-
-    uint8_t err = mfrc522_read_reg(dev, MFRC522_ERROR_REG);
-    uint8_t fifo = mfrc522_read_reg(dev, MFRC522_FIFO_LEVEL_REG);
-
-    return (err == 0 && fifo > 0) ? 1 : 0;
+    // WUPA (0x52, 7 bits) wakes cards in any state, so a card that stays on
+    // the reader keeps being detected.
+    uint8_t cmd = 0x52;
+    uint8_t atqa[2] = {0};
+    return (mfrc522_transceive(dev, &cmd, 1, atqa, 2, 7) == 2) ? 1 : 0;
 }
 
 int mfrc522_read_uid(mfrc522_t *dev)
 {
+    dev->uid_len = 0;
     if (!mfrc522_is_card_present(dev)) return 0;
 
-    // Anti-collision
-    mfrc522_write_reg(dev, MFRC522_BIT_FRAMING_REG, 0x00);
-    uint8_t cmd[2] = { 0x93, 0x20 };  // SELECT, NVB=2
-    mfrc522_write_reg(dev, MFRC522_FIFO_LEVEL_REG, 0x80);
-    mfrc522_write_reg(dev, MFRC522_FIFO_DATA_REG, cmd[0]);
-    mfrc522_write_reg(dev, MFRC522_FIFO_DATA_REG, cmd[1]);
-    mfrc522_write_reg(dev, MFRC522_COMMAND_REG, 0x0C);
+    // Anti-collision, cascade level 1: reply is 4 UID bytes + BCC check byte
+    uint8_t cmd[2] = { 0x93, 0x20 };
+    uint8_t rx[5] = {0};
+    if (mfrc522_transceive(dev, cmd, 2, rx, 5, 0) != 5) return 0;
+    if ((rx[0] ^ rx[1] ^ rx[2] ^ rx[3]) != rx[4]) return 0;   // BCC mismatch
+    if (rx[0] == 0x88) return 0;   // 7/10-byte UID (cascade tag): not supported
 
-    volt_delay_ms(10);
+    for (int i = 0; i < 4; i++) dev->uid[i] = rx[i];
+    dev->uid_len = 4;
+    return 4;
+}
 
-    uint8_t fifo_len = mfrc522_read_reg(dev, MFRC522_FIFO_LEVEL_REG);
-    if (fifo_len < 4) return 0;
-
-    dev->uid_len = (fifo_len > 10) ? 10 : fifo_len;
-    for (int i = 0; i < dev->uid_len; i++) {
-        dev->uid[i] = mfrc522_read_reg(dev, MFRC522_FIFO_DATA_REG);
-    }
-    return dev->uid_len;
+int mfrc522_uid_value(mfrc522_t *dev)
+{
+    // The 4 UID bytes of the last read_uid() as one 32-bit number (0 if none).
+    if (dev->uid_len != 4) return 0;
+    uint32_t v = ((uint32_t)dev->uid[0] << 24) | ((uint32_t)dev->uid[1] << 16) |
+                 ((uint32_t)dev->uid[2] << 8)  |  (uint32_t)dev->uid[3];
+    return (int)v;
 }

@@ -122,6 +122,7 @@
     "voltage": "5V heater (~150 mA, ~800 mW)"
   },
   "tips": [
+    "The heater needs 1-3 min after each power-up before readings settle (they start high): ignore readings and don't alarm until it has warmed up.",
     "Curve constants for ppm(a, b) from the datasheet log-log graphs: MQ-2 LPG a=574.25 b=-2.222, smoke a=3616.1 b=-2.675; MQ-3 alcohol (mg/L) a=0.3934 b=-1.504; MQ-4 CH4 a=1012.7 b=-2.786; MQ-5 LPG a=80.897 b=-2.431; MQ-7 CO a=99.042 b=-1.518; MQ-8 H2 a=976.97 b=-0.688; MQ-9 CO a=599.65 b=-2.244; MQ-135 CO2 a=110.47 b=-2.862, NH3 a=102.2 b=-2.473.",
     "Clean-air Rs/R0 for calibrate(): MQ-2 9.83, MQ-3 60, MQ-4 4.4, MQ-5 6.5, MQ-7 27.5, MQ-8 70, MQ-9 9.6, MQ-135 3.6.",
     "Calibrate outdoors or in fresh air after warm-up, save r0() to storage, and restore it with set_r0() at boot.",

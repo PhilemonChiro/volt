@@ -1,0 +1,49 @@
+{
+  "name": "DS18B20",
+  "category": "sensor",
+  "interface": "gpio",
+  "pins": {"pin": {"dir": "io"}},
+  "default_address": "",
+  "description": "Waterproof-probe digital thermometer (1-Wire), one sensor per pin",
+  "c_prefix": "ds18b20",
+  "c_source": "driver.c",
+  "init_args": "{pin}",
+  "methods": {
+    "temperature": {
+      "returns": "float",
+      "params": [],
+      "description": "Temperature in °C, at most 2 s old. A failed read returns the last good value: call temperature() first, then check is_connected() before acting on the value"
+    },
+    "is_connected": {
+      "returns": "bool",
+      "params": [],
+      "description": "true if the last temperature() call got a valid answer (call it after temperature()); false if the sensor is missing, unplugged or the read was corrupt"
+    }
+  },
+  "manufacturer": "Analog Devices (Maxim)",
+  "datasheet": "https://www.analog.com/media/en/technical-documentation/data-sheets/DS18B20.pdf",
+  "specs": {
+    "voltage": "3.0V – 5.5V",
+    "current": "1.5 mA converting, 1 μA standby",
+    "temp": "−55°C to +125°C, ±0.5°C from −10°C to +85°C",
+    "resolution": "0.0625°C (12-bit)",
+    "sample_rate": "750 ms per conversion"
+  },
+  "wiring": {
+    "pins": [
+      {"label": "VDD", "type": "power", "note": "3.3V (red wire on probes)"},
+      {"label": "DQ", "type": "data", "note": "4.7kΩ pull-up to 3.3V (yellow wire on probes)"},
+      {"label": "GND", "type": "ground", "note": "Black wire on probes"}
+    ]
+  },
+  "tips": [
+    "Power VDD from 3.3V; parasite power (VDD tied to GND) is not supported.",
+    "The 4.7kΩ pull-up between DQ and 3.3V is required; long cables may need 2.2kΩ.",
+    "One sensor per pin: give each extra probe its own GPIO.",
+    "Reads 85°C right after power-up before its first conversion; the driver rejects that value."
+  ],
+  "alternatives": [
+    {"name": "DHT22", "note": "Adds humidity; not waterproof."},
+    {"name": "BME280", "note": "I²C, adds humidity and pressure; not for liquids."}
+  ]
+}
