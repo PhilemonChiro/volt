@@ -86,22 +86,8 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
         };
     }
 
-    let flashAllowed = false;   // asked once per IDE session (or until disconnect)
-    let disconnected = false;   // the user pressed Disconnect in the status bar
+    let flashAllowed = false;   // asked once per IDE session
     ipcMain.handle("agent:voltPath", () => require("./volt-cli").bin());
-    // `volt ai list|setup|restart … --json` (connect AI apps; see cli/cmd/volt/ai.go)
-    ipcMain.handle("agent:ai", (_e, args) => new Promise((resolve) => {
-        require("child_process").execFile(require("./volt-cli").bin(), ["ai", ...args, "--json"],
-            { timeout: 60_000 }, (err, stdout, stderr) => {
-                try { resolve(JSON.parse(stdout)); }
-                catch (_) { resolve({ ok: false, message: (stderr || (err && err.message) || "volt ai failed").trim() }); }
-            });
-    }));
-    ipcMain.handle("agent:setConnected", (_e, on) => {
-        disconnected = !on;
-        if (disconnected) flashAllowed = false;
-        logger.log("info", "agent", disconnected ? "agent disconnected by the user" : "agent reconnected by the user");
-    });
 
     const methods = {
         ...(extraMethods || {}),
@@ -195,15 +181,7 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
             let call;
             try { call = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
             catch (_) { return reply(400, { error: "bad JSON" }); }
-            if (disconnected) {
-            return reply(200, { error: "The user disconnected the AI agent in the Volt IDE. Ask them to press Reconnect (the AI button at the top right of the IDE) if they want you to continue." });
-        }
-        if (settings.get("agent.allowControl") === false) {
-                return reply(200, { error: "AI agent control is turned off in the Volt IDE (Settings → AI agents)." });
-            }
             const { method, params } = call;
-            const win = getWin();
-            if (win) win.webContents.send("agent:activity", { method, client: req.headers["x-volt-client"] || null });
             if (onActivity) onActivity(req.headers["x-volt-client"] || null);
             try {
                 const result = methods[method]

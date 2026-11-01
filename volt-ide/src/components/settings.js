@@ -9,7 +9,7 @@ import * as dialog from "./dialog.js";
 
 const api = window.volt;
 
-export async function show() {
+export async function show(category) {
     await settings.init();
 
     const old = document.getElementById("settingsOverlay");
@@ -29,7 +29,7 @@ export async function show() {
     // "advanced" schema items are surfaced in the custom Advanced pane below
     // (the __advanced nav item), so don't also render it as its own nav entry.
     const categories = Object.keys(schema).filter(c => c !== "advanced");
-    let activeCategory = categories[0] || "editor";
+    let activeCategory = categories.includes(category) ? category : categories[0] || "editor";
 
     function render() {
         overlay.innerHTML = `
@@ -87,6 +87,11 @@ export async function show() {
             </div>
         `;
         bindRows(pane);
+        if (group.custom && activeCategory === "assistant") {
+            const host = document.createElement("div");
+            pane.querySelector(".settings-rows").replaceWith(host);
+            import("./ai-settings.js").then(m => m.render(host)).catch(() => {});
+        }
     }
 
     function renderRow(key, def) {

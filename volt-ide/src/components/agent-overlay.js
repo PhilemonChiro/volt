@@ -77,7 +77,12 @@ export function resolveRange(a) {
         const hits = model.findMatches(String(a.find), from, false, true, null, false);
         const n = Math.max(1, a.occurrence || 1);
         if (hits.length < n) throw new Error(`"${a.find}" not found${a.line ? ` from line ${a.line}` : ""}${n > 1 ? ` (${n} times)` : ""}.`);
-        return hits[n - 1].range;
+        const start = hits[n - 1].range;
+        if (!a.end_find) return start;
+        const rest = new monaco.Range(start.startLineNumber, start.startColumn, last, model.getLineMaxColumn(last));
+        const end = model.findMatches(String(a.end_find), rest, false, true, null, false)[0];
+        if (!end) throw new Error(`"${a.end_find}" not found after "${a.find}".`);
+        return new monaco.Range(start.startLineNumber, start.startColumn, end.range.endLineNumber, end.range.endColumn);
     }
     const line = Number(a.line);
     if (!(line >= 1 && line <= last)) throw new Error(`line must be 1–${last}`);
@@ -117,9 +122,147 @@ function removeMark(m) {
     const e = monaco.editor.getEditors()[0];
     if (e) e.removeDecorations(m.decos);
     marks = marks.filter(x => x !== m);
+    if (focus && !marks.some(x => x.num)) endFocus();
+    else if (focus) renderHud();
 }
 
-export function clearPoints() {
+// ── focus: bring the marked code forward ───────────────────────────────────
+// Numbered marks, the rest of the program dimmed, and a small bar to step
+// through them (‹ 1 of 3 ›). Esc, Done or typing in the editor dismisses every note.
+
+let focus = null;          // { dim: [deco ids], at, hud, pulse }
+
+function codeMarks() { return marks.filter(m => m.num).sort((a, b) => a.num - b.num); }
+
+function markRange(m) {
+    const e = monaco.editor.getEditors()[0];
+    return e && e.getModel().getDecorationRange(m.decos[0]);
+}
+
+function startFocus() {
+    const e = ed();
+    const list = codeMarks();
+    if (!list.length) return;
+    endFocus();
+    const model = e.getModel(), last = model.getLineCount();
+    // Keep lit everything the notes talk about: the marked lines, and the
+    // whole block of any marked line that opens one (an every, if, state…).
+    let lo = Infinity, hi = 0;
+    for (const m of list) {
+        const r = markRange(m);
+        if (!r) continue;
+        lo = Math.min(lo, r.startLineNumber);
+        hi = Math.max(hi, r.endLineNumber, blockEnd(model, r.startLineNumber), blockEnd(model, r.endLineNumber));
+    }
+    if (!isFinite(lo)) return;
+    const dim = [];
+    if (lo > 1) dim.push({ range: new monaco.Range(1, 1, lo - 1, model.getLineMaxColumn(lo - 1)), options: { inlineClassName: "agent-dim-code" } });
+    if (hi < last) dim.push({ range: new monaco.Range(hi + 1, 1, last, model.getLineMaxColumn(last)), options: { inlineClassName: "agent-dim-code" } });
+    focus = { dim: e.deltaDecorations([], dim), at: 0, hud: null, pulse: [] };
+    renderHud();
+    goTo(0);
+}
+
+// The bar sits in the info bar's empty middle, centred over the editor, so it never covers code.
+function placeHud() {
+    if (!focus || !focus.hud) return;
+    const bar = document.getElementById("infoBar"), edEl = monaco.editor.getEditors()[0]?.getDomNode();
+    if (!bar || !edEl) return;
+    const b = bar.getBoundingClientRect(), e = edEl.getBoundingClientRect();
+    focus.hud.style.top = Math.round(b.top + b.height / 2) + "px";
+    focus.hud.style.left = Math.round(e.left + e.width / 2) + "px";
+    focus.hud.style.maxWidth = Math.max(260, Math.round(e.width * 0.62)) + "px";
+}
+window.addEventListener("resize", placeHud);
+
+// blockEnd: the line that closes a block opened on this line (else the line itself).
+function blockEnd(model, line) {
+    const last = model.getLineCount();
+    let depth = 0, opened = false;
+    for (let n = line; n <= last; n++) {
+        const text = model.getLineContent(n).replace(/"(?:[^"\\]|\\.)*"/g, "").replace(/\/\/.*$/, "");
+        for (const c of text) {
+            if (c === "{") { depth++; opened = true; }
+            else if (c === "}") depth--;
+        }
+        if (!opened) return line;
+        if (depth <= 0) return n; // "} else {" reopens on the same line, so it carries on
+    }
+    return line;
+}
+
+export function endFocus() {
+    if (!focus) return;
+    const e = monaco.editor.getEditors()[0];
+    if (e) { e.removeDecorations(focus.dim); e.removeDecorations(focus.pulse); }
+    focus.hud?.classList.add("is-leaving");
+    const hud = focus.hud;
+    setTimeout(() => hud?.remove(), 180);
+    focus = null;
+}
+
+function goTo(i) {
+    const list = codeMarks();
+    if (!focus || !list.length) return;
+    focus.at = (i + list.length) % list.length;
+    const r = markRange(list[focus.at]);
+    const e = monaco.editor.getEditors()[0];
+    if (!r || !e) return;
+    e.revealRangeInCenter(r, monaco.editor.ScrollType.Smooth);
+    e.removeDecorations(focus.pulse);
+    focus.pulse = e.deltaDecorations([], [{ range: new monaco.Range(r.startLineNumber, 1, r.endLineNumber, 1),
+        options: { isWholeLine: true, className: "agent-pulse" } }]);
+    const ids = focus.pulse;
+    setTimeout(() => { if (focus && focus.pulse === ids) { e.removeDecorations(ids); focus.pulse = []; } }, 1400);
+    renderHud();
+}
+
+/** focusLine(line) — focus the note covering this line; false if none. */
+export function focusLine(line) {
+    const m = codeMarks().find(x => { const r = markRange(x); return r && line >= r.startLineNumber && line <= r.endLineNumber; });
+    return m ? focusMark(m.num) : false;
+}
+
+/** focusMark(n) — jump to code mark number n (1-based); false if it's gone. */
+export function focusMark(n) {
+    if (!codeMarks().some(m => m.num === n)) return false;
+    if (!focus) startFocus();
+    goTo(codeMarks().findIndex(m => m.num === n));
+    return true;
+}
+
+function renderHud() {
+    if (!focus) return;
+    const list = codeMarks();
+    if (!list.length) return endFocus();
+    if (!focus.hud) {
+        focus.hud = document.createElement("div");
+        focus.hud.className = "agent-hud";
+        const host = document.body;
+        focus.hud.setAttribute("role", "toolbar");
+        focus.hud.setAttribute("aria-label", "Notes in the code");
+        host.appendChild(focus.hud);
+        focus.hud.addEventListener("click", (ev) => {
+            const b = ev.target.closest("button");
+            if (!b) return;
+            if (b.dataset.go === "prev") goTo(focus.at - 1);
+            else if (b.dataset.go === "next") goTo(focus.at + 1);
+            else if (b.dataset.go === "done") clearPoints();
+            else if (b.dataset.go === "clear") clearPoints();
+        });
+    }
+    placeHud();
+    const cur = list[Math.min(focus.at, list.length - 1)];
+    focus.hud.innerHTML = `<span class="agent-hud-spark" aria-hidden="true">✦</span>
+        <span class="agent-hud-num">${cur.num}</span><span class="agent-hud-note">${escH(ghost(cur.note || ""))}</span>
+        <span class="agent-hud-nav">${list.length > 1 ? `<button type="button" data-go="prev" aria-label="Previous note">‹</button><span class="agent-hud-pos">${focus.at + 1} of ${list.length}</span><button type="button" data-go="next" aria-label="Next note">›</button>` : ""}</span>
+        <button type="button" class="agent-hud-done" data-go="done" title="Dismiss the notes (Esc)">Done</button>
+        <button type="button" class="agent-hud-clear" data-go="clear" title="Remove all the notes from the code" aria-label="Clear notes">×</button>`;
+}
+
+export function clearPoints(byUser = true) {
+    endFocus();
+    if (byUser) document.dispatchEvent(new CustomEvent("volt:points-cleared"));
     [...marks].forEach(removeMark);
     uiMarks.forEach(u => { u.el.classList.remove("agent-ring"); u.card.remove(); });
     uiMarks = [];
@@ -129,6 +272,7 @@ function watchEdits(editor) {
     if (watching) return;
     watching = true;
     editor.onDidChangeModelContent(e => {
+        if (focus && !e.isFlush) { const ed2 = monaco.editor.getEditors()[0]; ed2?.removeDecorations(focus.dim); focus.dim = []; }
         // The user (or an edit) touched a marked span: the note no longer applies.
         for (const m of [...marks]) {
             const r = editor.getModel().getDecorationRange(m.decos[0]);
@@ -136,6 +280,13 @@ function watchEdits(editor) {
         }
     });
     editor.onDidChangeModel(() => { marks = []; });
+    // The user starts typing: the notes have done their job, dismiss them all.
+    editor.onKeyDown(ev => {
+        const k = ev.browserEvent;
+        if (k.metaKey || k.ctrlKey || k.altKey) return;
+        const edits = k.key.length === 1 || ["Backspace", "Delete", "Enter", "Tab"].includes(k.key);
+        if (edits && (marks.length || uiMarks.length)) clearPoints();
+    });
     // A note's × (its own injected span) dismisses it.
     editor.onMouseDown(ev => {
         const t = ev.event.browserEvent.target;
@@ -189,7 +340,7 @@ const RULER = { info: "#5B9FD0", change: "#3FB98A", warning: "#D9A440", question
 // point replaces (or, with keep, adds to) the agent's marks. Code marks are
 // a soft underline, a ✦ in the gutter and the note as dim text after the line.
 export async function point({ marks: list, keep }) {
-    if (!keep) clearPoints();
+    if (!keep) clearPoints(false);
     list = Array.isArray(list) ? list : [];
     const placed = [];
     let first = null;
@@ -227,23 +378,38 @@ export async function point({ marks: list, keep }) {
         watchEdits(editor);
         const range = resolveRange(m);
         const id = ++markSeq;
-        const endCol = editor.getModel().getLineMaxColumn(range.endLineNumber);
+        const num = marks.filter(x => x.num).length + 1;
+        // A note sits after the first line of what it describes; a block is
+        // shown by its tint and gutter bar, not by underlining every line.
+        const multi = range.endLineNumber > range.startLineNumber;
+        const endCol = editor.getModel().getLineMaxColumn(range.startLineNumber);
         const decos = [{
             range,
             options: {
-                inlineClassName: `agent-range agent-${kind}`,
+                inlineClassName: multi ? undefined : `agent-range agent-${kind}`,
                 stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
                 hoverMessage: m.note ? { value: `✦ **AI** · ${m.note}\n\n*Click the note to dismiss it.*` } : undefined,
                 overviewRuler: { color: RULER[kind], position: monaco.editor.OverviewRulerLane.Center },
             },
         }];
         const life = LIFETIMES.includes(m.persist) ? m.persist : "dismissable";
-        const at = new monaco.Range(range.endLineNumber, endCol, range.endLineNumber, endCol);
+        const at = new monaco.Range(range.startLineNumber, endCol, range.startLineNumber, endCol);
+        const stagger = ` agent-d${Math.min(num, 8)}`;
+        decos.push({ range: new monaco.Range(range.startLineNumber, 1, range.endLineNumber, 1),
+            options: { isWholeLine: true, className: `agent-line agent-${kind}${multi ? " agent-block" : ""}${stagger}`, linesDecorationsClassName: `agent-gut agent-${kind}` } });
         if (m.note) decos.push({
             range: at,
             options: {
                 showIfCollapsed: true,
-                after: { content: "✦ " + ghost(m.note), inlineClassName: `agent-ghost agent-${kind}${life === "timeout" ? " agent-fading" : ""}`,
+                after: { content: String(num), inlineClassName: `agent-num agent-${kind}${stagger}`,
+                    cursorStops: monaco.editor.InjectedTextCursorStops.None },
+            },
+        });
+        if (m.note) decos.push({
+            range: at,
+            options: {
+                showIfCollapsed: true,
+                after: { content: ghost(m.note), inlineClassName: `agent-ghost agent-${kind}${stagger}${life === "timeout" ? " agent-fading" : ""}`,
                     cursorStops: monaco.editor.InjectedTextCursorStops.None },
                 hoverMessage: { value: `✦ **AI** · ${m.note}` },
             },
@@ -266,7 +432,7 @@ export async function point({ marks: list, keep }) {
                 hoverMessage: { value: "Dismiss this AI note" },
             },
         });
-        const mark = { id, decos: editor.deltaDecorations([], decos), kind, life, actions };
+        const mark = { id, decos: editor.deltaDecorations([], decos), kind, life, actions, num: m.note ? num : 0, note: m.note || "" };
         marks.push(mark);
         if (life === "timeout") {
             const secs = Math.min(600, Math.max(2, Number(m.seconds) || 8));
@@ -276,7 +442,8 @@ export async function point({ marks: list, keep }) {
         placed.push({ id, line: range.startLineNumber, end_line: range.endLineNumber,
             col: range.startColumn, end_col: range.endColumn });
     }
-    if (first) ed().revealRangeInCenterIfOutsideViewport(first);
+    if (codeMarks().length) startFocus();
+    else if (first) ed().revealRangeInCenterIfOutsideViewport(first);
     return { marks: placed };
 }
 
@@ -530,3 +697,9 @@ export async function select(a) {
     return { line: r.startLineNumber, col: r.startColumn, end_line: r.endLineNumber, end_col: r.endColumn };
 }
 
+
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && (focus || marks.length || uiMarks.length)
+        && !document.querySelector(".dialog-overlay, .agent-float.agent-card")) { clearPoints(); }
+}, true);
+function escH(t) { return String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }

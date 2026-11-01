@@ -351,12 +351,48 @@ export function applyAgentEdit({ text, edits }) {
     return first;
 }
 
+// restoreText replaces the whole program as one step the user can undo
+// (Cmd+Z), e.g. when the Assistant panel undoes a turn.
+// Gutter marks for the last assistant turn: Claude's lines vs the user's own.
+let changeDecos = [];
+export function setChangeMarks(marks) {
+    if (!editor) return;
+    const max = editor.getModel().getLineCount();
+    changeDecos = editor.deltaDecorations(changeDecos, (marks || []).filter(m => m.line <= max).map(m => ({
+        range: new monaco.Range(m.line, 1, m.line, 1),
+        options: { isWholeLine: true, linesDecorationsClassName: m.who === "you" ? "as-gut-you" : "as-gut-claude",
+            hoverMessage: { value: m.who === "you" ? "Your edit since Claude's last turn" : "Changed by Claude in its last turn" } },
+    })));
+}
+
+export function restoreText(text) {
+    if (!editor) throw new Error("No file is open in the editor.");
+    const model = editor.getModel();
+    editor.pushUndoStop();
+    editor.executeEdits("restore", [{ range: model.getFullModelRange(), text }]);
+    editor.pushUndoStop();
+}
+
 export function undo() {
     if (editor) editor.trigger("agent", "undo", null);
 }
 
 // highlightLines marks 1-based lines until the next call (an empty list
 // clears them); note shows on hover.
+// flashLines: briefly highlight a range the user clicked in the chat.
+let flashIds = [], flashTimer = null;
+export function flashLines(from, to = from) {
+    if (!editor) return;
+    const max = editor.getModel().getLineCount();
+    from = Math.max(1, Math.min(from, max)); to = Math.max(from, Math.min(to, max));
+    flashIds = editor.deltaDecorations(flashIds, [{ range: new monaco.Range(from, 1, to, 1),
+        options: { isWholeLine: true, className: "volt-line-flash", linesDecorationsClassName: "volt-line-flash-gut" } }]);
+    editor.revealLinesInCenter(from, to);
+    editor.setPosition({ lineNumber: from, column: 1 });
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { flashIds = editor.deltaDecorations(flashIds, []); }, 2600);
+}
+
 export function highlightLines(lines, note) {
     if (!editor) throw new Error("No file is open in the editor.");
     // Each line carries a text label, not just a colour.

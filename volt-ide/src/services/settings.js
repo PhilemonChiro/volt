@@ -48,6 +48,8 @@ export function get(key, fallback = undefined) {
 }
 
 export async function set(key, value) {
+    // Which UI changed the Assistant's agent (see settings_set in main.js).
+    if (key === "assistant.provider") api.log?.("info", `assistant.provider -> ${value} from ${new Error().stack.split("\n").slice(2, 5).map(l => l.trim()).join(" < ")}`);
     try {
         const updated = await api.settingsSet(key, value);
         cache[key] = updated;

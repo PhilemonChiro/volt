@@ -20,34 +20,60 @@ export function init(container, { onNew, onOpen, onOpenRecent }) {
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                     Open Project
                 </button>
+                <div class="welcome-drop">
+                    <button class="welcome-btn" id="welcomeExamplesBtn" aria-haspopup="menu" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+                        Examples
+                        <svg class="welcome-caret" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="welcome-examples-menu" id="welcomeExamples" role="menu" hidden>
+                        <div class="welcome-section-label">Example projects</div>
+                        <div class="welcome-examples-list" id="exampleList"></div>
+                    </div>
+                </div>
             </div>
 
             <div class="welcome-lists" id="welcomeLists">
                 <div class="welcome-col welcome-col-recent">
                     <div id="recentProjects" class="welcome-recents"></div>
                 </div>
-                <div class="welcome-col welcome-col-examples">
-                    <div class="welcome-examples" id="welcomeExamples">
-                        <div class="welcome-section-label">Example Projects</div>
-                        <div class="welcome-examples-list" id="exampleList"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="welcome-hints">
-                <span><kbd>⌃N</kbd>New</span>
-                <span><kbd>⌃O</kbd>Open</span>
-                <span><kbd>⌃R</kbd>Upload</span>
             </div>
         </div>
+        <a class="welcome-credit" href="#" data-href="https://dl.espressif.com/dl/schematics/esp32_devkitc_v4-sch.pdf" title="Background: the ESP32-DevKitC V4 schematic">Schematic © Espressif Systems</a>
     `;
 
     document.getElementById("welcomeNewBtn").onclick = onNew;
     document.getElementById("welcomeOpenBtn").onclick = onOpen;
+    container.querySelector(".welcome-credit").onclick = (e) => { e.preventDefault(); api.openExternal?.(e.currentTarget.dataset.href); };
+
+    // Examples dropdown
+    const exBtn = document.getElementById("welcomeExamplesBtn");
+    const exMenu = document.getElementById("welcomeExamples");
+    const items = () => [...exMenu.querySelectorAll(".example-item")];
+    const setOpen = (on) => {
+        exMenu.hidden = !on;
+        exBtn.setAttribute("aria-expanded", String(on));
+        exBtn.classList.toggle("is-open", on);
+        if (on) items()[0]?.focus();
+    };
+    exBtn.onclick = (e) => { e.stopPropagation(); setOpen(exMenu.hidden); };
+    exMenu.addEventListener("keydown", (e) => {
+        const list = items(), i = list.indexOf(document.activeElement);
+        if (e.key === "Escape") { e.preventDefault(); setOpen(false); exBtn.focus(); }
+        else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            list[(i + (e.key === "ArrowDown" ? 1 : list.length - 1)) % list.length]?.focus();
+        }
+    });
+    document.addEventListener("mousedown", (e) => {
+        if (!exMenu.hidden && !exMenu.contains(e.target) && !exBtn.contains(e.target)) setOpen(false);
+    });
 
     loadRecent(onOpenRecent);
     loadExamples(onOpenRecent);
 }
+
+const RECENT_SHOWN = 6;
 
 async function loadRecent(onOpenRecent) {
     try {
@@ -64,13 +90,13 @@ async function loadRecent(onOpenRecent) {
         el.innerHTML = `
             <div class="welcome-recents-label">Recent</div>
             <div class="welcome-recents-list">
-                ${projects.slice(0, 6).map(p => {
+                ${projects.map((p, i) => {
                     const shortPath = p.path
                         .replace(/^\/home\/[^/]+/, "~")
                         .replace(/^\/Users\/[^/]+/, "~")
                         .replace(/^C:\\Users\\[^\\]+/i, "~");
                     return `
-                    <div class="recent-item" data-path="${p.path}" tabindex="0" role="button">
+                    <div class="recent-item${i >= RECENT_SHOWN ? " is-extra" : ""}" data-path="${p.path}" tabindex="0" role="button"${i >= RECENT_SHOWN ? " hidden" : ""}>
                         <div class="recent-item-main">
                             <span class="recent-item-name">${p.name}</span>
                             <span class="recent-item-path">${shortPath}</span>
@@ -79,7 +105,17 @@ async function loadRecent(onOpenRecent) {
                     </div>`;
                 }).join("")}
             </div>
+            ${projects.length > RECENT_SHOWN ? `<button type="button" class="welcome-more" aria-expanded="false">Show ${projects.length - RECENT_SHOWN} more</button>` : ""}
         `;
+
+        const more = el.querySelector(".welcome-more");
+        if (more) more.onclick = () => {
+            const open = more.getAttribute("aria-expanded") !== "true";
+            el.querySelectorAll(".recent-item.is-extra").forEach(it => { it.hidden = !open; });
+            more.setAttribute("aria-expanded", String(open));
+            more.textContent = open ? "Show less" : `Show ${projects.length - RECENT_SHOWN} more`;
+            if (open) el.querySelector(".recent-item.is-extra")?.focus();
+        };
 
         el.querySelectorAll(".recent-item").forEach(item => {
             const open = () => onOpenRecent(item.dataset.path);
@@ -110,7 +146,7 @@ async function loadExamples(onOpenExample) {
         if (!el) return;
 
         el.innerHTML = examples.map(ex => `
-            <div class="example-item" data-dir="${ex.dir}" tabindex="0" role="button">
+            <div class="example-item" data-dir="${ex.dir}" tabindex="-1" role="menuitem">
                 <div class="example-item-main">
                     <span class="example-item-name">${ex.name}</span>
                     <span class="example-item-desc">${ex.desc}</span>

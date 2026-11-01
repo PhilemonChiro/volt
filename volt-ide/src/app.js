@@ -92,6 +92,7 @@ let editorReady = false;
 
 // ---- Views ----
 function showWelcome() {
+    document.body.classList.add("is-welcome");
     document.getElementById("welcome").style.display = "flex";
     document.getElementById("editorArea").style.display = "none";
     // Board / Diagrams are project views: never left over the welcome page.
@@ -99,6 +100,7 @@ function showWelcome() {
 }
 
 function showEditor() {
+    document.body.classList.remove("is-welcome");
     document.getElementById("welcome").style.display = "none";
     document.getElementById("editorArea").style.display = "flex";
     diagramsView.placeBottomPanel("code");
@@ -879,7 +881,7 @@ window.volt.onBuild("progress", ({ stage, message, percent, size }) => {
     }
 });
 
-assistantPanel.init({ getProject: () => currentProject });
+assistantPanel.init({ getProject: () => currentProject, getFile: () => (editorReady ? currentFile : null), onSave });
 
 // AI agents connected through `volt mcp` work in this window (src/agent.js).
 agent.init({

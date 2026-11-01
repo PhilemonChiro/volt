@@ -458,11 +458,14 @@ const settings = require("./src/main/settings.js");
 ipcMain.handle("settings_schema", () => settings.SCHEMA);
 ipcMain.handle("settings_all",    () => settings.all());
 ipcMain.handle("settings_set", (_, key, value) => {
+    // The Assistant's agent has been seen switching back unasked: record every change.
+    if (key === "assistant.provider") logger.log("info", "settings", `${key}: ${settings.get(key)} -> ${value}`);
     const updated = settings.set(key, value);
     if (win) win.webContents.send("settings:changed", { key, value: updated });
     return updated;
 });
 ipcMain.handle("settings_reset", () => {
+    logger.log("info", "settings", "reset to defaults");
     const fresh = settings.reset();
     if (win) win.webContents.send("settings:changed", { key: "*", value: fresh });
     return fresh;
@@ -1136,17 +1139,35 @@ function send(channel, data) {
     }
 }
 
-// ---- Assistant panel: the user's own Claude Code, one process per project ----
+// ---- Assistant panel: the user's own Claude Code or Codex, one process per project ----
 const claudeHost = require("./src/main/claude-host");
-claudeHost.init({ send, bin: () => volt.bin(), setting: (k) => settings.get(k) });
-ipcMain.handle("assistant:status", () => claudeHost.status());
-ipcMain.handle("assistant:history", (_, project) => claudeHost.history(project));
-ipcMain.handle("assistant:send", (_, project, text) => claudeHost.send(project, text));
-ipcMain.handle("assistant:decide", (_, project, id, allow) => claudeHost.decide(project, id, allow));
-ipcMain.handle("assistant:stop", (_, project) => claudeHost.stop(project));
-ipcMain.handle("assistant:new", (_, project) => claudeHost.newChat(project));
-ipcMain.handle("assistant:close", (_, project) => claudeHost.close(project));
-app.on("will-quit", () => claudeHost.closeAll());
+const codexHost = require("./src/main/codex-host");
+for (const h of [claudeHost, codexHost]) h.init({ send, bin: () => volt.bin(), setting: (k) => settings.get(k) });
+// Both hosts share the chat log; codex-host also answers for claude-host's
+// leftovers (stop, decide, history) after a provider switch.
+const assistantProvider = () => (settings.get("assistant.provider") === "codex" ? "codex" : "claude");
+const assistantHost = () => (assistantProvider() === "codex" ? codexHost : claudeHost);
+ipcMain.handle("assistant:status", async () => ({ ...(await assistantHost().status()), provider: assistantProvider() }));
+ipcMain.handle("assistant:models", async (_, which) => ((which || assistantProvider()) === "codex" ? codexHost.models()
+    : claudeHost.MODELS.map(m => ({ value: m, label: m[0].toUpperCase() + m.slice(1) }))));
+// Settings → AI agents: both agents' install and sign-in state.
+ipcMain.handle("assistant:agents", async () => {
+    const [claude, codex] = await Promise.all([claudeHost.status(), codexHost.status()]);
+    return { provider: assistantProvider(), claude, codex };
+});
+ipcMain.handle("assistant:history", (_, project) => codexHost.history(project));
+ipcMain.handle("assistant:send", (_, project, text, extra) => {
+    if (assistantProvider() === "claude") codexHost.close(project);
+    return assistantHost().send(project, text, extra);
+});
+ipcMain.handle("assistant:decide", (_, project, id, allow) => codexHost.decide(project, id, allow));
+ipcMain.handle("assistant:stop", (_, project) => codexHost.stop(project));
+ipcMain.handle("assistant:new", (_, project) => codexHost.newChat(project));
+ipcMain.handle("assistant:after", (_, project, at, source) => claudeHost.saveAfter(project, at, source));
+ipcMain.handle("assistant:chats", (_, project) => claudeHost.chats(project));
+ipcMain.handle("assistant:open", (_, project, id) => codexHost.openChat(project, id));
+ipcMain.handle("assistant:close", (_, project) => { codexHost.close(project); claudeHost.close(project); });
+app.on("will-quit", () => { claudeHost.closeAll(); codexHost.closeAll(); });
 
 // The serial port is held by at most one volt child: `volt monitor`, or the
 // monitor phase of `volt run`.

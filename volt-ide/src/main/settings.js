@@ -48,14 +48,16 @@ const SCHEMA = {
                        label: "Grid URL", hint: "Base URL of the Volt library registry (Grid) that Fuse installs signed Cells from." },
         },
     },
+    // Drawn by components/ai-settings.js (one card per agent), not as rows.
     assistant: {
-        label: "Assistant",
+        label: "AI agents",
+        custom: true,
         items: {
-            model: { type: "enum", default: "sonnet",
-                     options: [{value: "sonnet", label: "Sonnet (faster, uses less of your plan)"}, {value: "opus", label: "Opus"}],
-                     label: "Model", hint: "The model Claude Code uses in the Assistant panel." },
-            claudePath: { type: "path", default: "",
-                          label: "Claude Code path", hint: "Leave empty to find `claude` automatically." },
+            provider:   { type: "enum", default: "claude", options: [{value: "claude"}, {value: "codex"}] },
+            model:      { type: "enum", default: "sonnet", options: [{value: "sonnet"}, {value: "opus"}] },
+            claudePath: { type: "path", default: "" },
+            codexModel: { type: "string", default: "" },
+            codexPath:  { type: "path", default: "" },
         },
     },
     build: {
@@ -78,14 +80,6 @@ const SCHEMA = {
                               ],
                               label: "Toolchain download source",
                               hint: "Mirror = pinned, controlled versions from the Volt GitHub release. Upstream = official vendor sites." },
-        },
-    },
-    agent: {
-        label: "AI agents",
-        items: {
-            allowControl: { type: "bool", default: true,
-                            label: "Allow AI agents to control the IDE",
-                            hint: "Agents connected through `volt mcp` (Claude Code, Cursor, VS Code…) can read and edit the open program, switch views, take screenshots, build, flash (after you allow it) and read the serial monitor." },
         },
     },
     serial: {

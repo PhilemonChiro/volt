@@ -24,7 +24,7 @@ const rel = (file) => project && file && file.startsWith(project) ? file.slice(p
 // kind groups authors for colour and icon.
 function kind(author) {
     if (/^You\b/.test(author)) return "you";
-    if (/^Volt Assistant/.test(author)) return "assistant";
+    if (/^Volt Assistant|\(Assistant\)/.test(author)) return "assistant";
     if (/^Outside|Unrecorded|while Volt/.test(author)) return "outside";
     if (author === "Volt") return "you";
     return "agent";
@@ -41,10 +41,18 @@ function ago(iso) {
 
 // ── tracking ───────────────────────────────────────────────────────────────
 
+// The assistant panel says when its Claude Code session is working, so its
+// edits are credited to it rather than to an outside AI app.
+let assistantBusy = false;
+document.addEventListener("volt:assistant-busy", (e) => { assistantBusy = !!(e.detail && e.detail.on); });
+
 document.addEventListener("volt:agent-edit", (e) => {
     const client = e.detail && e.detail.client;
-    pending.authors.add(client || "AI agent");
+    pending.authors.add(assistantBusy ? "Claude (Assistant)" : client || "AI agent");
 });
+
+/** userEditsPending: the user has typed since the last recorded save. */
+export function userEditsPending() { return pending.authors.has("You"); }
 
 export function init() {
     editorMod.onContentChange((source) => { if (!source) pending.authors.add("You"); });
@@ -142,7 +150,7 @@ export async function openChange(hash) {
     closeSheet();
     sheet = document.createElement("div");
     sheet.className = "hs-backdrop";
-    sheet.innerHTML = `<div class="hs-sheet" role="dialog" aria-modal="true" aria-labelledby="hsTitle">
+    sheet.innerHTML = `<div class="hs-sheet k-${kind(ch.author)}" role="dialog" aria-modal="true" aria-labelledby="hsTitle">
         <header class="hs-head"><span class="hs-av k-${kind(ch.author)}" aria-hidden="true">${ICON[kind(ch.author)]}</span>
           <div><h2 id="hsTitle">${esc(ch.message)}</h2><p>${esc(ch.author)} · ${new Date(ch.when).toLocaleString()} · <span class="hs-plus">+${ch.added}</span> <span class="hs-minus">−${ch.removed}</span></p></div>
           <button type="button" class="hs-x" aria-label="Close">×</button></header>
