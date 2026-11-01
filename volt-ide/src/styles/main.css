@@ -6247,11 +6247,17 @@ body.is-mac:not(.is-fullscreen) #toolbar { padding-left: 84px; }
 /* ---- Community: status-bar buttons, welcome links, feedback dialog, privacy notice ---- */
 .status-btn { gap: 5px; background: none; border: 0; padding: 0 2px; font: inherit; color: inherit; cursor: pointer; }
 .status-btn:hover { color: var(--t1); }
+/* Discord's brand mark and Blurple. */
+.status-discord { color: #5865f2; }
+.status-discord:hover { color: #9aa2f8; }
+.welcome-community a.welcome-discord { display: inline-flex; align-items: center; gap: 6px; color: #5865f2; }
+.welcome-community a.welcome-discord:hover { color: #9aa2f8; }
+.welcome-discord svg { fill: currentColor; }
 .welcome-community { display: flex; gap: var(--s-2); justify-content: center; margin-top: var(--s-4); font-size: var(--fs-12); color: var(--t3); }
 .welcome-community a { color: var(--t2); text-decoration: none; }
 .welcome-community a:hover { color: var(--t1); text-decoration: underline; }
 .fb-dialog { width: 480px; }
-.fb-dialog .dialog-subtitle a { color: var(--volt-hover); }
+.fb-dialog .dialog-subtitle a { color: #5865f2; }
 .fb-kinds { display: flex; gap: var(--s-1); margin-bottom: var(--s-3); }
 .fb-kind { flex: 1; height: 28px; border-radius: var(--r-2); border: 1px solid var(--border-strong); background: var(--bg-2); color: var(--t2); font: inherit; font-size: var(--fs-12); cursor: pointer; }
 .fb-kind[aria-checked="true"] { border-color: var(--volt-hover); color: var(--t1); background: var(--bg-3); }
