@@ -63,7 +63,6 @@ docs/community/
 /compiler/
 
 # Internal / working files
-CLAUDE.md
 CONVENTIONS.md
 ROADMAP.md
 serial_monitor.py
