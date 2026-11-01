@@ -39,7 +39,7 @@ if [ "$WINDOWS" = ci ]; then
 	npx electron-builder --mac --linux --publish never
 	# Start the signed Windows build and wait for it; its artifact holds the
 	# signed installer and the latest.yml written for it.
-	gh workflow run windows.yml -R "$REPO" --ref main -f version="$VERSION"
+	gh workflow run windows.yml -R "$REPO" --ref master -f version="$VERSION"
 	sleep 15
 	RUN=$(gh run list -R "$REPO" --workflow windows.yml --limit 1 --json databaseId -q '.[0].databaseId')
 	gh run watch "$RUN" -R "$REPO" --exit-status
