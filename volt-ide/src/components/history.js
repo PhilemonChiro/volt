@@ -29,7 +29,12 @@ function kind(author) {
     if (author === "Volt") return "you";
     return "agent";
 }
-const ICON = { you: "Y", assistant: "✦", agent: "⇄", outside: "!" };
+const ICON = { you: "Y", assistant: "✦", agent: "⇄", outside: "!",
+    volt: `<img src="assets/volt-logo.svg" width="12" height="12" alt="">` };
+// badge is the entry's avatar. "Volt" entries (the snapshot taken when
+// history starts) count as the user's lines in the gutter (kind), but are
+// written by Volt, so they get Volt's own badge, not the user's "Y".
+const badge = (author) => author === "Volt" ? "volt" : kind(author);
 
 function ago(iso) {
     const s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -119,8 +124,8 @@ async function refresh() {
     panelBody.innerHTML = `<div class="hs-root">
         <div class="hs-bar"><label class="hs-toggle"><input type="checkbox" data-authors${authorsOn ? " checked" : ""}> Show who wrote each line</label></div>
         ${log.length ? [...days].map(([d, es]) => `<div class="hs-day">${esc(d)}</div>` + es.map(e => `
-          <button type="button" class="hs-entry k-${kind(e.author)}" data-h="${e.hash}">
-            <span class="hs-av" aria-hidden="true">${ICON[kind(e.author)]}</span>
+          <button type="button" class="hs-entry k-${badge(e.author)}" data-h="${e.hash}">
+            <span class="hs-av" aria-hidden="true">${ICON[badge(e.author)]}</span>
             <span class="hs-main"><span class="hs-msg">${esc(e.message)}</span>
               <span class="hs-meta">${esc(e.author)} · ${ago(e.when)}</span></span>
             <span class="hs-stat"><span class="hs-plus">+${e.added}</span> <span class="hs-minus">−${e.removed}</span></span>
@@ -150,8 +155,8 @@ export async function openChange(hash) {
     closeSheet();
     sheet = document.createElement("div");
     sheet.className = "hs-backdrop";
-    sheet.innerHTML = `<div class="hs-sheet k-${kind(ch.author)}" role="dialog" aria-modal="true" aria-labelledby="hsTitle">
-        <header class="hs-head"><span class="hs-av k-${kind(ch.author)}" aria-hidden="true">${ICON[kind(ch.author)]}</span>
+    sheet.innerHTML = `<div class="hs-sheet k-${badge(ch.author)}" role="dialog" aria-modal="true" aria-labelledby="hsTitle">
+        <header class="hs-head"><span class="hs-av k-${badge(ch.author)}" aria-hidden="true">${ICON[badge(ch.author)]}</span>
           <div><h2 id="hsTitle">${esc(ch.message)}</h2><p>${esc(ch.author)} · ${new Date(ch.when).toLocaleString()} · <span class="hs-plus">+${ch.added}</span> <span class="hs-minus">−${ch.removed}</span></p></div>
           <button type="button" class="hs-x" aria-label="Close">×</button></header>
         <div class="hs-body"><nav class="hs-files">${ch.changes.map((c, i) => `<button type="button" class="hs-file${i ? "" : " on"}" data-i="${i}"><span>${esc(c.path)}</span><em class="s-${c.status}">${c.status}</em></button>`).join("")}</nav>

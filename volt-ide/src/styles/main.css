@@ -1374,6 +1374,14 @@ kbd {
    shrinking to fit (a large graph becomes unreadable when squeezed). */
 .bp-diagram { overflow: auto; }
 .bp-diagram svg { max-width: none !important; height: auto; }
+/* State machines: each machine's graph is its pan/zoom viewport, so it must
+   be view-sized, not shrink-wrapped to the svg (zooming would clip at the
+   svg's own box). One machine fills the view; several stack and scroll. */
+#dgStateMachine.active { display: flex; flex-direction: column; }
+#dgStateMachine .bp-diagram-machine { flex: 1 0 320px; display: flex; flex-direction: column; min-height: 320px; }
+#dgStateMachine .bp-diagram-title { flex: none; margin: 0; padding: var(--s-3) var(--s-4) 0; }
+#dgStateMachine .bp-diagram-graph { flex: 1; min-height: 0; }
+#dgStateMachine .bp-diagram-machine + .bp-diagram-machine { margin-top: 0; padding-top: 0; }
 
 /* Floating note (e.g. "no shared state") over a diagram */
 .bp-diagram-note {
@@ -5704,6 +5712,8 @@ body.lvd-open .vlib2-dock, body.lvd-open .overlay { z-index: 9100 !important; }
 .hs-gut.k-agent { background: var(--who-claude); }
 .k-agent .hs-av, .hs-av.k-agent { background: color-mix(in srgb, var(--who-claude) 16%, transparent); color: var(--who-claude); }
 .hs-entry.k-agent { border-left-color: color-mix(in srgb, var(--who-claude) 55%, transparent); }
+.k-volt .hs-av, .hs-av.k-volt { background: var(--bg-4); }
+.hs-entry.k-volt { border-left-color: var(--border-strong); }
 
 /* Welcome: compact actions + Examples dropdown */
 .welcome-actions { gap: var(--s-2); align-items: center; }

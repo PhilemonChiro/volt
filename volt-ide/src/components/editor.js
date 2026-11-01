@@ -342,11 +342,18 @@ export function applyAgentEdit({ text, edits }) {
             };
         });
     }
+    const before = model.getLinesContent();
     editor.pushUndoStop();
     editSource = "agent";
     try { editor.executeEdits("agent", ops); } finally { editSource = null; }
     editor.pushUndoStop();
-    const first = ops.length ? Math.min(...ops.map(o => o.range.startLineNumber)) : 1;
+    // Report the first line whose text actually changed, not where the range
+    // starts: agents often begin a range on the unchanged line above (or
+    // send the whole program), which named the line before the edit.
+    const after = model.getLinesContent();
+    let i = 0;
+    while (i < before.length && i < after.length && before[i] === after[i]) i++;
+    const first = Math.min(i, after.length - 1) + 1;
     editor.revealLineInCenterIfOutsideViewport(first);
     return first;
 }

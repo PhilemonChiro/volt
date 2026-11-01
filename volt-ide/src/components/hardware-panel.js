@@ -42,6 +42,14 @@ const basicParts = () => _parts.filter(e => e.kind === "pin");
 const useOf = mode => basicParts().find(u => u.mode === (mode || "Output"))
     || { id: mode, label: mode || "Output", mode, name: "pin", wiring: [], example: "{name}" };
 const partForType = type => _parts.find(e => e.kind === "device" && e.type.toLowerCase() === String(type).toLowerCase());
+// One mode covers several parts (Output: LED, relay, active buzzer; PWM: LED,
+// motor, buzzer), so the mode alone can't say how to wire a pin. The pin's
+// name says what it drives: use that part's wiring, else the mode's general list.
+function wiringOf(use, name) {
+    const n = String(name || "").toLowerCase();
+    const role = (use.roles || []).find(r => new RegExp(r.match).test(n));
+    return role ? role.wiring : use.wiring;
+}
 const fill = (s, gpio, name) => s.replace(/\{gpio\}/g, gpio).replace(/\{name\}/g, name || "…");
 
 // Plain-language pin safety: { level: good|ok|avoid|no, label, text }.
@@ -682,7 +690,7 @@ async function editCard(h, p, focusName) {
                 `<button class="pp-btn pp-btn-primary" data-fix="${i}">${esc(f.title)}</button>`).join("")}</div>` : ""}</div>`
             : info && info.safety !== "safe" ? statusLine(info, p.gpio) : ""}
         <div class="pp-section-title">Wire it</div>
-        ${wireList(use.wiring.map(w => fill(w, p.gpio, p.name)))}
+        ${wireList(wiringOf(use, p.name).map(w => fill(w, p.gpio, p.name)))}
         <div class="hwp-muted">In code: <code>${esc(fill(use.example, p.gpio, p.name))}</code></div>
         <div class="hwp-actions hwp-acts" role="group" aria-label="Actions">
             <button class="pp-btn pp-btn-ghost" data-act="change">Change mode</button>

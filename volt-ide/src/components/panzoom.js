@@ -3,7 +3,7 @@
 // Re-attaching to the same host tears down the previous instance first, so it
 // is safe to call on every re-render.
 
-const MIN = 0.15, MAX = 8;
+const MIN = 0.15, MAX = 8, FIT_MAX = 2;
 
 export function attachPanZoom(host) {
     if (!host) return;
@@ -25,6 +25,22 @@ export function attachPanZoom(host) {
     svg.style.maxWidth = "none";
     svg.style.cursor = "grab";
 
+    // Mermaid sizes the viewBox from its layout, but edge labels and titles
+    // can overhang it and get cut at the svg edge. Grow it to the drawn bounds.
+    try {
+        const bb = svg.getBBox(), vb = svg.viewBox.baseVal, m = 8;
+        if (bb.width && vb && vb.width) {
+            const x0 = Math.min(vb.x, bb.x - m), y0 = Math.min(vb.y, bb.y - m);
+            const x1 = Math.max(vb.x + vb.width, bb.x + bb.width + m), y1 = Math.max(vb.y + vb.height, bb.y + bb.height + m);
+            if (x0 < vb.x || y0 < vb.y || x1 > vb.x + vb.width || y1 > vb.y + vb.height) {
+                const k = svg.width.baseVal.value / vb.width || 1;
+                svg.setAttribute("viewBox", `${x0} ${y0} ${x1 - x0} ${y1 - y0}`);
+                svg.setAttribute("width", (x1 - x0) * k);
+                svg.setAttribute("height", (y1 - y0) * k);
+            }
+        }
+    } catch (_) {}
+
     let scale = 1, tx = 0, ty = 0;
     const apply = () => { svg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; };
 
@@ -33,13 +49,14 @@ export function attachPanZoom(host) {
         const cr = host.getBoundingClientRect();
         const sr = svg.getBoundingClientRect();
         if (!sr.width || !sr.height || !cr.width || !cr.height) { apply(); return; }
-        const pad = 24;
-        let s = Math.min((cr.width - pad) / sr.width, (cr.height - pad) / sr.height, 1);
+        const pad = 48;
+        // Fit both ways: shrink a big diagram, and enlarge a small one to fill
+        // the view (capped, so three states don't become huge boxes).
+        let s = Math.min((cr.width - pad) / sr.width, (cr.height - pad) / sr.height, FIT_MAX);
         if (!(s > 0) || !isFinite(s)) s = 1;
         scale = s;
         tx = (cr.width - sr.width * s) / 2;
-        // A diagram that fits sits near the top, not floating mid-panel.
-        ty = s === 1 ? pad : (cr.height - sr.height * s) / 2;
+        ty = (cr.height - sr.height * s) / 2;
         apply();
     }
 

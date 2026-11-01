@@ -5,7 +5,16 @@
       "keywords": "light lamp relay output digital on off buzzer active",
       "example": "{name}.on()",
       "wiring": ["GPIO {gpio} → 220–330 Ω resistor → LED long leg (+)", "LED short leg (–) → GND",
-                 "Relay: use a relay module — IN → GPIO {gpio}, VCC → 5V, GND → GND"] },
+                 "Relay: use a relay module — IN → GPIO {gpio}, VCC → 5V, GND → GND"],
+      "roles": [
+        { "match": "relay", "wiring": ["Relay module IN → GPIO {gpio}", "Module VCC → 5V, GND → GND",
+                   "The switched load goes on the module's COM / NO screws, never on the board"] },
+        { "match": "buzzer|beeper|alarm|siren", "wiring": ["Active buzzer (+) → GPIO {gpio}", "Buzzer (–) → GND",
+                   "A loud or 5V buzzer needs a transistor between the pin and the buzzer"] },
+        { "match": "motor|fan|pump|valve|solenoid", "wiring": ["GPIO {gpio} → MOSFET / transistor or driver input — never the load directly",
+                   "Give the load its own supply and share GND with the board", "Motors, pumps and solenoids need a flyback diode across them"] },
+        { "match": "led|light|lamp", "wiring": ["GPIO {gpio} → 220–330 Ω resistor → LED long leg (+)", "LED short leg (–) → GND"] }
+      ] },
     { "id": "button", "label": "Button / switch", "sub": "pressed = 0", "mode": "PullUpInput", "name": "button",
       "keywords": "push switch key input pullup tactile reed door",
       "example": "{name}.is_pressed()",
@@ -14,7 +23,14 @@
       "keywords": "pwm fade dim fan motor speed brightness buzzer tone",
       "example": "{name}.write(128)",
       "wiring": ["LED: GPIO {gpio} → 220 Ω → LED (+), LED (–) → GND",
-                 "Motor / fan: GPIO {gpio} → motor driver or MOSFET input — never the motor directly"] },
+                 "Motor / fan: GPIO {gpio} → motor driver or MOSFET input — never the motor directly"],
+      "roles": [
+        { "match": "buzzer|beeper|speaker|piezo|tone|alarm|siren", "wiring": ["Passive buzzer (+) → GPIO {gpio}", "Buzzer (–) → GND",
+                   "A loud buzzer or small speaker needs a transistor between the pin and it"] },
+        { "match": "motor|fan|pump", "wiring": ["GPIO {gpio} → motor driver or MOSFET input — never the motor directly",
+                   "Give the motor its own supply and share GND with the board", "A bare MOSFET needs a flyback diode across the motor"] },
+        { "match": "led|light|lamp|dim", "wiring": ["GPIO {gpio} → 220 Ω resistor → LED long leg (+)", "LED short leg (–) → GND"] }
+      ] },
     { "id": "servo", "label": "Servo", "sub": "angle 0–180°", "mode": "Servo", "name": "servo",
       "keywords": "servo angle sg90 mg996",
       "example": "{name}.move(90)",

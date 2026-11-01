@@ -1118,7 +1118,7 @@ function choices(lines, devices = false) {
         const answer = devices && !free ? `Use the ${title}.` : title.replace(/(\.\.\.|…)$/, "");
         return `<button type="button" class="as-choice${rec ? " is-rec" : ""}${free ? " is-free" : ""}" data-title="${esc(answer)}" data-name="${esc(title)}" data-detail="${esc(detail)}">
             <span class="as-key">${i + 1}</span>
-            <span class="as-choice-body"><span class="as-choice-title">${inline(title)}${rec ? `<span class="as-rec">Recommended</span>` : ""}</span>${detail ? `<span class="as-choice-detail">${inline(detail)}</span>` : ""}</span>
+            <span class="as-choice-body"><span class="as-choice-title"><span>${inline(title, "span")}</span>${rec ? `<span class="as-rec">Recommended</span>` : ""}</span>${detail ? `<span class="as-choice-detail">${inline(detail, "span")}</span>` : ""}</span>
             <span class="as-choice-go">${free ? ICON.compose : ICON.chev}</span>
         </button>`;
     }).join("")}</div>`;
@@ -1231,17 +1231,21 @@ function liveChoices() {
 }
 
 // "line 7", "lines 38-52", "lines 38–52": a link that shows them in the editor.
-function lineRefs(html) {
+// tag is "span" inside a choice card: a <button> nested in the card's
+// <button> is invalid HTML, and the parser closes the card at the link,
+// spilling the link and the rest of the text out of it.
+function lineRefs(html, tag = "button") {
+    const attrs = tag === "button" ? ` type="button"` : ` role="button"`;
     return html.split(/(<code>[\s\S]*?<\/code>)/).map(part => part.startsWith("<code>") ? part
         : part.replace(/\b(lines?|Ln)\s+(\d+)(?:\s*(?:-|–|to)\s*(\d+))?/gi, (m, w, a, b) =>
-            `<button type="button" class="as-lref" data-from="${a}" data-to="${b || a}" title="Show in the editor">${m}</button>`)).join("");
+            `<${tag}${attrs} class="as-lref" data-from="${a}" data-to="${b || a}" title="Show in the editor">${m}</${tag}>`)).join("");
 }
 
-function inline(s) {
+function inline(s, refTag) {
     return lineRefs(esc(s)
         .replace(/`([^`]+)`/g, "<code>$1</code>")
         .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-        .replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=[\s).,!?:;]|$)/g, "$1<i>$2</i>"));
+        .replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=[\s).,!?:;]|$)/g, "$1<i>$2</i>"), refTag);
 }
 
 // Notes gone from the editor: the latest list becomes a plain record (its items still jump to the code).

@@ -438,8 +438,12 @@ async function origins() {
         for (const l of (st && st.libraries) || []) {
             if (out[l.name] || l.name === FRAMEWORK) continue;
             const src = l.source || "";
-            out[l.name] = src === "sdk-baseline" ? { kind: "official", edited: !!l.bundled && !l.matchesBundled }
-                : src.startsWith("registry:") ? { kind: "grid" } : { kind: "local" };
+            // Bundled counts too (as in locked()): a Volt library re-approved
+            // after an SDK update is recorded with source "local", yet it is
+            // still the copy Volt ships.
+            out[l.name] = src.startsWith("registry:") ? { kind: "grid" }
+                : src === "sdk-baseline" || l.bundled ? { kind: "official", edited: !!l.bundled && !l.matchesBundled }
+                : { kind: "local" };
         }
     }
     return out;
