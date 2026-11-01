@@ -1,0 +1,136 @@
+# Windows build of Volt IDE, signed through SignPath (free code signing for
+# open-source projects, certificate by SignPath Foundation).
+#
+# Two signing passes, because the installer embeds the app:
+#   1. build the unpacked app → SignPath signs Volt IDE.exe and the bundled volt.exe
+#   2. build the NSIS installer from the signed app → SignPath signs the installer
+# then latest.yml (the auto-update feed) is rewritten with the signed installer's
+# hash, since signing changes its bytes.
+#
+# Run from scripts/release-ide.sh (WINDOWS=ci) or by hand: Actions → "Windows
+# build (signed)" → Run workflow. The result is the "windows-release" artifact.
+#
+# Setup (once): repository secret SIGNPATH_API_TOKEN, and repository variables
+# SIGNPATH_ORGANIZATION_ID and SIGNPATH_PROJECT_SLUG. Artifact configurations
+# "app" and "installer" (see .github/signpath/) and signing policy
+# "release-signing" are created in SignPath.
+name: Windows build (signed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "IDE version (e.g. 2.0.86)"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      SIGNPATH_ORG: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+    steps:
+      # Same layout as the workspace: volt/ and cli/ side by side
+      # (scripts/build-volt.js builds ../../cli).
+      - uses: actions/checkout@v4
+        with:
+          path: volt
+      - uses: actions/checkout@v4
+        with:
+          repository: PhilemonChiro/volt-cli
+          path: cli
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        working-directory: volt/volt-ide
+        run: npm install --no-audit --no-fund
+
+      - name: Set version
+        working-directory: volt/volt-ide
+        run: npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Stage SDK, icons and the volt CLI
+        working-directory: volt/volt-ide
+        run: |
+          npm run prepack
+          node scripts/build-volt.js win32-x64
+
+      - name: Package the app (unsigned)
+        working-directory: volt/volt-ide
+        # On Windows this sets the exe's icon and version info; with no
+        # certificate configured nothing is signed here.
+        run: npx electron-builder --win dir --publish never --config.win.signAndEditExecutable=true
+
+      - name: Upload app for signing
+        id: app
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-unsigned
+          path: volt/volt-ide/dist/win-unpacked
+          if-no-files-found: error
+
+      - name: Sign the app
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORG }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-app
+
+      - name: Build the installer from the signed app
+        working-directory: volt/volt-ide
+        run: |
+          rm -rf dist/win-unpacked
+          mv ../../signed-app dist/win-unpacked
+          npx electron-builder --win nsis --prepackaged dist/win-unpacked --publish never
+
+      - name: Upload installer for signing
+        id: installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: volt/volt-ide/dist/*.exe
+          if-no-files-found: error
+
+      - name: Sign the installer
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORG }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-installer
+
+      - name: Point the update feed at the signed installer
+        working-directory: volt/volt-ide
+        run: |
+          mkdir -p release
+          cp ../../signed-installer/*.exe release/
+          node scripts/update-feed-hash.js dist/latest.yml release/*.exe > release/latest.yml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: volt/volt-ide/release/
+          if-no-files-found: error

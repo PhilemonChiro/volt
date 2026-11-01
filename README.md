@@ -405,5 +405,6 @@ Volt is dual-licensed.
   [GNU GPL v3](framework/LICENSE). These are compiled into your firmware, so firmware you distribute is covered by the
   GPL too.
 - A commercial licence is available for closed-source products: contact licensing@voltembedded.com.
+- Windows builds are signed: see the [code signing policy](CODE_SIGNING.md).
 
 Contributions are made under the [Contributor License Agreement](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md).
