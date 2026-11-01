@@ -899,6 +899,7 @@ function settle(c, allow) {
 const ACTIONS = { ide_build: "build the program", ide_run: "build and flash the board", ide_save: "save the file",
     ide_open: "open another project", ide_new_project: "create a new project", library_write: "write a device library",
     library_request_approval: "ask you to approve a device library", Edit: "edit a file", Write: "write a file",
+    ide_projects: "list your other projects", ide_serial: "read the serial monitor", ide_edit: "edit the program", Read: "read a file",
     shell: "run a command" };
 function actionText(e) { return ACTIONS[e.tool] || `use ${e.tool}`; }
 function detail(e) {
