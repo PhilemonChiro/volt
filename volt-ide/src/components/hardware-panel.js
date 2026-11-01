@@ -15,6 +15,7 @@ import { MODES, chip, pinTable, supportsMode, takenGpios, rankFreePins, tagFor, 
 import { applyEdits, insertDecl, insertDecls, deleteDecl, fixToEdit, flashLine, modernizeHardware } from "./hardware-edit.js";
 import { catalogue, placePart, fitsPin, deviceWiring } from "./parts.js";
 import * as picker from "./part-picker.js";
+import { ICONS } from "./icons.js";
 
 // Two hosts share the list + card code: { name, el, list, card, toast }
 const _hosts = {};
@@ -71,7 +72,7 @@ function plainSafety(info, gpio) {
 function statusLine(info, gpio) {
     const s = plainSafety(info, gpio);
     if (!s.label) return "";
-    const icon = { good: "✓", ok: "●", avoid: "⚠", no: "⨯" }[s.level];
+    const icon = { good: "✓", ok: "●", avoid: ICONS.warn, no: "⨯" }[s.level];
     return `<div class="hwp-status is-${s.level}"><b>${icon} ${esc(s.label)}</b>${s.text ? `<span>${esc(s.text)}</span>` : ""}</div>`;
 }
 
@@ -175,7 +176,7 @@ async function openPinPicker(h) {
 
 function notice(h, msg) {
     const t = h.toast;
-    t.innerHTML = `<span class="hwp-toast-what">⚠ ${esc(msg)}</span>`;
+    t.innerHTML = `<span class="hwp-toast-what">${ICONS.warn} ${esc(msg)}</span>`;
     t.style.display = "";
     clearTimeout(_toastTimer);
     _toastTimer = setTimeout(() => { t.style.display = "none"; }, 5000);
@@ -205,6 +206,10 @@ export function initBoard(el) {
         <div class="bv-body">
             <div class="bv-canvas"></div>
             <div class="bv-side">
+                <form class="bv-ask" title="Describe what you need; the assistant picks the part and wires it">
+                    ${ICONS.sparkle}<input type="text" placeholder="Ask for a part… e.g. measure soil moisture" aria-label="Ask for a part">
+                    <button type="submit" class="pp-btn">Ask</button>
+                </form>
                 <div class="hwp-card"></div>
                 <div class="hwp-list"></div>
             </div>
@@ -213,6 +218,15 @@ export function initBoard(el) {
             <div class="hwp-tip" style="display:none"></div>
         </div>`;
     _hosts.board = host("board", el);
+    const ask = el.querySelector(".bv-ask");
+    ask.onsubmit = (e) => {
+        e.preventDefault();
+        const input = ask.querySelector("input");
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = "";
+        import("./ai-assist.js").then(m => m.askPart(text));
+    };
     el.querySelectorAll(".bv-add").forEach(b => b.onclick = () => openPicker(_hosts.board, null, b.dataset.kind));
     const more = el.querySelector(".bv-more");
     more.onclick = () => moreMenu(_hosts.board, more);
@@ -261,6 +275,14 @@ function bindGlobal() {
     });
 }
 
+// Pins the assistant just added for "Ask for a part" stay lit for a while.
+let _newPins = null;
+export function highlightNew(gpios) {
+    _newPins = { gpios, until: Date.now() + 15000 };
+    pinout.setHighlight(gpios);
+    setTimeout(() => { if (_newPins && Date.now() >= _newPins.until) { _newPins = null; pinout.setHighlight(null); } }, 15100);
+}
+
 // Re-read the source (every keystroke) and redraw.
 export function refresh(src = source()) {
     // The parser needs device facts and the chip's bus pins; redraw once
@@ -269,7 +291,9 @@ export function refresh(src = source()) {
     _hw = pinout.extractHardware(src);
     const c = chip();
     if (_hosts.board) {
-        pinout.render(c, Object.values(_hw.pinByGpio), _hw);
+        pinout.render(c, Object.values(_hw.pinByGpio), _hw).then(() => {
+            if (_newPins && Date.now() < _newPins.until) pinout.setHighlight(_newPins.gpios);
+        });
         renderBoardPicker(c);
         pinTable().then(t => {
             _tipTable = t;
@@ -317,7 +341,7 @@ function renderStats(table) {
     const taken = takenGpios(_hw);
     const free = table.filter(i => !taken.has(String(i.gpio)) && i.safety !== "unavailable");
     const safe = free.filter(i => i.safety === "safe").length;
-    const used = _hw.pins.length;
+    const used = taken.size; // GPIOs in use: pins, device pins and bus pins
     _hosts.board.el.querySelector(".bv-stats").textContent =
         `${used} pin${used === 1 ? "" : "s"} used · ${safe} good pin${safe === 1 ? "" : "s"} free`;
 }
@@ -350,14 +374,16 @@ function renderList(h) {
         for (const d of devices) {
             const own = Object.entries(d.roles || {});
             const bus = _hw.buses.find(b => b.name === d.bus);
-            const where = [bus && !(bus.implicit && bus.owner) && bus.name, ...own.map(([r, g]) => r + " " + g),
+            // Where it connects: its own pins, its own UART's pins, or the bus
+            // (a default bus by its pins, since it has no name in the code).
+            const busRoles = bus ? Object.entries(bus.roles) : [];
+            const where = [
+                bus && !bus.implicit && bus.name,
+                bus && bus.implicit && !bus.owner && `${bus.busType} ${busRoles.map(([, g]) => g).join("/")}`,
+                ...(own.length ? own : bus && bus.owner ? busRoles : []).map(([r, g]) => r + " " + g),
                 bus && bus.busType === "I2C" && d.address].filter(Boolean).join(" · ");
             html += row(d, "device", deviceGpios(d), d.name, d.type, where, []);
         }
-        // The chip's default buses aren't in the code: one muted line.
-        const auto = _hw.buses.filter(b => b.implicit && !b.owner);
-        if (auto.length) html += `<div class="hwl-auto">default ${auto.map(b =>
-            `<button class="hwl-autobus" data-line="${b.line}" title="${esc(b.busType)} bus on the chip's standard pins">${esc(b.busType)} ${Object.values(b.roles).join("/")}</button>`).join(" · ")}</div>`;
         html += "</div>";
         html += `<div class="hw-section">${title("Pins", pins.length)}`;
         if (!pins.length) html += `<div class="hwl-none">LEDs, buttons, servos… wired to one pin.</div>`;
@@ -378,7 +404,6 @@ function renderList(h) {
     el.querySelectorAll(".hwl-add[data-kind]").forEach(b => b.onclick = () => openPicker(h, null, b.dataset.kind));
     const more = el.querySelector(".hwl-more");
     if (more) more.onclick = () => moreMenu(h, more);
-    el.querySelectorAll(".hwl-autobus").forEach(b => b.onclick = () => itemCard(h, "bus", Number(b.dataset.line)));
     const modern = el.querySelector(".hwl-modernize");
     if (modern) modern.onclick = async () => {
         if (!await modernizeHardware({ flash: _view === "code" })) notice(h, "Couldn't modernize — fix the errors in the hardware block first.");
@@ -438,7 +463,7 @@ function row(item, kind, gpios, name, tag, detail, warn) {
         <span class="hw-name">${esc(name)}</span>
         <span class="hwl-tag">${esc(tag || "")}</span>
         <span class="hw-detail">${esc(detail)}</span>
-        ${warn.length ? `<span class="hwl-warn${gpios.some(g => pinout.pinSeverity(g) === "error") ? " is-error" : ""}" title="${esc(warn.join("\n"))}">⚠</span>` : ""}
+        ${warn.length ? `<span class="hwl-warn${gpios.some(g => pinout.pinSeverity(g) === "error") ? " is-error" : ""}" title="${esc(warn.join("\n"))}">${ICONS.warn}</span>` : ""}
     </div>`;
 }
 
@@ -652,7 +677,7 @@ async function editCard(h, p, focusName) {
             <button class="pp-close" data-act="close" aria-label="Close" title="Close (Esc)">×</button>
         </div><div class="pp-body">
         <div class="hwp-muted">${esc(current)} · GPIO ${esc(p.gpio)} · ${esc(whereText(p.gpio))}${onboard ? " · " + esc(onboard) : ""}</div>
-        ${warns.length ? `<div class="hwp-status ${isErr ? "is-avoid" : "is-ok"}"><b>⚠ ${isErr ? "Problem with this pin" : "Check this pin"}</b><span>${esc(plainSafety(info, p.gpio).text || warns[0])}</span>
+        ${warns.length ? `<div class="hwp-status ${isErr ? "is-avoid" : "is-ok"}"><b>${ICONS.warn} ${isErr ? "Problem with this pin" : "Check this pin"}</b><span>${esc(plainSafety(info, p.gpio).text || warns[0])}</span>
             ${fixes.length ? `<div class="hwp-actions">${fixes.map((f, i) =>
                 `<button class="pp-btn pp-btn-primary" data-fix="${i}">${esc(f.title)}</button>`).join("")}</div>` : ""}</div>`
             : info && info.safety !== "safe" ? statusLine(info, p.gpio) : ""}
@@ -799,7 +824,7 @@ function itemCard(h, kind, line, boardPin, focusName) {
         ? `<div class="pp-section"><div class="pp-section-title">Devices on ${esc(item.name)}</div>
             <ul class="pp-alts">${riders.map(d => `<li>${esc(d.name)} <span style="color:var(--t3)">${esc(d.type)} @ ${esc(d.address)}</span></li>`).join("")}</ul></div>`
         : `<div class="hwp-muted">No devices on this bus yet.</div>`;
-    for (const g of gpios) for (const w of pinout.pinDiagnostics(g)) body += `<div class="pp-note pp-warn">⚠ ${esc(w)}</div>`;
+    for (const g of gpios) for (const w of pinout.pinDiagnostics(g)) body += `<div class="pp-note pp-warn">${ICONS.warn} ${esc(w)}</div>`;
     if (boardPin && boardPin.alt && boardPin.alt.length) body += `<div class="hwp-muted">Also: ${esc(boardPin.alt.join(", "))}</div>`;
     if (!item.implicit && BUS_SIGNALS[item.busType.toLowerCase()]) body += `<div class="hwp-actions">
         <button class="pp-btn pp-btn-ghost" data-act="edit">Edit bus</button>
@@ -843,7 +868,7 @@ function deviceCard(h, line, focusName) {
             <button class="pp-close" data-act="close" aria-label="Close" title="Close (Esc)">×</button>
         </div><div class="pp-body">
         <div class="hwp-muted">${esc(d.type)}${entry && entry.sub ? " · " + esc(entry.sub) : ""} · ${esc(where)}</div>
-        ${clash ? `<div class="hwp-status is-avoid"><b>⚠ Address clash</b><span>${esc(clash.name)} also uses ${esc(d.address)} on ${esc(d.bus)}.${addrs.length > 1 ? " Pick another address below (and set the board's ADDR pin to match)." : " Use a second I2C bus or an I2C multiplexer."}</span></div>` : ""}
+        ${clash ? `<div class="hwp-status is-avoid"><b>${ICONS.warn} Address clash</b><span>${esc(clash.name)} also uses ${esc(d.address)} on ${esc(d.bus)}.${addrs.length > 1 ? " Pick another address below (and set the board's ADDR pin to match)." : " Use a second I2C bus or an I2C multiplexer."}</span></div>` : ""}
         ${addrs.length > 1 ? `<div class="hwp-addr"><span class="pp-section-title">Address</span>${addrs.map(a =>
             `<button class="hwp-chip${parseInt(a) === parseInt(d.address) ? " is-active" : ""}${usedOnBus.has(parseInt(a)) ? " is-taken" : ""}" data-addr="${a}"
                 title="${usedOnBus.has(parseInt(a)) ? "Used by another device on this bus" : "Use " + a}">${a}</button>`).join("")}</div>` : ""}

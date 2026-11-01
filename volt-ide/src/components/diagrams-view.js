@@ -71,6 +71,8 @@ export function showView(view) {
     }
 }
 
+export function activeDiagramName() { return activeDiagram; }
+
 export function showDiagram(name) {
     activeDiagram = name;
     document.getElementById("dgStateMachine").classList.toggle("active", name === "statemachine");

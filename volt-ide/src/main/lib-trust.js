@@ -51,8 +51,33 @@ function volt(args, input) {
     });
 }
 
+// A project's own libraries live in <project>/devices; its approvals are
+// keyed by the project (`volt trust --project`), not shared with others.
+function isProjectRoot(root) {
+    return path.basename(root) === "devices" && fs.existsSync(path.join(path.dirname(root), "volt.toml"));
+}
+const where = (root) => isProjectRoot(root) ? ["--project", path.dirname(root)] : ["--devices", root];
+
 async function status(root) {
-    return JSON.parse(await volt(["status", "--json", "--devices", root]));
+    return JSON.parse(await volt(["status", "--json", ...where(root)]));
+}
+
+// locked — a library nobody changes on this computer: Volt's own (as shipped)
+// or one installed from the Grid. Changes to it are never approved; methods a
+// project needs go in that project's own library instead.
+function locked(l) {
+    const src = (l && l.source) || "";
+    if (!l || l.name === FRAMEWORK) return null;
+    if (src.startsWith("registry:")) return "grid";
+    if (src === "sdk-baseline" || l.bundled) return "official";
+    return null;
+}
+const LOCKED_WHY = {
+    official: "an official Volt library",
+    grid: "installed from the Grid",
+};
+function lockedMessage(name, kind) {
+    return `${name} is ${LOCKED_WHY[kind]}, so changes to it can't be approved. Put what this project needs in the project's own library (its devices/ folder), or suggest the change to the library's author.`;
 }
 
 function frameworkOf(root) { return path.join(path.dirname(root), "framework"); }
@@ -106,7 +131,7 @@ function readText(p) {
 // later change can be shown as a diff, or rejected back to it).
 async function approve(root, names, source = "local", version = "") {
     if (state !== "ready") throw new Error(`Library approvals unavailable: ${stateDetail || state}`);
-    const args = ["approve", ...names, "--devices", root, "--source", source];
+    const args = ["approve", ...names, ...where(root), "--source", source];
     if (version) args.push("--version", version);
     await volt(args, readKey());
     for (const n of names) {
@@ -125,7 +150,7 @@ async function approveOwnWrite(names, source, version) {
         const st = await status(root).catch(() => null);
         if (!st || !st.setUp) continue;
         const present = new Set(st.libraries.map(l => l.name));
-        const todo = [...names.filter(n => present.has(n)), FRAMEWORK];
+        const todo = [...names.filter(n => present.has(n)), ...(isProjectRoot(root) ? [] : [FRAMEWORK])];
         await approve(root, todo, source, version).catch(e => log("warn", e.message));
     }
     scanSoon();
@@ -199,7 +224,7 @@ async function pending() {
         for (const l of st.libraries || []) {
             if (l.state === "approved" || shipped.includes(l.name)) continue;
             out.push({ root, name: l.name, state: l.state, hash: l.hash, detail: l.detail || "",
-                source: l.source || "", approvedAt: l.approvedAt || "", approvedHashes: l.approvedHashes || [],
+                source: l.source || "", bundled: !!l.bundled, approvedAt: l.approvedAt || "", approvedHashes: l.approvedHashes || [],
                 deferred: deferred.get(key(root, l.name)) === l.hash });
         }
     }
@@ -210,7 +235,11 @@ async function pending() {
 async function details(root, name) {
     const dir = libDir(root, name);
     const items = await pending();
-    const it = items.find(i => i.root === root && i.name === name) || { root, name, state: "approved", approvedHashes: [] };
+    let it = items.find(i => i.root === root && i.name === name);
+    if (!it) {
+        const l = ((await status(root).catch(() => null)) || {}).libraries?.find(x => x.name === name) || {};
+        it = { root, name, state: "approved", approvedHashes: [], source: l.source || "", bundled: !!l.bundled };
+    }
     // The snapshot is only a diff base if it really is an approved version.
     // Diff base: the snapshot of an approved version — this location's own,
     // else another location's (e.g. the copy Volt ships) — verified by digest.
@@ -241,7 +270,9 @@ async function details(root, name) {
         : found ? "Found when library approvals were set up: it differs from the copy Volt ships."
         : "Changed outside Volt IDE (not by an install or the library creator).";
     const checks = name === FRAMEWORK ? { errors: [], warnings: [] } : require("./lib-publish").localCheck(dir);
+    const lock = locked(it);
     return { ...it, files, hasPrevious: !!prev, prevLabel, who, framework: name === FRAMEWORK, device, checks,
+        project: isProjectRoot(root), locked: lock, lockedMessage: lock ? lockedMessage(device && device.name || name, lock) : "",
         capabilities: device && { interface: device.interface, address: device.default_address, pins: device.pins, category: device.category } };
 }
 
@@ -258,6 +289,14 @@ async function reject(root, name) {
         return { restored: true };
     }
     if (name === FRAMEWORK) throw new Error("There is no approved framework to go back to — reinstall Volt to repair it.");
+    // An official library: put back the copy Volt ships.
+    if (d.locked === "official" && !isProjectRoot(root)) {
+        await new Promise((resolve, reject) => execFile(bin(), ["sdk", "sync", "--take", name], (err, _o, stderr) =>
+            err ? reject(new Error(stderr.trim() || err.message)) : resolve()));
+        await approve(root, [name], "sdk-baseline");
+        log("info", `rejected change to ${name}: restored the shipped copy`);
+        return { restored: true };
+    }
     fs.mkdirSync(QUARANTINE, { recursive: true });
     const dest = path.join(QUARANTINE, `${new Date().toISOString().replace(/[:.]/g, "-")}-${name}`);
     fs.renameSync(dir, dest);
@@ -272,6 +311,9 @@ async function decide({ root, name, decision, reason }) {
     const agent = opts.lastAgent();
     const byAgent = waiters.has(k) || (agent && Date.now() - agent.at < 15 * 60_000);
     if (decision === "approve") {
+        const st = await status(root).catch(() => null);
+        const lock = locked(st && (st.libraries || []).find(l => l.name === name));
+        if (lock) throw new Error(lockedMessage(name, lock));
         if (name !== FRAMEWORK) {
             const { errors } = require("./lib-publish").localCheck(libDir(root, name));
             if (errors.length) throw new Error(`${name} fails the library checks: ${errors[0]}`);
@@ -301,6 +343,11 @@ async function requestApproval(name, timeoutMs = 15 * 60_000) {
         return { status: "approved", already: true };
     }
     const it = items[0];
+    const lock = locked(it);
+    if (lock) {
+        return { status: "locked", error: lockedMessage(it.name, lock),
+            next: "Undo your change to this library. Write the methods this project needs as a project library (library_write with scope: \"project\" and a new prefix), then call library_request_approval for it." };
+    }
     // A library that fails the publish checks never reaches the user's review.
     const { errors } = require("./lib-publish").localCheck(libDir(it.root, it.name));
     if (errors.length) {
@@ -401,4 +448,4 @@ async function origins() {
 function info() { return { state, detail: stateDetail, roots: opts ? opts.roots() : [] }; }
 function setReviewOpen(open) { reviewOpen = !!open; if (!open) scanSoon(); }
 
-module.exports = { start, info, origins, whereIs, ownLibraries, pending, details, decide, requestApproval, approveOwnWrite, reset, setReviewOpen, FRAMEWORK };
+module.exports = { start, rescan: () => scanSoon(300), info, origins, whereIs, ownLibraries, pending, details, decide, requestApproval, approveOwnWrite, reset, setReviewOpen, FRAMEWORK };

@@ -57,16 +57,19 @@ function render(d, msg) {
     const blocking = d.errors.length > 0 || !d.approved;
     // One submission at a time: while a version waits for review (or was just
     // sent), there's nothing to submit — only a way out.
-    const waiting = (msg && msg.ok) || d.submitted.some(x => x.status === "pending");
+    const pending = d.submitted.find(x => x.status === "pending");
+    const waiting = (msg && msg.ok) || !!pending;
+    // While one waits, show that version, not the next one.
+    if (pending && !(msg && msg.ok)) d = { ...d, version: pending.version };
     const prior = d.submitted.length ? `<div class="pb-sec"><h3>Your earlier submissions</h3><ul class="pb-list">${d.submitted.map(x =>
         `<li><code>${esc(x.version)}</code><span class="pb-st st-${esc(x.status)}">${esc(STATUS[x.status] || x.status)}</span>${x.findings ? `<span class="pb-find">${esc(x.findings)}</span>` : ""}</li>`).join("")}</ul></div>` : "";
     const body = `
       <p class="pb-muted">Public libraries are reviewed and signed by a Volt maintainer before anyone can install them. You'll see the result here and in the Library panel.</p>
       <div class="pb-grid">
-        <label>Name<input class="ai-input" value="${esc(d.name)}" disabled></label>
-        <label>Version<input class="ai-input" data-version value="${esc(d.version)}" spellcheck="false"${waiting ? " disabled" : ""}></label>
+        <label>Name<input class="pb-input" value="${esc(d.name)}" disabled></label>
+        <label>Version<input class="pb-input" data-version value="${esc(d.version)}" spellcheck="false"${waiting ? " disabled" : ""}></label>
       </div>
-      <label class="pb-desc">Description<textarea class="ai-input" data-desc rows="2"${waiting ? " disabled" : ""}>${esc(d.description)}</textarea></label>
+      <label class="pb-desc">Description<textarea class="pb-input" data-desc rows="2"${waiting ? " disabled" : ""}>${esc(d.description)}</textarea></label>
       <div class="pb-chips"><span class="lr-chip">${esc(String(d.interface || "").toUpperCase())}</span>${d.capabilities.map(c => `<span class="lr-chip">uses ${esc(c)}</span>`).join("")}
         ${d.aiAssisted ? `<span class="lr-chip pb-ai" title="Approved after an AI agent wrote or changed it — reviewers will see this">✦ AI-assisted</span>` : ""}</div>
       <div class="pb-sec"><h3>Checks</h3>

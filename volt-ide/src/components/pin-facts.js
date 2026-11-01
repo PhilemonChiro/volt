@@ -64,7 +64,7 @@ export function rankFreePins(table, mode, taken) {
 
 export function tagFor(info) {
     if (info.safety === "safe") return "free";
-    return info.safety === "risky" ? info.reason + " ⚠" : info.reason;
+    return info.safety === "risky" ? info.reason + " (risky)" : info.reason;
 }
 
 // Suggested pins for a new bus: { i2c: { sda, scl }, spi: {...}, uart: {...} }.

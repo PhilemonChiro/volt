@@ -218,7 +218,11 @@ app.whenReady().then(() => {
         minWidth:  1024,
         minHeight: 640,
         title: "Volt IDE",
-        frame: false,
+        // macOS keeps its own traffic lights (inset into the toolbar);
+        // elsewhere the toolbar draws minimize / maximize / close.
+        ...(process.platform === "darwin"
+            ? { titleBarStyle: "hidden", trafficLightPosition: { x: 16, y: 16 } }
+            : { frame: false }),
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
             contextIsolation: true,
@@ -228,6 +232,9 @@ app.whenReady().then(() => {
 
     win.loadFile("index.html");
     appMenu.install(win, loadRecents);
+    // The traffic lights hide in full screen; the toolbar gives their space back.
+    for (const [ev, on] of [["enter-full-screen", true], ["leave-full-screen", false]])
+        win.on(ev, () => win.webContents.send("window:fullscreen", on));
 
     // Once the renderer is live, replay a deep link that arrived early — either
     // parked by open-url before the window existed, or passed in argv on a cold
@@ -523,6 +530,17 @@ ipcMain.handle("devices_list", () => {
             }
         }
     }
+    // The open project's own libraries — added, never replacing a shared one.
+    const own = projectDevicesDir();
+    if (own && fs.existsSync(own)) {
+        for (const entry of fs.readdirSync(own)) {
+            try {
+                const data = JSON.parse(fs.readFileSync(path.join(own, entry, "device.json"), "utf-8"));
+                const key = (data.name || entry).toLowerCase();
+                if (!byPrefix.has(key)) byPrefix.set(key, { ...data, project: true });
+            } catch (_) {}
+        }
+    }
     return [...byPrefix.values()];
 });
 
@@ -728,7 +746,9 @@ async function gridLogin() {
         const r = await fetch(`${gridUrl()}/api/v1/me`, { headers: { Authorization: `Bearer ${tok}` } });
         if (!r.ok) return { token: null, login: null };
         const j = await r.json();
-        const u = j.data || j;
+        // /me answers { data: { user: { login, … } } }.
+        const d = j.data || j;
+        const u = d.user || d;
         return { token: tok, login: u.login || u.Login || null };
     } catch (_) { return { token: null, login: null } ; }
 }
@@ -1049,7 +1069,7 @@ app.on("before-quit", () => {
 
 ipcMain.handle("compile_full", async (_, source) => {
     try {
-        return await workerCall("compile_full", { source, filename: "main.volt" });
+        return await workerCall("compile_full", { source, filename: "main.volt", project: openProjectDir || "" });
     } catch (e) {
         return compileErrorResult(e.message);
     }
@@ -1057,7 +1077,7 @@ ipcMain.handle("compile_full", async (_, source) => {
 
 ipcMain.handle("check_code", async (_, source) => {
     try {
-        const result = await workerCall("compile_full", { source, filename: "main.volt" });
+        const result = await workerCall("compile_full", { source, filename: "main.volt", project: openProjectDir || "" });
         return result.diagnostics;
     } catch (e) {
         return [{
@@ -1165,6 +1185,26 @@ ipcMain.handle("assistant:chats", (_, project) => claudeHost.chats(project));
 ipcMain.handle("assistant:open", (_, project, id) => codexHost.openChat(project, id));
 ipcMain.handle("assistant:close", (_, project) => { codexHost.close(project); claudeHost.close(project); });
 app.on("will-quit", () => { claudeHost.closeAll(); codexHost.closeAll(); });
+// GitHub panel: sign in, commit and push, pull, publish (src/main/github.js).
+const github = require("./src/main/github");
+github.init({ send, setting: (k) => settings.get(k) });
+ipcMain.handle("github:status", () => github.status());
+ipcMain.handle("github:signIn", () => github.signIn());
+ipcMain.handle("github:cancelSignIn", () => github.cancelSignIn());
+ipcMain.handle("github:signOut", () => github.signOut());
+ipcMain.handle("github:repo", (_, project) => github.repo(project));
+ipcMain.handle("github:commit", (_, project, message, push) => github.commit(project, message, push));
+ipcMain.handle("github:pull", (_, project) => github.pull(project));
+ipcMain.handle("github:publish", (_, project, opts) => github.publish(project, opts));
+// A repository description written by the Assistant's agent from the program.
+ipcMain.handle("assistant:describe", (_, source) => assistantHost().describe(String(source || "")));
+// A commit message written by the Assistant's agent from the project's changes.
+ipcMain.handle("assistant:commitMessage", async (_, project) => {
+    const d = await github.diff(project);
+    if (!d.trim()) throw new Error("No changes to describe.");
+    return assistantHost().commitMessage(d);
+});
+
 // Install an agent or start its own sign-in, from Settings → AI agents.
 const agentSetup = require("./src/main/agent-setup");
 agentSetup.init({ send, locate: { claude: () => claudeHost.locate(), codex: () => codexHost.locate() } });
@@ -1442,8 +1482,15 @@ ipcMain.handle("history:last-agent", () => lastAgent);
 
 // ---- Library approvals: the review sheet for new/changed device libraries ----
 let lastAgent = null; // { at, client } — the last AI agent call, for "who changed it"
+// The shared device library first (its key is the one pinned), then the open
+// project's own libraries (<project>/devices) when it has any.
+let openProjectDir = null;
+ipcMain.on("project:open", (_, dir) => { openProjectDir = dir ? String(dir) : null; libTrust.rescan?.(); });
+function projectDevicesDir() { return openProjectDir ? path.join(openProjectDir, "devices") : ""; }
 function trustRoots() {
-    return [devicesDir()].filter(r => fs.existsSync(r) && fs.existsSync(path.join(path.dirname(r), "framework")));
+    const shared = [devicesDir()].filter(r => fs.existsSync(r) && fs.existsSync(path.join(path.dirname(r), "framework")));
+    const own = projectDevicesDir();
+    return own && shared.length && fs.existsSync(own) ? [...shared, own] : shared;
 }
 app.whenReady().then(() => libTrust.start({ getWin: () => win, roots: trustRoots, logger, lastAgent: () => lastAgent }));
 ipcMain.handle("libtrust:info", () => libTrust.info());
@@ -1462,7 +1509,7 @@ app.whenReady().then(() => {
         onActivity: (client) => { lastAgent = { at: Date.now(), client }; },
         extraMethods: {
             library_request_approval: ({ prefix }) => libTrust.requestApproval(String(prefix || "")),
-            library_paths: () => ({ devices: trustRoots(), ide_builds_use: devicesDir() }),
+            library_paths: () => ({ devices: trustRoots(), ide_builds_use: devicesDir(), project_devices: projectDevicesDir() }),
             projects: () => ({ projects_dir: projectsDir(), projects: listProjects().map(p => ({ ...p, modified: new Date(p.modified * 1000).toISOString() })) }),
             new_project: ({ name, chip, template, source }) => {
                 chip = String(chip || "esp32").toLowerCase();
@@ -1471,6 +1518,7 @@ app.whenReady().then(() => {
             },
         },
         getWin: () => win,
+        getProject: () => openProjectDir,
         settings,
         version: app.getVersion(),
         logger,

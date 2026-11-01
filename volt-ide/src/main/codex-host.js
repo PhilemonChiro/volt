@@ -14,15 +14,18 @@ const claudeHost = require("./claude-host");
 
 const { logFile, readMeta, writeMeta, emit, wasCut, diskCheck, switchedFrom } = claudeHost.store;
 
+const policy = require("./agent-policy");
+const { hostToken } = require("./agent-bridge");
+
 const PROMPT = claudeHost.SYSTEM_PROMPT + `
 Change .volt files only with the volt ide_edit tool, never with apply_patch or shell commands.`;
 
 // Volt tools that run without asking: read-only, or visible and undoable in the editor.
 const AUTO = ["volt_spec", "device_card", "list_devices", "check", "review", "ide_status",
-    "ide_read", "ide_edit", "ide_diagnostics", "ide_show", "ide_screenshot", "ide_serial", "ide_history", "ide_highlight",
-    "ide_point", "ide_walkthrough", "ide_select"];
+    "ide_read", "ide_diagnostics", "ide_show", "ide_history", "ide_highlight",
+    "ide_point", "ide_walkthrough", "ide_select", "ide_build"]; // the rest follow agent-policy.js
 // Kept from the model: file-based build/format (the IDE owns the project) and tools the chat doesn't use.
-const HIDDEN = ["ide_note_events", "ide_ask", "build", "format"];
+const HIDDEN = ["ide_note_events", "ide_ask", "build", "format", "ide_screenshot"];
 // Codex features that pull in tools, apps or hooks from the user's own setup.
 const OFF = ["apps", "plugins", "computer_use", "browser_use", "browser_use_external", "in_app_browser", "hooks",
     "image_generation", "multi_agent", "goals", "tool_suggest", "tool_search_always_defer_mcp_tools", "skill_search",
@@ -116,7 +119,7 @@ function rpc(child, onMessage) {
 function serverArgs() {
     const toml = (s) => JSON.stringify(s); // TOML basic strings share JSON's escaping
     const tools = AUTO.map(t => `${t}={approval_mode="approve"}`).join(",");
-    const volt = `{command=${toml(voltBin())},args=["mcp"],default_tools_approval_mode="prompt",` +
+    const volt = `{command=${toml(voltBin())},args=["mcp"],env={VOLT_AGENT_HOST=${toml(hostToken)}},default_tools_approval_mode="prompt",` +
         `disabled_tools=[${HIDDEN.map(toml).join(",")}],tools={${tools}}}`;
     return ["app-server", ...OFF.flatMap(f => ["--disable", f]), "-c", "notify=[]", "-c", `mcp_servers={volt=${volt}}`];
 }
@@ -270,6 +273,15 @@ function askApproval(p, m) {
     } else {
         return p.rpc.fail(m.id, "Not supported in Volt IDE");
     }
+    // The strictest rule over every file a change touches (or the one tool call).
+    const files = tool === "Edit" ? String(input.file_path || "").split(", ").filter(Boolean) : [null];
+    const rules = files.map(f => policy.forCall(tool, f ? { file_path: f } : input, p.project, getSetting));
+    const rank = (r) => r.level ? policy.LEVELS.indexOf(r.level) : 1; // not covered: ask
+    const rule = rules.reduce((a, b) => rank(b) > rank(a) ? b : a);
+    const settle = (allow) => answer(p, { rpcId: m.id, kind }, allow);
+    if (rule.level === "allow") return settle(true);
+    if (rule.level === "never") return settle(false);
+    if (rule.key && !reason) reason = policy.label(rule.key);
     const id = "cx-" + m.id;
     const entry = { t: "approval", id, tool, input, reason };
     p.approvals.set(id, { entry, rpcId: m.id, kind });
@@ -320,6 +332,23 @@ function startTurn(p, text) {
     return p.rpc.request("turn/start", { threadId: p.thread, input: [{ type: "text", text, text_elements: [] }] })
         .then(r => { p.turnId = r.turn.id; });
 }
+
+/** ask(prompt) → the reply text (one quick, read-only, unsaved request). */
+async function ask(prompt) {
+    const bin = await locate();
+    if (!bin) throw new Error("Codex is not installed.");
+    const out = path.join(os.tmpdir(), `volt-describe-${process.pid}-${Date.now()}.txt`);
+    const m = await model();
+    const args = ["exec", ...OFF.flatMap(f => ["--disable", f]), "-c", "notify=[]", "-c", "mcp_servers={}",
+        "--ephemeral", "--skip-git-repo-check", "--ignore-rules", "-s", "read-only", ...(m ? ["-m", m] : []),
+        "-o", out, prompt];
+    // stdin closed at once: `codex exec` otherwise waits to read more of the prompt from it.
+    await new Promise((resolve, reject) => execFile(bin, args, { timeout: 90000, cwd: os.tmpdir(), env: env(bin), maxBuffer: 4 << 20 },
+        (err, _o, se) => { if (err) { logger.log("warn", "assistant", `codex describe: ${String(se || err.message).trim().split("\n").slice(-3).join(" | ")}`); reject(new Error("Codex couldn't write it.")); } else resolve(); }).stdin.end());
+    try { return fs.readFileSync(out, "utf8"); } finally { try { fs.unlinkSync(out); } catch (_) {} }
+}
+async function describe(source) { return claudeHost.cleanDescription(await ask(claudeHost.DESCRIBE_PROMPT(source))); }
+async function commitMessage(diff) { return claudeHost.cleanCommitMessage(await ask(claudeHost.COMMIT_PROMPT(diff))); }
 
 // ---- panel actions ----
 
@@ -415,4 +444,4 @@ function newChat(project) { close(project); return claudeHost.newChat(project); 
 function openChat(project, id) { close(project); return claudeHost.openChat(project, id); }
 const { chats, saveAfter } = claudeHost;
 
-module.exports = { init, locate, status, models, history, send, decide, stop, newChat, chats, openChat, saveAfter, close, closeAll };
+module.exports = { init, locate, describe, commitMessage, status, models, history, send, decide, stop, newChat, chats, openChat, saveAfter, close, closeAll };

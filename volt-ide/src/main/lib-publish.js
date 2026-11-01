@@ -162,8 +162,13 @@ function nextVersion(list, prefix, fallback) {
             const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
             return pa[0] - pb[0] || pa[1] - pb[1] || pa[2] - pb[2];
         });
-    if (!vs.length) return fallback && /^\d+\.\d+\.\d+$/.test(fallback) ? fallback : "1.0.0";
-    const [a, b, c] = vs[vs.length - 1].split(".").map(Number);
+    const local = fallback && /^\d+\.\d+\.\d+$/.test(fallback) ? fallback : null;
+    if (!vs.length) return local || "1.0.0";
+    const last = vs[vs.length - 1];
+    const [a, b, c] = last.split(".").map(Number);
+    // A version set in device.json that's ahead of the Grid wins over a patch bump.
+    const [x, y, z] = local ? local.split(".").map(Number) : [];
+    if (local && (x - a || y - b || z - c) > 0) return local;
     return `${a}.${b}.${c + 1}`;
 }
 

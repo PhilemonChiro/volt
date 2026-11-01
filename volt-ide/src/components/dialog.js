@@ -61,6 +61,32 @@ export function confirm(title, opts = {}) {
 }
 
 // Returns Promise<void> — resolves when dismissed.
+// askSave(fileName, what) — the file has unsaved changes and something is about
+// to replace it (opening or creating a project, closing). Resolves to
+// "save" | "discard" | "cancel". Enter saves, Escape cancels.
+export function askSave(fileName, what = "") {
+    return new Promise((resolve) => {
+        const { overlay, close, setKeyHandler } = mount(`
+            <div class="dialog dialog-confirm" role="dialog" aria-modal="true">
+                <h2 class="dialog-title">Save changes to ${esc(fileName)}${what ? " " + esc(what) : ""}?</h2>
+                <p class="dialog-subtitle">Your changes will be lost if you don't save them.</p>
+                <div class="dialog-actions">
+                    <button class="dialog-btn dialog-btn-left" data-act="discard">Don't Save</button>
+                    <button class="dialog-btn" data-act="cancel">Cancel</button>
+                    <button class="dialog-btn dialog-btn-primary" data-act="save">Save</button>
+                </div>
+            </div>`);
+        const finish = (v) => close(v, resolve);
+        overlay.querySelectorAll("[data-act]").forEach(b => b.onclick = () => finish(b.dataset.act));
+        overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) finish("cancel"); });
+        setKeyHandler((e) => {
+            if (e.key === "Escape") { e.preventDefault(); finish("cancel"); }
+            else if (e.key === "Enter" && !e.target.closest?.("[data-act]")) { e.preventDefault(); finish("save"); }
+        });
+        setTimeout(() => overlay.querySelector('[data-act="save"]')?.focus(), 40);
+    });
+}
+
 export function alert(title, opts = {}) {
     const { detail = "", okLabel = "OK" } = opts;
     return new Promise((resolve) => {

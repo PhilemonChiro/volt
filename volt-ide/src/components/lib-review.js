@@ -171,6 +171,7 @@ function render() {
           <p class="lr-who">${esc(cur.who)}${cur.hasPrevious ? ` Showing changes against ${esc(cur.prevLabel)}.` : cur.state === "changed" ? " The approved version can't be shown, so read every file." : " Nothing was approved here before — read every file."}</p>
           ${cur.state === "invalid" ? `<p class="lr-alert">Its approval record doesn't verify — it may have been edited by hand.</p>` : ""}
           ${cur.detail && cur.state === "unreadable" ? `<p class="lr-alert">${esc(cur.detail)}</p>` : ""}
+          ${cur.locked ? `<p class="lr-alert">${esc(cur.lockedMessage)}</p>` : ""}
           ${failing ? `<div class="lr-alert"><b>Fails the library checks</b> — it can't be approved until these are fixed:<ul>${cur.checks.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul></div>` : ""}
           <div class="lr-caps">${capsHtml(cur.capabilities)}</div>
           ${summaryHtml()}
@@ -189,9 +190,9 @@ function render() {
       <footer class="lr-foot">
         ${focusReq ? `<input class="lr-reason" type="text" placeholder="Note for the AI agent (optional) — e.g. why you rejected it" aria-label="Note for the AI agent">` : ""}
         <span class="lr-spacer"></span>
-        <button type="button" class="lr-btn" data-d="reject">${cur.hasPrevious ? "Reject change" : cur.framework ? "Keep blocked" : "Reject"}</button>
+        <button type="button" class="lr-btn${cur.locked ? " primary" : ""}" data-d="reject">${cur.locked ? "Restore original" : cur.hasPrevious ? "Reject change" : cur.framework ? "Keep blocked" : "Reject"}</button>
         <button type="button" class="lr-btn" data-d="later">Decide later</button>
-        <button type="button" class="lr-btn primary" data-d="approve"${failing ? ` disabled title="Fix the library check errors first"` : ""}>Approve &amp; sign</button>
+        ${cur.locked ? "" : `<button type="button" class="lr-btn primary" data-d="approve"${failing ? ` disabled title="Fix the library check errors first"` : ""}>Approve &amp; sign</button>`}
       </footer>`;
     sheet.querySelectorAll(".lr-item").forEach(b => b.onclick = () => select(items[+b.dataset.k]));
     sheet.querySelectorAll(".lr-file").forEach(b => b.onclick = () => {

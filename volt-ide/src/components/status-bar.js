@@ -13,9 +13,21 @@ export function setLine(line, col) {
     if (el) el.textContent = `Ln ${line}, Col ${col}`;
 }
 
+// The tone colours the status bar so build state reads at a glance.
+function toneOf(text) {
+    if (/^no errors|ok$|^exported/i.test(text)) return "ok";
+    if (/fail|error/i.test(text)) return "err";
+    if (/warning/i.test(text)) return "warn";
+    if (/(\.\.\.|…)$/.test(text)) return "busy";
+    return "";
+}
+
 export function setBuild(text) {
     const el = document.getElementById("statusLine");
-    if (el) el.textContent = text === "Ready" ? "" : text;
+    if (!el) return;
+    el.textContent = text === "Ready" ? "" : text;
+    const bar = document.getElementById("statusBar");
+    if (bar) bar.dataset.tone = toneOf(text);
 }
 
 export function setVersion(v) {

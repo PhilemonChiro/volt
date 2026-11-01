@@ -86,7 +86,7 @@ function build() {
                 item("Outline", "panel:outline", "Cmd+2", true),
                 item("Library…", "panel:library", "Cmd+3", true),
                 item("History", "panel:history", "Cmd+Shift+H", true),
-                item("Board", "board", "Cmd+5", true),
+                item("Wiring", "board", "Cmd+5", true),
                 { type: "separator" },
                 item("Add Part…", "addPart", "Cmd+Shift+A", true),
                 { type: "separator" },

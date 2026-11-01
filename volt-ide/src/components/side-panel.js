@@ -8,8 +8,8 @@ let activePanel = null;
 let lastAST = null;
 
 export function init() {
-    const ids = ["toggleHardware", "toggleOutline", "toggleLibrary", "toggleHistory", "toggleAssistant"];
-    const panels = ["hardware", "outline", "library", "history", "assistant"];
+    const ids = ["toggleHardware", "toggleOutline", "toggleLibrary", "toggleHistory", "toggleGithub", "toggleAssistant"];
+    const panels = ["hardware", "outline", "library", "history", "github", "assistant"];
 
     ids.forEach((id, i) => {
         const btn = document.getElementById(id);
@@ -99,12 +99,12 @@ export function open(panel) {
 
     // Highlight active button in activity bar
     document.querySelectorAll(".activity-btn").forEach(b => b.classList.remove("active"));
-    const btnMap = { hardware: "toggleHardware", outline: "toggleOutline", library: "toggleLibrary", history: "toggleHistory", assistant: "toggleAssistant" };
+    const btnMap = { hardware: "toggleHardware", outline: "toggleOutline", library: "toggleLibrary", history: "toggleHistory", github: "toggleGithub", assistant: "toggleAssistant" };
     const btn = document.getElementById(btnMap[panel]);
     if (btn) btn.classList.add("active");
 
     // Swap visible body — fade-in via .is-active class (CSS keyframe)
-    ["panelHardware", "panelOutline", "panelLibrary", "panelHistory", "panelAssistant"].forEach(id => {
+    ["panelHardware", "panelOutline", "panelLibrary", "panelHistory", "panelGithub", "panelAssistant"].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.style.display = "none"; el.classList.remove("is-active"); }
     });
@@ -113,6 +113,7 @@ export function open(panel) {
         outline:  "panelOutline",
         library:  "panelLibrary",
         history: "panelHistory",
+        github: "panelGithub",
         assistant: "panelAssistant",
     };
     const body = document.getElementById(bodyMap[panel]);
@@ -123,12 +124,14 @@ export function open(panel) {
     }
 
     // Title
-    const titles = { hardware: "Hardware", outline: "Outline", library: "Library", history: "History", assistant: "Assistant" };
+    const titles = { hardware: "Hardware", outline: "Outline", library: "Library", history: "History", github: "GitHub", assistant: "Assistant" };
     const title = document.getElementById("sidePanelTitle");
     if (title) title.textContent = titles[panel] || panel;
 
     if (panel === "assistant") {
         import("./assistant-panel.js").then(m => m.renderInto(body));
+    } else if (panel === "github") {
+        import("./github-panel.js").then(m => m.renderInto(body));
     } else if (panel === "history") {
         import("./history.js").then(m => m.renderInto(body));
     } else if (panel === "library") {
@@ -232,7 +235,7 @@ function renderOutline() {
 
     // Task tiers come from the compiler when it has run.
     const tiers = Object.fromEntries(((lastAST && lastAST.tasks) || []).map(t => [t.name, t.tier]));
-    const ICON = { setup: ["S", "task"], loop: ["L", "task"], every: ["E", "task"], task: ["T", "task"], on: ["O", "task"],
+    const ICON = { setup: ["S", "setup"], loop: ["L", "every"], every: ["E", "every"], task: ["T", "task"], on: ["O", "on"],
         machine: ["M", "machine"], var: ["V", "var"], shared: ["V", "var"], storage: ["D", "var"], channel: ["C", "var"],
         struct: ["S", "enum"], enum: ["E", "enum"], func: ["ƒ", "fn"] };
     const row = (kind, name, detail, line, badge) => {

@@ -108,7 +108,7 @@ export function openPin(opts) {
                     <select id="pkfPin" required>
                         <option value="" disabled selected>Choose a pin…</option>
                         ${opts.pins.map(p => `<option value="${p.gpio}"${p.level === "blocked" ? " disabled" : ""}>GPIO ${p.gpio}${p.label !== String(p.gpio) ? ` (${esc(p.label)})` : ""}${
-                            p.level === "blocked" ? " — can't be used" : p.level === "issue" ? "  ⚠ unsafe" : p.level === "warning" ? "  ⚠" : ""}</option>`).join("")}
+                            p.level === "blocked" ? " — can't be used" : p.level === "issue" ? " — unsafe" : p.level === "warning" ? " — use with care" : ""}</option>`).join("")}
                     </select>
                     <div class="pkf-note"></div>
                 </div>

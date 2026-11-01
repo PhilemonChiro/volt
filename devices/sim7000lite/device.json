@@ -1,10 +1,6 @@
 {
   "alternatives": [
     {
-      "name": "SIM7000",
-      "note": "Full driver: delivery receipts, whitelist/SMS command helpers, network time, operator name."
-    },
-    {
       "name": "SIM800L",
       "note": "2G only, SMS basics."
     }

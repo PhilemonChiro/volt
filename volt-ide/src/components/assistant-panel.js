@@ -12,6 +12,7 @@ const api = () => window.volt.assistant;
 let getProject = () => null;
 let getFile = () => null;
 let saveFile = async () => {};
+let getContext = async () => "";   // what the user sees right now (ai-assist.js), sent with every message
 let rewindAt = null;    // the user message the chat goes back to before, on the next send
 let root = null;        // panel body element
 let shownProject = null;
@@ -68,6 +69,7 @@ export function init(ctx) {
     getProject = ctx.getProject;
     if (ctx.getFile) getFile = ctx.getFile;
     if (ctx.onSave) saveFile = ctx.onSave;
+    if (ctx.getContext) getContext = ctx.getContext;
     if (hooked) return;
     hooked = true;
     // The agent was switched (here or in Settings → AI agents): draw the panel for it.
@@ -83,10 +85,11 @@ export function init(ctx) {
 // A request queued by ask() for the next time the panel is drawn for that project.
 let queued = null;
 
-/** ask(project, text) — open the Assistant and send text as the first message
- *  (the New Project sheet's "Describe it"). */
-export function ask(project, text) {
-    queued = { project, text };
+/** ask(project, text, opts) — open the Assistant and send text as the next
+ *  message (New Project "Describe it", Fix it, Ask on a selection…).
+ *  opts.context: extra notes for the agent only (build log, serial lines). */
+export function ask(project, text, opts = {}) {
+    queued = { project, text, context: opts.context || "" };
     shownProject = null;
     openPanel("assistant");
     if (root && root.offsetParent) renderInto(root);
@@ -199,7 +202,7 @@ export async function renderInto(body) {
     });
     // Show the message and the thinking dots at once: on a cold start the
     // host only echoes them after Claude Code has launched (several seconds).
-    const send = async (text) => {
+    const send = async (text, opts = {}) => {
         const log = body.querySelector(".as-log");
         log.querySelector(".as-welcome")?.remove();
         endGroup();
@@ -216,7 +219,9 @@ export async function renderInto(body) {
         scroll(true);
         const rewind = rewindAt && rewindAt._at;
         try {
-            await api().send(project, text, { before, rewind });
+            const seen = await getContext().catch(() => "");
+            const context = [seen, opts.context].filter(Boolean).join("\n\n");
+            await api().send(project, text, { before, rewind, context });
             if (rewind) { log.querySelectorAll(".is-rewound").forEach(el => el.remove()); rewindAt = null; }
         }
         catch (err) {
@@ -240,7 +245,7 @@ export async function renderInto(body) {
     const log = body.querySelector(".as-log");
     const jump = body.querySelector(".as-jump");
     log.addEventListener("scroll", () => { if (nearBottom(log)) jump.classList.remove("is-shown"); }, { passive: true });
-    jump.onclick = () => { jump.classList.remove("is-shown"); scroll(true); };
+    jump.onclick = () => { jump.classList.remove("is-shown"); pinned = true; log.scrollTop = log.scrollHeight; };
     log.addEventListener("click", (e) => {
         const copy = e.target.closest(".as-copy");
         if (copy) {
@@ -301,8 +306,13 @@ export async function renderInto(body) {
     live = null;
     group = null;
     const h = await api().history(project);
-    for (const entry of h.entries) draw(entry, false);
+    // Long chats: draw the last few turns now, earlier ones as the user
+    // scrolls up (loadOlder).
+    const start = turnStart(h.entries, PAGE_TURNS);
+    older = h.entries.slice(0, start);
+    for (const entry of h.entries.slice(start)) draw(entry, false);
     for (const entry of h.pending) draw(entry, false);
+    log.addEventListener("scroll", () => { if (older.length && log.scrollTop < 300) loadOlder(); }, { passive: true });
     cut = !!h.cut;
     if (!log.children.length) welcome(log);
     setBusy(h.busy);
@@ -313,7 +323,7 @@ export async function renderInto(body) {
     }
     pinned = true;
     scroll(true);
-    if (queued && queued.project === project && !h.busy) { const q = queued; queued = null; send(q.text); }
+    if (queued && queued.project === project && !h.busy) { const q = queued; queued = null; send(q.text, q); }
 }
 
 // ---- undo ----
@@ -931,6 +941,8 @@ function setBusy(on) {
         b.classList.toggle("is-stop", busy);
     }
     if (!busy && live) { live.classList.remove("is-live"); live = null; }
+    // A Fix it / Ask sent while the agent was busy goes out when it's done.
+    if (!busy && queued && queued.project === shownProject && sendFn) { const q = queued; queued = null; setTimeout(() => sendFn(q.text, q), 0); }
     if (!busy) { endGroup(); turnBar(root && root.querySelector(".as-log")); retryBar(root && root.querySelector(".as-log")); }
     syncTyping();
     badge();
@@ -949,6 +961,52 @@ function syncTyping() {
 
 // ---- helpers ----
 
+// ---- lazy history ----
+const PAGE_TURNS = 8;   // turns (a user message and everything after it) drawn at a time
+let older = [];         // history entries not drawn yet, oldest first
+let loadingOlder = false;
+
+// Index where the last `turns` turns begin (always on a user message, so a
+// turn's tool steps and replies are drawn together).
+function turnStart(entries, turns) {
+    let seen = 0;
+    for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i].t === "user" && ++seen === turns) return i;
+    }
+    return 0;
+}
+
+// Draw the previous page of turns above what's shown, keeping the reader's place.
+function loadOlder() {
+    const log = root && root.querySelector(".as-log");
+    if (!log || loadingOlder || !older.length) return;
+    loadingOlder = true;
+    const start = turnStart(older, PAGE_TURNS);
+    const page = older.slice(start).filter(e => e.t !== "busy");
+    older = older.slice(0, start);
+    const fromBottom = log.scrollHeight - log.scrollTop;
+    // draw() appends to the log: set the newer messages aside, draw the page,
+    // then put them back after it.
+    const newer = document.createDocumentFragment();
+    while (log.firstChild) newer.appendChild(log.firstChild);
+    const keep = { live, group };
+    live = null; group = null;
+    for (const entry of page) draw(entry, false);
+    endGroup();
+    ({ live, group } = keep);
+    log.appendChild(newer);
+    jumpTo(log, log.scrollHeight - fromBottom);
+    loadingOlder = false;
+}
+
+// Move the scroll position at once (the log scrolls smoothly otherwise, which
+// would animate through the whole chat).
+function jumpTo(log, top) {
+    log.style.scrollBehavior = "auto";
+    log.scrollTop = top;
+    requestAnimationFrame(() => { log.style.scrollBehavior = ""; });
+}
+
 function add(log, node) { const t = log.querySelector(".as-typing"); log.insertBefore(node, t); }
 // Follow new output only while the user is at the bottom; otherwise offer a
 // "jump to latest" button instead of pulling them away from what they read.
@@ -957,7 +1015,8 @@ function nearBottom(log) { return log.scrollHeight - log.scrollTop - log.clientH
 function scroll(force) {
     const log = root && root.querySelector(".as-log");
     if (!log) return;
-    if (force || pinned) { log.scrollTop = log.scrollHeight; return; }
+    if (force) { jumpTo(log, log.scrollHeight); return; }
+    if (pinned) { log.scrollTop = log.scrollHeight; return; }
     root.querySelector(".as-jump")?.classList.add("is-shown");
 }
 document.addEventListener("scroll", (e) => {
@@ -989,7 +1048,7 @@ function clean(m) { return String(m || "").replace(/^Error invoking remote metho
 function md(text) {
     const lines = String(text).split("\n");
     const out = [];
-    const isBlock = (l) => /^\s*```/.test(l) || /^#{1,4}\s/.test(l) || /^\s*[-*•]\s+/.test(l) || /^\s*\d+[.)]\s+/.test(l);
+    const isBlock = (l) => /^\s*```/.test(l) || /^#{1,4}\s/.test(l) || /^\s*[-*•]\s+/.test(l) || /^\s*\d+[.)]\s+/.test(l) || /^\s*\|/.test(l);
     let i = 0;
     while (i < lines.length) {
         const l = lines[i];
@@ -1005,6 +1064,18 @@ function md(text) {
             continue;
         }
         if (!l.trim()) { i++; continue; }
+        // A table: a | row, then a |---| row. A row whose first cell is empty
+        // continues the one above (more pins of the same part).
+        if (/^\s*\|/.test(l) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || "")) {
+            const cells = (row) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+            const head = cells(l);
+            i += 2;
+            const rows = [];
+            while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(cells(lines[i++]));
+            out.push(`<div class="as-tablewrap"><table class="as-table"><thead><tr>${head.map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${
+                rows.map(r => `<tr${r[0] ? "" : ` class="is-cont"`}>${head.map((_, k) => `<td>${inline(r[k] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+            continue;
+        }
         const h = l.match(/^(#{1,4})\s+(.*)/);
         if (h) { out.push(`<div class="as-h">${inline(h[2])}</div>`); i++; continue; }
         const list = (re, tag) => {
@@ -1018,7 +1089,9 @@ function md(text) {
         };
         if (/^\s*[-*•]\s+/.test(l)) { list(/^\s*[-*•]\s+/, "ul"); continue; }
         if (/^\s*\d+[.)]\s+/.test(l)) { list(/^\s*\d+[.)]\s+/, "ol"); continue; }
-        const para = [];
+        // Always take at least this line: a block-looking line no rule above
+        // handled (a lone "| …" row) would otherwise never be consumed.
+        const para = [inline(lines[i++])];
         while (i < lines.length && lines[i].trim() && !isBlock(lines[i])) para.push(inline(lines[i++]));
         out.push(`<p>${para.join("<br>")}</p>`);
     }

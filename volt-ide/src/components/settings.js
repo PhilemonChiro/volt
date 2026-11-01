@@ -28,7 +28,7 @@ export async function show(category) {
     const schema = settings.getSchema();
     // "advanced" schema items are surfaced in the custom Advanced pane below
     // (the __advanced nav item), so don't also render it as its own nav entry.
-    const categories = Object.keys(schema).filter(c => c !== "advanced");
+    const categories = Object.keys(schema).filter(c => c !== "advanced" && Object.values(schema[c].items).some(d => !d.hidden));
     let activeCategory = categories.includes(category) ? category : categories[0] || "editor";
 
     function render() {

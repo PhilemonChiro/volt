@@ -3,6 +3,40 @@
 import * as settings from "../services/settings.js";
 import * as editor from "./editor.js";
 import { attachPanZoom } from "./panzoom.js";
+import { ICONS } from "./icons.js";
+
+// AI hooks (ai-assist.js): Fix it on errors, and a look at each serial line.
+let fixHandler = null;      // ({ message, line, hint }) → void; null = no Fix buttons
+let serialHook = null;      // (line) → void
+export function onFix(fn) { fixHandler = fn; }
+export function onSerialLine(fn) { serialHook = fn; }
+const fixBtn = () => fixHandler
+    ? `<button type="button" class="bp-fix" title="Ask the assistant to fix this">${ICONS.sparkle}Fix it</button>` : "";
+
+/** recentOutput(n) / recentSerial(n) — the last n lines as plain text. */
+export function recentOutput(n = 40) { return lastLines("bpOutput", ".bp-line", n); }
+export function recentSerial(n = 40) { return lastLines("bpMonitor", ".serial-line", n); }
+function lastLines(id, sel, n) {
+    const el = document.getElementById(id);
+    return el ? [...el.querySelectorAll(sel)].slice(-n).map(l => l.textContent.replace(/Fix it$/, "").trim()).join("\n") : "";
+}
+
+/** showSerialBar({ text, actions: [{ label, run }] }) — the one-line note above
+ *  the Serial Monitor (crash, brownout…); null hides it. */
+export function showSerialBar(bar) {
+    const el = document.getElementById("bpSerialBar");
+    if (!el) return;
+    if (!bar) { el.hidden = true; el.innerHTML = ""; return; }
+    el.innerHTML = `${ICONS.warn}<span class="bp-sbar-text">${esc(bar.text)}</span>` +
+        bar.actions.map((a, i) => `<button type="button" class="bp-sbar-btn${i === bar.actions.length - 1 ? " is-primary" : ""}" data-i="${i}">${i === bar.actions.length - 1 ? ICONS.sparkle : ""}${esc(a.label)}</button>`).join("") +
+        `<button type="button" class="bp-sbar-x" title="Dismiss" aria-label="Dismiss">×</button>`;
+    el.querySelectorAll(".bp-sbar-btn").forEach(b => b.onclick = () => bar.actions[+b.dataset.i].run());
+    el.querySelector(".bp-sbar-x").onclick = () => { showSerialBar(null); bar.onDismiss?.(); };
+    el.hidden = activeTab !== "monitor";
+    el.dataset.has = "1";
+    // Point at it from the other tabs.
+    if (activeTab !== "monitor") document.querySelector('.bp-tab[data-tab="monitor"]')?.classList.add("has-alert");
+}
 
 let activeTab = "output";
 let showTimestamps = settings.get("serial.showTimestamps", true);
@@ -82,6 +116,7 @@ export function init(container) {
         </div>
         <!-- Build progress moved to footer status bar -->
         <div class="bp-content active" id="bpOutput"></div>
+        <div class="bp-sbar" id="bpSerialBar" role="status" hidden></div>
         <div class="bp-content" id="bpMonitor"></div>
         <div class="bp-content" id="bpProblems"></div>
         <div class="bp-content bp-content-c" id="bpGeneratedC"></div>
@@ -156,6 +191,7 @@ export function init(container) {
         const el = container.querySelector(".bp-content.active");
         if (el) el.innerHTML = "";
         if (activeTab === "output") clearProgress();
+        if (activeTab === "monitor") showSerialBar(null);
     };
 
     // Timestamp toggle (serial monitor) — persists via settings; the
@@ -185,6 +221,9 @@ function switchTab(container, tab) {
     container.querySelector("#bpMonitor").classList.toggle("active", tab === "monitor");
     container.querySelector("#bpProblems").classList.toggle("active", tab === "problems");
     container.querySelector("#bpGeneratedC").classList.toggle("active", tab === "generatedc");
+    const sbar = container.querySelector("#bpSerialBar");
+    if (sbar) sbar.hidden = tab !== "monitor" || !sbar.innerHTML;
+    if (tab === "monitor") container.querySelector('.bp-tab[data-tab="monitor"]')?.classList.remove("has-alert");
 
     // Show/hide monitor-specific buttons
     const tsBtn = container.querySelector("#bpTimestamp");
@@ -275,7 +314,9 @@ export function appendOutput(text, level, opts = {}) {
     entry.innerHTML =
         `<span class="bp-time">${ts}</span>` +
         `<span class="bp-out-dot bp-out-${level || "info"}"></span>` +
-        `<span>${esc(clean)}</span>`;
+        `<span>${esc(clean)}</span>` + (opts.fix ? fixBtn() : "");
+    const fb = entry.querySelector(".bp-fix");
+    if (fb) fb.onclick = (e) => { e.stopPropagation(); fixHandler({ message: clean, log: true }); };
     if (opts.onClick) {
         entry.classList.add("bp-link");
         entry.onclick = opts.onClick;
@@ -357,6 +398,7 @@ export function appendMonitor(text) {
     // Strip ANSI escape codes
     const clean = text.replace(/\x1b\[[0-9;]*m/g, "").trim();
     if (!clean) return;
+    serialHook?.(clean);
 
     // Parse ESP-IDF log format: "00:10:41.050 [INFO ] tag: message"
     // or compact: "I (12345) tag: message"
@@ -451,11 +493,19 @@ export function setProblems(diags) {
                     <span class="bp-problem-msg">${esc(d.message)}</span>
                     ${hint}
                 </div>
+                ${d.severity === "error" ? fixBtn() : ""}
                 <span class="bp-problem-loc">Ln ${d.line || 1}</span>
             </div>
         `;
     }).join("");
 
+    el.querySelectorAll(".bp-problem .bp-fix").forEach(b => {
+        b.onclick = (e) => {
+            e.stopPropagation();
+            const d = diags[[...el.querySelectorAll(".bp-problem")].indexOf(b.closest(".bp-problem"))];
+            if (d) fixHandler({ message: d.message, line: d.line, hint: d.hint });
+        };
+    });
     // Click → jump to line
     el.querySelectorAll(".bp-problem").forEach(item => {
         item.onclick = () => {

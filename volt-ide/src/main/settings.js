@@ -60,6 +60,14 @@ const SCHEMA = {
             codexPath:  { type: "path", default: "" },
         },
     },
+    agentPermissions: require("./agent-policy").SETTINGS,
+    // The GitHub panel's OAuth app (device flow); set until it is built in.
+    github: {
+        label: "GitHub",
+        items: {
+            clientId: { type: "string", default: "", hidden: true },
+        },
+    },
     build: {
         label: "Build & Toolchain",
         items: {

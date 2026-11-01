@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("volt", {
     // App metadata
     getVersion: () => ipcRenderer.invoke("app_version"),
     platform: process.platform,   // "darwin" | "linux" | "win32"
+    onFullscreen: (callback) => ipcRenderer.on("window:fullscreen", (_, on) => callback(on)),
     arch:     process.arch,
 
     // Window controls
@@ -144,6 +145,8 @@ contextBridge.exposeInMainWorld("volt", {
     },
     // macOS menu bar: actions in, project state out (greys items out).
     onMenuAction: (callback) => ipcRenderer.on("menu:action", (_, data) => callback(data)),
+    // The project open in this window (main points builds/checks at its devices/).
+    setOpenProject: (dir) => ipcRenderer.send("project:open", dir || ""),
     setMenuState: (state) => ipcRenderer.send("menu:state", state),
     // Logging — fire-and-forget from the renderer; main writes to the
     // rotating log file. The reveal helper opens Finder/Explorer on it.
@@ -166,10 +169,23 @@ contextBridge.exposeInMainWorld("volt", {
     agentReply: (id, result, error) => ipcRenderer.send("agent:reply", { id, result, error }),
     agentVoltPath: () => ipcRenderer.invoke("agent:voltPath"),
     // Assistant panel: the user's own Claude Code (src/main/claude-host.js)
+    github: {
+        status:       () => ipcRenderer.invoke("github:status"),
+        signIn:       () => ipcRenderer.invoke("github:signIn"),
+        cancelSignIn: () => ipcRenderer.invoke("github:cancelSignIn"),
+        signOut:      () => ipcRenderer.invoke("github:signOut"),
+        repo:         (project) => ipcRenderer.invoke("github:repo", project),
+        commit:       (project, message, push) => ipcRenderer.invoke("github:commit", project, message, push),
+        pull:         (project) => ipcRenderer.invoke("github:pull", project),
+        publish:      (project, opts) => ipcRenderer.invoke("github:publish", project, opts),
+        onEvent:      (callback) => ipcRenderer.on("github:event", (_, data) => callback(data)),
+    },
     assistant: {
         status:  () => ipcRenderer.invoke("assistant:status"),
         models:  (which) => ipcRenderer.invoke("assistant:models", which),
         agents:  () => ipcRenderer.invoke("assistant:agents"),
+        describe: (source) => ipcRenderer.invoke("assistant:describe", source),
+        commitMessage: (project) => ipcRenderer.invoke("assistant:commitMessage", project),
         setupPlan:   (agent) => ipcRenderer.invoke("assistant:setupPlan", agent),
         install:     (agent) => ipcRenderer.invoke("assistant:install", agent),
         login:       (agent) => ipcRenderer.invoke("assistant:login", agent),

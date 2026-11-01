@@ -10,22 +10,27 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { ipcMain, dialog } = require("electron");
+const policy = require("./agent-policy");
 
 const INFO_FILE = path.join(os.homedir(), ".volt", "ide.json");
 const SERIAL_MAX = 2000;
 const MINUTE = 60_000;
 
+// Given (in VOLT_AGENT_HOST) to the `volt mcp` of the IDE's own chat agents, which
+// ask the user with approval cards; any other caller is asked here with a dialog.
+const hostToken = crypto.randomBytes(16).toString("hex");
+
 // Renderer methods and how long each may take.
 const RENDERER_TIMEOUTS = { build: 20 * MINUTE, run: 20 * MINUTE, open: MINUTE, walkthrough: 31 * MINUTE, ask: 31 * MINUTE };
 
 /**
- * start({ getWin, settings, onSend, isMonitoring, version, logger, onActivity, extraMethods })
+ * start({ getWin, getProject, settings, onSend, isMonitoring, version, logger, onActivity, extraMethods })
  *   onActivity(client) is told about every agent call; extraMethods are
  *   main-process methods added to the bridge (e.g. library approvals).
  *   onSend(fn) subscribes fn(channel, data) to everything main sends the
  *   renderer and returns an unsubscribe function.
  */
-function start({ getWin, settings, onSend, isMonitoring, version, logger, onActivity, extraMethods }) {
+function start({ getWin, getProject, settings, onSend, isMonitoring, version, logger, onActivity, extraMethods }) {
     const token = crypto.randomBytes(32).toString("hex");
 
     // ---- renderer round trips ----
@@ -86,13 +91,43 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
         };
     }
 
-    let flashAllowed = false;   // asked once per IDE session
+    // ---- permissions (agent-policy.js) ----
+    const allowedUntilClose = new Set(); // action keys the user allowed for this IDE session
+    async function describe(key, params) {
+        if (key !== "flash") return `An AI agent wants to ${policy.label(key).toLowerCase()}.`;
+        const st = await callRenderer("status");
+        const project = path.basename(st.project || st.file || "") || "the open program";
+        const port = params.port;
+        const b = port ? (st.boards || []).find(x => x.port === port) || { port } : st.board;
+        const board = b ? `the ${b.chip || "board"} on ${b.port}` : "the connected board";
+        return `An AI agent wants to build ${project} and flash it to ${board}.`;
+    }
+    async function gate(method, params, builtin, client) {
+        const project = getProject ? getProject() : null;
+        const key = policy.action(method, params, project || "");
+        if (!key) return;
+        const level = policy.level(key, project, settings);
+        if (level === "never") throw new Error(policy.refusal(key));
+        if (level === "allow" || builtin || allowedUntilClose.has(key)) return; // built-in chat asked with a card
+        const { response } = await dialog.showMessageBox(getWin(), {
+            type: "question",
+            buttons: ["Allow once", "Allow until Volt IDE closes", "Don't allow"],
+            defaultId: 2, cancelId: 2,
+            title: "Allow AI agent?",
+            message: await describe(key, params),
+            detail: `${client ? client + " is asking. " : ""}Change what agents may do in Settings → AI agent permissions.`,
+        });
+        if (response === 2) throw new Error("The user did not allow this.");
+        if (response === 1) allowedUntilClose.add(key);
+    }
     ipcMain.handle("agent:voltPath", () => require("./volt-cli").bin());
 
     const methods = {
         ...(extraMethods || {}),
         hello: async () => ({ version }),
         agent_hello: async () => ({ version }), // `volt mcp` connected; the activity event names the app
+        // `volt mcp` asks before work it does itself (library_write writes files, then asks for approval).
+        agent_gate: async () => ({ ok: true }), // the gate runs before every method, below
 
         screenshot: async ({ target = "window", max_width = 1600 } = {}) => {
             const win = getWin();
@@ -129,23 +164,6 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
         },
 
         run: async ({ port } = {}) => {
-            if (!flashAllowed) {
-                const win = getWin();
-                const st = await callRenderer("status");
-                const project = path.basename(st.project || st.file || "") || "the open program";
-                const b = port ? (st.boards || []).find(x => x.port === port) || { port } : st.board;
-                const board = b ? `the ${b.chip || "board"} on ${b.port}` : "the connected board";
-                const { response } = await dialog.showMessageBox(win, {
-                    type: "question",
-                    buttons: ["Allow", "Don't allow"],
-                    defaultId: 1, cancelId: 1,
-                    title: "Allow AI agent to flash?",
-                    message: `An AI agent wants to build ${project} and flash it to ${board}.`,
-                    detail: "If you allow it, the agent can flash again until you close the IDE or disconnect the agent (AI button, top right).",
-                });
-                if (response !== 0) throw new Error("The user did not allow flashing.");
-                flashAllowed = true;
-            }
             const { result, events } = await collectBuild(() => callRenderer("run", { port }));
             const s = buildSummary(result, events);
             if (s.ok) { s.port = s.artifact; delete s.artifact; }
@@ -182,8 +200,11 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
             try { call = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
             catch (_) { return reply(400, { error: "bad JSON" }); }
             const { method, params } = call;
-            if (onActivity) onActivity(req.headers["x-volt-client"] || null);
+            const client = req.headers["x-volt-client"] || null;
+            if (onActivity) onActivity(client);
             try {
+                const builtin = req.headers["x-volt-host"] === hostToken;
+                await gate(method === "agent_gate" ? String((params || {}).tool || "") : method, params || {}, builtin, client);
                 const result = methods[method]
                     ? await methods[method](params || {}, req.headers["x-volt-session"] || null)
                     : await callRenderer(method, params, req.headers["x-volt-client"] || null);
@@ -216,4 +237,4 @@ function start({ getWin, settings, onSend, isMonitoring, version, logger, onActi
     };
 }
 
-module.exports = { start };
+module.exports = { start, hostToken };

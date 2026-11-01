@@ -253,7 +253,8 @@ export function extractHardware(source) {
         if ((d.iface === "uart" || d.iface === "spi") && d.hasAddress) legacy = true;   // `on ser at 0`, `on spi0 at 5`
         if (d.iface === "uart") {
             if (d.hasBus) continue;           // legacy `on ser at 0`
-            const roles = { ...d.roles };
+            // No tx / rx given: the compiler uses the chip's spare UART pins.
+            const roles = Object.keys(d.roles).length ? { ...d.roles } : (native.uart ? { tx: native.uart.tx, rx: native.uart.rx } : {});
             d.bus = d.name + "_uart";
             addBus({ name: d.bus, kind: "bus", busType: "UART", roles, params: { baud: d.params.baud || "" },
                 line: --synth, implicit: true, owner: d.name });
@@ -874,7 +875,7 @@ function drawPin(p, side, edgeX, y) {
             <circle cx="${edgeX}" cy="${y}" r="4" class="bp-pin-outer"/>
             <circle cx="${edgeX}" cy="${y}" r="8" class="bp-pin-ring"/>
             <text x="${labelX}" y="${y + 4}" class="bp-pin-label" text-anchor="${labelAnchor}">${escapeHtml(shown)}</text>
-            <text x="${warnX}" y="${y + 4}" class="bp-warn-mark" text-anchor="middle" style="display:none">⚠<title></title></text>
+            <g class="bp-warn-mark" transform="translate(${warnX - 6} ${y - 6})" style="display:none"><title></title><rect width="12" height="12" fill="transparent"/><path d="M6 1 11.2 10.5H.8z" fill="none" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 4.6v2.6M6 8.8v.1" fill="none" stroke-width="1.4" stroke-linecap="round"/></g>
             <text x="${varX}" y="${y + 4}" class="bp-var-label"
                   text-anchor="${labelAnchor}" data-line="0" style="display:none"></text>
             <g class="bp-dev-list" style="display:none"></g>

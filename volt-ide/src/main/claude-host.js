@@ -11,11 +11,16 @@ const path = require("path");
 const crypto = require("crypto");
 const logger = require("./logger");
 const voltCli = require("./volt-cli");
+const policy = require("./agent-policy");
+const { hostToken } = require("./agent-bridge");
 
 const SYSTEM_PROMPT = `You are the assistant inside Volt IDE. You write Volt firmware for the project open in the IDE.
 Volt is a new language: never write it from memory or by analogy with C, Arduino or Python.
 Loop: volt_spec once -> device_card for each device -> ide_read -> change the program only with ide_edit -> check -> fix until ok -> review and compare with the request.
 Layout: put the setup block right after the hardware block (the formatter keeps it there).
+Wiring: when the user asks about wiring, connections or pins, call ide_show with view board (the Wiring view; it marks every pin, buses included) rather than ide_point, and reply with a table: Part | Part pin | ESP32 pin, one row per wire, the part's name only on its first row; notes (common ground, dividers, supplies) as short bullets after it.
+Asked to show, explain or find something: answer and point; don't change the program. Change it only when the user asks for a change (or picks one of your options).
+Libraries: never change an official Volt library or one from the Grid. Methods only this project needs go in a project library (library_write with scope "project" and a new prefix such as sim7000lite_app) or in plain functions in the program; a shared driver only gets what every user of that part needs.
 Choosing parts: the user decides. When more than one device can do exactly what was asked, equally well for every stated requirement (list_devices results and each device_card's alternatives show these), don't pick one yourself: recommend one, end your reply with a devices block (always first a "for:" line saying what the part does in this project, so the user knows why you ask, then one device name per line, recommended first, a short reason each), and wait for the answer before writing code. Skip it when only one device fits or the user already named one.
 \`\`\`devices
 for: reading the room's temperature and humidity
@@ -25,7 +30,7 @@ DHT22 :: one data pin, slower to read
 Put nothing after the block.
 Never make a change that causes an error or hardware violation: before editing, confirm it is valid (pins the chip has, methods the device lists, free pins). If a request can't work as asked, don't apply it; say why and offer valid choices.
 End every turn with check ok: if the program has errors (yours or ones already there), fix them before you answer.
-Build or flash only when the user asks (ide_build, ide_run), then confirm with ide_serial.
+Verify with a real build: when you changed the program this turn, once its last edit passes check, run ide_build once (it only compiles; nothing goes to the board) and fix any build error the same way before you answer. Flash (ide_run) only when the user asks, then confirm with ide_serial.
 Answer briefly in plain language; the user sees your edits in the editor.
 Show, don't paste: when the user asks where something is, how code works, or what you changed, point at it in the editor with ide_point: anchor each mark with find (an exact, distinctive piece of the code, e.g. "every 300ms {" or "rfid.read_uid()"), never a line number you counted yourself; when a note is about several lines (a check and its branches, a whole block), add end_find (distinctive code on its last line) so the mark covers all of them, and put each note on the code it actually describes; a short note each, kind info, persist dismissable. ide_point answers with the real line of every mark: use those numbers (and only those) when you mention lines. Notes are shown beside the code, never written into the file. Then keep the chat reply to a sentence or two and refer to lines as "line N" or "lines N-M" (the user can click them). Don't paste the program's code into the chat. For a tour of several parts in order, use ide_walkthrough. Never add comments to the source just to explain it.
 Whenever your reply offers alternatives or ends with a question for the user (pins, approaches, a different chip, whether to apply something), always end it with the options in a choices block, 2-4 options, the recommended one first marked (recommended); an option whose title ends with ... lets the user type their own answer:
@@ -35,14 +40,26 @@ Another pin... :: tell me which; safe outputs are 18, 19, 21-23, 25-27, 32, 33
 \`\`\`
 Put nothing after the block. Don't repeat the options as a list above it.`;
 
-// Auto-approved: read-only, or visible and undoable in the editor.
+// Auto-approved: read-only or harmless. Edits, flashing, serial, libraries and other projects
+// follow the user's agent permissions (agent-policy.js) in askApproval.
+// Read is not listed: Claude reads the project (its cwd) and the Volt SDK in ~/.volt/sdk (--add-dir) without asking;
+// anything else comes to the user as an approval card.
 const ALLOWED = ["volt_spec", "device_card", "list_devices", "check", "review", "ide_status",
-    "ide_read", "ide_edit", "ide_diagnostics", "ide_show", "ide_screenshot", "ide_serial", "ide_history", "ide_highlight",
-    "ide_point", "ide_walkthrough", "ide_select"]
-    .map(t => "mcp__volt__" + t).concat(["Read"]);
+    "ide_read", "ide_diagnostics", "ide_show", "ide_history", "ide_highlight",
+    "ide_point", "ide_walkthrough", "ide_select", "ide_build"]
+    .map(t => "mcp__volt__" + t);
 // Removed from the model's tool list: file-based build/format
 // (the IDE owns the project), and the biggest definitions the chat doesn't need.
-const DISALLOWED = ["ide_note_events", "ide_ask", "build", "format"].map(t => "mcp__volt__" + t);
+// ide_screenshot: the user is looking at the IDE already; pictures cost a lot of the plan.
+const DISALLOWED = ["ide_note_events", "ide_ask", "build", "format", "ide_screenshot"].map(t => "mcp__volt__" + t)
+    .concat(secretRules());
+// Never readable or writable, even if the user would approve: keys, tokens and sign-ins.
+function secretRules() {
+    const dirs = ["~/.ssh/**", "~/.gnupg/**", "~/.aws/**", "~/.config/gh/**", "~/.kube/**", "~/.docker/**",
+        "~/.netrc", "~/.npmrc", "~/.claude/**", "~/.claude.json", "~/.codex/**", "~/.volt/secrets/**", "~/.volt/trust/**", "~/.volt/github.bin", "~/.volt/registry-signer.json",
+        "~/Library/Keychains/**", "**/.env", "**/.env.*"];
+    return ["Read", "Edit", "Write"].flatMap(t => dirs.map(d => `${t}(${d})`));
+}
 
 const MODELS = ["sonnet", "opus"];
 
@@ -97,6 +114,43 @@ async function status() {
     return { found: true, path: bin, version: v.out.trim().split(" ")[0], loggedIn: !!auth.loggedIn,
         authMethod: auth.authMethod || null };
 }
+
+// A one-line description of a program, for a GitHub repository.
+const DESCRIBE_PROMPT = (source) => `Write a GitHub repository description for this ESP32 firmware project (written in Volt, a microcontroller language). One sentence, at most 120 characters, saying what the device does for its user, not how it is coded. No quotes, no emoji, no markdown. Reply with the sentence only.
+
+Program:
+${String(source).slice(0, 12000)}`;
+// A git commit message for a project's changes (a diff).
+const COMMIT_PROMPT = (diff) => `Write a git commit message for these changes to an ESP32 firmware project written in Volt (a microcontroller language). First line: imperative mood, at most 60 characters, saying what changed in what the device does (e.g. "Send an SMS when the gas level is dangerous"). Usually that one line is the whole message. Only when there are several distinct changes, add one blank line, then one short "- " line per change (at most 3), never repeating the first line. No quotes, no markdown headings, no emoji. Reply with the message only.
+
+Changes:
+${String(diff).slice(0, 14000)}`;
+function cleanCommitMessage(text) {
+    const lines = String(text || "").replace(/^\s*\\`\\`\\`\w*\n?|\\`\\`\\`\s*$/g, "").split("\n").map(s => s.trimEnd());
+    while (lines.length && !lines[0].trim()) lines.shift();
+    if (!lines.length) return "";
+    lines[0] = lines[0].replace(/^["'`]+|["'`]+$/g, "").replace(/^(commit message|subject):\s*/i, "").slice(0, 72);
+    return lines.slice(0, 6).join("\n").trim();
+}
+function cleanDescription(text) {
+    const line = String(text || "").split("\n").map(s => s.trim()).filter(Boolean)[0] || "";
+    return line.replace(/^["'`]+|["'`]+$/g, "").replace(/^description:\s*/i, "").slice(0, 300);
+}
+
+/** ask(prompt) → the reply text: one quick request on the cheapest model, no tools, not saved. */
+async function ask(prompt) {
+    const bin = await locate();
+    if (!bin) throw new Error("Claude Code is not installed.");
+    return new Promise((resolve, reject) => execFile(bin, ["-p", prompt, "--model", "haiku", "--tools", "",
+        "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+        "--setting-sources", "", "--disable-slash-commands",
+        "--no-session-persistence", "--output-format", "text"], { timeout: 60000, cwd: os.tmpdir(), maxBuffer: 1 << 20 },
+        (err, out) => err ? reject(new Error("Claude Code couldn't write it.")) : resolve(String(out || ""))));
+}
+/** describe(source) → a one-line repository description. */
+async function describe(source) { return cleanDescription(await ask(DESCRIBE_PROMPT(source))); }
+/** commitMessage(diff) → a commit message for those changes. */
+async function commitMessage(diff) { return cleanCommitMessage(await ask(COMMIT_PROMPT(diff))); }
 
 // ---- per-project chat log and session ----
 
@@ -159,13 +213,15 @@ async function start(project) {
     const bin = await locate();
     if (!bin) throw new Error("Claude Code is not installed. Install it, sign in with `claude`, then try again.");
     const meta = readMeta(project);
-    const mcp = { mcpServers: { volt: { type: "stdio", command: voltBin(), args: ["mcp"] } } };
+    const mcp = { mcpServers: { volt: { type: "stdio", command: voltBin(), args: ["mcp"], env: { VOLT_AGENT_HOST: hostToken } } } };
     const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
         "--include-partial-messages",
         "--mcp-config", JSON.stringify(mcp), "--strict-mcp-config",
         "--permission-prompt-tool", "stdio",
-        "--setting-sources", "project", "--disable-slash-commands",
+        // No settings files: a project's .claude/settings.json could run hooks (shell commands) or widen permissions.
+        "--setting-sources", "", "--disable-slash-commands",
         "--tools", "Read,Edit,Write",
+        "--add-dir", path.join(os.homedir(), ".volt", "sdk"),
         "--model", model(), "--system-prompt", SYSTEM_PROMPT,
         "--allowedTools", ALLOWED.join(" "), "--disallowedTools", DISALLOWED.join(" ")];
     let resumed = false;
@@ -326,7 +382,14 @@ function askApproval(p, requestId, r) {
     if ((tool === "Edit" || tool === "Write") && /\.volt$/i.test(input.file_path || "")) {
         return answer(p, requestId, { behavior: "deny", message: "In Volt IDE, change .volt files only with ide_edit (the user sees it and can undo)." });
     }
-    const entry = { t: "approval", id: requestId, tool, input, reason: r.decision_reason || r.blocked_path || undefined };
+    const file = input.file_path || input.path || "";
+    const outside = file && path.isAbsolute(file) && path.relative(p.project, file).startsWith("..");
+    const rule = policy.forCall(tool, input, p.project, getSetting);
+    if (rule.level === "allow") return answer(p, requestId, { behavior: "allow", updatedInput: input });
+    if (rule.level === "never") return answer(p, requestId, { behavior: "deny", message: policy.refusal(rule.key) });
+    const reason = outside ? `Outside this project: ${file}` : rule.key ? policy.label(rule.key)
+        : r.decision_reason || r.blocked_path || undefined;
+    const entry = { t: "approval", id: requestId, tool, input, reason };
     p.approvals.set(requestId, { entry, input });
     emit(p.project, entry);
 }
@@ -547,4 +610,4 @@ function closeAll() { for (const project of [...procs.keys()]) close(project); }
 
 module.exports = { init, locate, status, history, send, decide, stop, newChat, chats, openChat, saveAfter, close, closeAll, MODELS,
     // shared with codex-host.js: same chat log, chats and prompt
-    SYSTEM_PROMPT, store: { dir, logFile, readMeta, writeMeta, emit, wasCut, diskCheck, switchedFrom } };
+    describe, commitMessage, DESCRIBE_PROMPT, COMMIT_PROMPT, cleanDescription, cleanCommitMessage, SYSTEM_PROMPT, store: { dir, logFile, readMeta, writeMeta, emit, wasCut, diskCheck, switchedFrom } };

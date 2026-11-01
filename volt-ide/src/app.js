@@ -26,6 +26,14 @@ import { startTour } from "./components/guided-tour.js";
 import { readFile, saveFile } from "./services/projects.js";
 import * as agent from "./agent.js";
 import * as assistantPanel from "./components/assistant-panel.js";
+import { ICONS } from "./components/icons.js";
+import * as aiAssist from "./components/ai-assist.js";
+
+// macOS: native traffic lights instead of drawn window buttons (main.js).
+if (window.volt.platform === "darwin") {
+    document.body.classList.add("is-mac");
+    window.volt.onFullscreen?.((on) => document.body.classList.toggle("is-fullscreen", on));
+}
 
 // Hydrate the settings cache as early as possible so other components can
 // read get() synchronously by the time they need it.
@@ -118,6 +126,8 @@ function showEditor() {
                 statusBar.setLine(line, col);
             },
         });
+        // Lightbulb Fix it + Ask on a selection (ai-assist.js).
+        { const ed = monaco.editor.getEditors()[0]; if (ed) aiAssist.attachEditor(ed); }
         // Gutter dots + selection → board highlight (hardware-editor.js).
         import("./components/hardware-editor.js").then(m => {
             const ed = monaco.editor.getEditors()[0];
@@ -166,13 +176,28 @@ function setFileModified(modified) {
 // openNewProject — open a project the New Project sheet just made; a
 // description goes to the Assistant, which writes the program.
 async function openNewProject(path, chip, ask) {
-    await loadProject(path);
+    if (await loadProject(path) === false) return;
     if (ask) import("./components/assistant-panel.js").then(m => m.ask(path, ask));
 }
 
+// keepOrSave(what) — before the open file is replaced: if it has unsaved
+// changes, ask to Save / Don't Save / Cancel. false = stay where you are.
+async function keepOrSave(what) {
+    if (!currentProject || !currentFile || !_fileModified) return true;
+    const choice = await dialog.askSave(basename(currentFile), what);
+    if (choice === "cancel") return false;
+    if (choice === "save") { await onSave({ quiet: true }); return !_fileModified; }
+    setFileModified(false);   // Don't Save: nothing left to ask about
+    return true;
+}
+
 async function loadProject(projectPath, file) {
+    const same = projectPath === currentProject && (!file || file === currentFile);
+    if (!same && !await keepOrSave(`before opening ${basename(file || projectPath)}`)) return false;
     currentProject = projectPath;
+    window.volt.setOpenProject?.(projectPath);
     sidePanel.refresh("assistant");
+    sidePanel.refresh("github");
     const voltFile = file || joinPath(projectPath, "main.volt");
     currentFile = voltFile;
     // Drop the previous project's diagrams so a stale one never lingers.
@@ -290,6 +315,7 @@ async function onSave({ quiet = false } = {}) {
         history.afterSave(currentFile);
         toolbar.setSaveUnsaved(false);
         setFileModified(false);
+        document.dispatchEvent(new CustomEvent("volt:file-saved", { detail: { file: currentFile } }));
         if (!quiet) bottomPanel.appendOutput("Saved: " + currentFile, "success");
         console.log("[volt] Saved:", currentFile);
     } catch (e) {
@@ -300,7 +326,7 @@ async function onSave({ quiet = false } = {}) {
 
 // ---- Wire toolbar ----
 toolbar.init({
-    onNew:      () => newProject.show({ onCreated: openNewProject }),
+    onNew:      () => startNewProject(),
     onOpen:     () => openProject(),
     onClose:    () => closeProject(),
     onRun:      () => onRun(),
@@ -326,7 +352,7 @@ function ctxProjectOpen() { return document.getElementById("editorArea")?.style.
 const menuActions = {
     installVolt: () => voltCommand.offer(true),
     checkUpdates: () => window.volt.updates.check(),
-    new:      () => newProject.show({ onCreated: openNewProject }),
+    new:      () => startNewProject(),
     open:     () => openProject(),
     openRecent: (path) => loadProject(path),
     save:     () => onSave(),
@@ -373,22 +399,24 @@ welcome.init(document.getElementById("welcome"), {
     onOpenRecent: (path) => loadProject(path),
 });
 
+// New Project: settle unsaved changes first, so they aren't asked about after
+// the user has filled in the sheet.
+async function startNewProject() {
+    if (!await keepOrSave("before starting a new project")) return;
+    newProject.show({ onCreated: openNewProject });
+}
+
 async function closeProject() {
     if (!currentProject) return;
     const projName = basename(currentProject);
-    const ok = await dialog.confirm(
-        _fileModified ? "Discard unsaved changes?" : `Close ${projName}?`,
-        {
-            detail: _fileModified
-                ? `Unsaved changes in ${projName} will be lost.`
-                : "",
-            okLabel: _fileModified ? "Discard & Close" : "Close project",
-            danger: _fileModified,
-        },
-    );
-    if (!ok) return;
+    // Unsaved: the Save / Don't Save / Cancel question is the only one asked.
+    if (_fileModified) {
+        if (!await keepOrSave("before closing")) return;
+    } else if (!await dialog.confirm(`Close ${projName}?`, { okLabel: "Close project" })) return;
     currentProject = null;
+    window.volt.setOpenProject?.(null);
     sidePanel.refresh("assistant");
+    sidePanel.refresh("github");
     currentFile = null;
     diagramsView.reset();
     showWelcome();
@@ -522,7 +550,7 @@ async function onRun() {
 
         if (errors.length > 0) {
             bottomPanel.updatePipelineStage("error", `${errors.length} error(s) — fix before building`, 10);
-            failRun(`Compile failed: ${errors.length} error${errors.length === 1 ? "" : "s"} → Problems`);
+            failRun(`Compile failed: ${errors.length} error${errors.length === 1 ? "" : "s"} → Problems`, { fix: true });
             statusBar.setBuild("Compile failed");
             return;
         }
@@ -597,6 +625,7 @@ const fileLabel = () => {
 
 function startRun(kind, title) {
     run = { kind, t0: performance.now(), warnings: 0, upToDate: false };
+    aiAssist.noteBuild(null);
     bottomPanel.beginRun(title);
 }
 
@@ -604,8 +633,8 @@ function countWarnings(diags) {
     if (run) run.warnings = (diags || []).filter(d => d.severity === "warning" || d.severity === "warn").length;
 }
 
-function failRun(message) {
-    if (message) bottomPanel.appendOutput(message, "error");
+function failRun(message, opts = {}) {
+    if (message) bottomPanel.appendOutput(message, "error", opts);
     bottomPanel.endRun();
     run = null;
 }
@@ -655,7 +684,7 @@ async function onCheck() {
 
         if (errors.length > 0) {
             bottomPanel.updatePipelineStage("error", `${errors.length} error(s)`, 10);
-            failRun(`Compile failed: ${errors.length} error${errors.length === 1 ? "" : "s"} → Problems`);
+            failRun(`Compile failed: ${errors.length} error${errors.length === 1 ? "" : "s"} → Problems`, { fix: true });
             statusBar.setBuild("Compile failed");
             return;
         }
@@ -834,7 +863,7 @@ function checkChipMismatch() {
     const match = detected === "unknown" || detected.includes(target) || target.includes(detected);
     if (!match) {
         el.style.display = "";
-        el.textContent = `⚠ ${device.chip} connected — project targets ${chipSelector.getChip().toUpperCase()}`;
+        el.innerHTML = `${ICONS.warn} ${String(device.chip).replace(/[<>&"]/g, "")} connected, but the project targets ${chipSelector.getChip().toUpperCase()}`;
     } else {
         el.style.display = "none";
     }
@@ -859,9 +888,10 @@ window.volt.onSerialError((message) => bottomPanel.appendOutput("Serial monitor:
 // flash percentages); fall back to a coarse per-stage estimate only when it
 // doesn't send one.
 window.volt.onBuild("progress", ({ stage, message, percent, size }) => {
+    if (message) aiAssist.noteBuild(message);
     if (stage === "error") {
         bottomPanel.updatePipelineStage("error", message, 0);
-        if (run) failRun(message); else bottomPanel.appendOutput(message, "error");
+        if (run) failRun(message, { fix: true }); else bottomPanel.appendOutput(message, "error", { fix: true });
         statusBar.setBuild("Failed");
     } else if (stage === "done") {
         bottomPanel.updatePipelineStage("verify", message, 100);
@@ -882,7 +912,9 @@ window.volt.onBuild("progress", ({ stage, message, percent, size }) => {
     }
 });
 
-assistantPanel.init({ getProject: () => currentProject, getFile: () => (editorReady ? currentFile : null), onSave });
+assistantPanel.init({ getProject: () => currentProject, getFile: () => (editorReady ? currentFile : null), onSave, getContext: aiAssist.context });
+aiAssist.init({ getProject: () => currentProject, getFile: () => (editorReady ? currentFile : null) });
+import("./components/github-panel.js").then(m => m.init({ getProject: () => currentProject }));
 
 // AI agents connected through `volt mcp` work in this window (src/agent.js).
 agent.init({
