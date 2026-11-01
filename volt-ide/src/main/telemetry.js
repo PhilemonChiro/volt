@@ -180,7 +180,7 @@ async function refreshConfig() {
     } catch (_) {}
 }
 
-const DEFAULT_DISCORD = "https://discord.gg/voltembedded";
+const DEFAULT_DISCORD = "https://discord.gg/nRMjUsdnT";
 
 function config() {
     const c = cachedConfig();
