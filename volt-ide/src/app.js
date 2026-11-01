@@ -28,6 +28,9 @@ import * as agent from "./agent.js";
 import * as assistantPanel from "./components/assistant-panel.js";
 import { ICONS } from "./components/icons.js";
 import * as aiAssist from "./components/ai-assist.js";
+import * as community from "./components/community.js";
+
+community.forwardErrors();
 
 // macOS: native traffic lights instead of drawn window buttons (main.js).
 if (window.volt.platform === "darwin") {
@@ -55,6 +58,9 @@ settings.init().then(() => {
 
 // Show app version in the status bar (status-bar right side).
 window.volt.getVersion().then((v) => statusBar.setVersion(v)).catch(() => {});
+document.getElementById("statusDiscord")?.addEventListener("click", () => community.openDiscord());
+document.getElementById("statusFeedback")?.addEventListener("click", () => community.showFeedback());
+setTimeout(() => community.maybeShowPrivacyNotice(), 1500);
 
 // Tee renderer console output into the main process's rotating log file
 // so we can debug user-reported issues from a saved log.
@@ -372,6 +378,8 @@ const menuActions = {
     addPart:  () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "A", ctrlKey: true, shiftKey: true })),
     help:     () => window.volt.openExternal("https://volt.dev/docs/GETTING_STARTED.md"),
     tour:     () => startTour(() => {}),
+    feedback: () => community.showFeedback(),
+    discord:  () => community.openDiscord(),
 };
 window.volt.onMenuAction(({ action, arg }) => menuActions[action]?.(arg));
 // AI note action buttons run the same commands (agent-overlay.js RUNNABLE).

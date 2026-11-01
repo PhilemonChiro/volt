@@ -133,6 +133,19 @@ const SCHEMA = {
                               label: "Onboarding completed" },
         },
     },
+    privacy: {
+        label: "Privacy",
+        items: {
+            crashReports: { type: "bool", default: true,
+                            label: "Send crash reports",
+                            hint: "When Volt IDE crashes or hits an unexpected error, send the error and stack trace (home folder and user name removed) so it can be fixed. Applies fully after a restart." },
+            usageStats:   { type: "bool", default: true,
+                            label: "Send anonymous usage statistics",
+                            hint: "IDE version, OS, chip, which features you use and whether builds and flashes succeed, under a random install ID. Never your code, files or project names." },
+            noticeShown:  { type: "bool", default: false, hidden: true,
+                            label: "Privacy notice shown" },
+        },
+    },
     advanced: {
         label: "Advanced",
         items: {

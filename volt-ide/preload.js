@@ -103,6 +103,12 @@ contextBridge.exposeInMainWorld("volt", {
         ipcRenderer.on("open_path", (_, data) => callback(data)),
     takePendingOpenPath: () => ipcRenderer.invoke("open_path:take"),
     openExternal:  (url) => ipcRenderer.invoke("open_external", url),
+    telemetry: {
+        feature:       (name) => ipcRenderer.invoke("telemetry:feature", name),
+        rendererError: (err) => ipcRenderer.send("telemetry:renderer_error", err),
+    },
+    community: { config: () => ipcRenderer.invoke("community:config") },
+    feedback:  { send: (data) => ipcRenderer.invoke("feedback:send", data) },
     watchOpenFile: (path) => ipcRenderer.send("watch_open_file", path),
     onOpenFileChanged: (callback) => ipcRenderer.on("open_file:changed", (_, d) => callback(d)),
     // Project history (volt history): who changed what, with diffs.

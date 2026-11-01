@@ -39,11 +39,18 @@ export function init(container, { onNew, onOpen, onOpenRecent }) {
                 </div>
             </div>
         </div>
+        <div class="welcome-community">
+            <a href="#" id="welcomeDiscord">Join our Discord</a>
+            <span aria-hidden="true">·</span>
+            <a href="#" id="welcomeFeedback">Send feedback</a>
+        </div>
         <a class="welcome-credit" href="#" data-href="https://dl.espressif.com/dl/schematics/esp32_devkitc_v4-sch.pdf" title="Background: the ESP32-DevKitC V4 schematic">Schematic © Espressif Systems</a>
     `;
 
     document.getElementById("welcomeNewBtn").onclick = onNew;
     document.getElementById("welcomeOpenBtn").onclick = onOpen;
+    document.getElementById("welcomeDiscord").onclick = (e) => { e.preventDefault(); import("./community.js").then(m => m.openDiscord()); };
+    document.getElementById("welcomeFeedback").onclick = (e) => { e.preventDefault(); import("./community.js").then(m => m.showFeedback()); };
     container.querySelector(".welcome-credit").onclick = (e) => { e.preventDefault(); api.openExternal?.(e.currentTarget.dataset.href); };
 
     // Examples dropdown

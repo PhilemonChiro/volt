@@ -60,7 +60,10 @@
       "package.json",
       "!**/*.{md,log}",
       "!**/.DS_Store",
-      "!**/__pycache__/**"
+      "!**/__pycache__/**",
+      "!node_modules/@sentry/**/*.map",
+      "!node_modules/@sentry/**/*.d.ts",
+      "!node_modules/@sentry/**/esm/**"
     ],
     "asarUnpack": [
       "scripts/**/*",
@@ -165,6 +168,7 @@
     ]
   },
   "dependencies": {
+    "@sentry/electron": "^8.3.0",
     "electron-updater": "^6.8.9"
   }
 }

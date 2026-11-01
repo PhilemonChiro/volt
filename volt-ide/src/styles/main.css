@@ -6243,3 +6243,26 @@ body.is-mac:not(.is-fullscreen) #toolbar { padding-left: 84px; }
 
 /* Don't Save sits apart on the left, as in macOS save sheets. */
 .dialog-actions .dialog-btn-left { margin-right: auto; }
+
+/* ---- Community: status-bar buttons, welcome links, feedback dialog, privacy notice ---- */
+.status-btn { gap: 5px; background: none; border: 0; padding: 0 2px; font: inherit; color: inherit; cursor: pointer; }
+.status-btn:hover { color: var(--t1); }
+.welcome-community { display: flex; gap: var(--s-2); justify-content: center; margin-top: var(--s-4); font-size: var(--fs-12); color: var(--t3); }
+.welcome-community a { color: var(--t2); text-decoration: none; }
+.welcome-community a:hover { color: var(--t1); text-decoration: underline; }
+.fb-dialog { width: 480px; }
+.fb-dialog .dialog-subtitle a { color: var(--volt-hover); }
+.fb-kinds { display: flex; gap: var(--s-1); margin-bottom: var(--s-3); }
+.fb-kind { flex: 1; height: 28px; border-radius: var(--r-2); border: 1px solid var(--border-strong); background: var(--bg-2); color: var(--t2); font: inherit; font-size: var(--fs-12); cursor: pointer; }
+.fb-kind[aria-checked="true"] { border-color: var(--volt-hover); color: var(--t1); background: var(--bg-3); }
+.fb-input { display: block; width: 100%; box-sizing: border-box; margin-bottom: var(--s-2); font: inherit; font-size: var(--fs-12); color: var(--t1); background: var(--bg-0); border: 1px solid var(--border-strong); border-radius: var(--r-2); padding: 7px 9px; outline: 0; }
+.fb-input:focus { border-color: var(--volt-hover); box-shadow: none; }
+.fb-message { resize: vertical; min-height: 110px; line-height: var(--lh-base); }
+.fb-check { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-12); color: var(--t2); }
+.fb-status { min-height: 16px; margin: var(--s-2) 0 0; font-size: var(--fs-12); color: var(--t3); }
+.privacy-notice { position: fixed; right: 16px; bottom: 40px; z-index: 900; width: 340px; background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--r-4); box-shadow: var(--elev-pop); padding: var(--s-4); font-size: var(--fs-12); color: var(--t2); }
+.privacy-notice strong { display: block; color: var(--t1); font-size: var(--fs-13); margin-bottom: var(--s-1); }
+.privacy-notice p { margin: 0 0 var(--s-3); line-height: var(--lh-base); }
+.privacy-notice label { display: flex; align-items: center; gap: var(--s-2); margin: var(--s-1) 0; }
+.privacy-actions { display: flex; align-items: center; justify-content: space-between; margin-top: var(--s-3); }
+.privacy-hint { color: var(--t3); font-size: var(--fs-11); }

@@ -5,6 +5,30 @@ const libTrust = require("./src/main/lib-trust");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const telemetry = require("./src/main/telemetry");
+
+// Crash reporting hooks Electron's crash reporter, so it starts before "ready".
+telemetry.initCrashReports();
+
+// Feature-use stats: count the IPC calls behind user-facing features (throttled
+// per feature in telemetry.feature). Wrapping ipcMain.handle here, before any
+// handler is registered, keeps the tracking out of every handler body.
+const FEATURE_CHANNELS = {
+    create_project: "new_project", create_device: "create_device", vlib_install: "vlib_install",
+    grid_fetch: "grid_install", collection_install: "collection_install", "publish:submit": "publish_library",
+    auth_login: "account_login", format_code: "format", state_diagram: "state_diagram",
+    sequence_diagram: "sequence_diagram", "assistant:send": "ai_chat", "github:commit": "github_commit",
+    "github:pull": "github_pull", "github:publish": "github_publish", start_monitor: "serial_monitor",
+    setup_toolchain: "toolchain_install", export_binary: "export_firmware", "history:show": "history_view",
+    "history:restore": "history_restore", "voltcmd:install": "install_cli", create_toml: "open_project",
+};
+{
+    const handle = ipcMain.handle.bind(ipcMain);
+    ipcMain.handle = (channel, listener) => {
+        const name = FEATURE_CHANNELS[channel];
+        return handle(channel, name ? (...args) => { telemetry.feature(name); return listener(...args); } : listener);
+    };
+}
 
 app.commandLine.appendSwitch("no-sandbox");
 
@@ -205,6 +229,7 @@ function clearMacOSQuarantine() {
 app.whenReady().then(() => {
     logger.init();
     clearMacOSQuarantine();
+    telemetry.start();
 
     // Open at ~85% of the primary display's work area (excludes dock /
     // taskbar), capped at 1800x1200 so 4K+ monitors don't open giants.
@@ -286,6 +311,17 @@ ipcMain.handle("win_maximize", () => {
 ipcMain.handle("win_close", () => win?.close());
 
 ipcMain.handle("app_version", () => app.getVersion());
+
+// ---- Telemetry, feedback, community ----
+ipcMain.handle("telemetry:feature", (_, name) => {
+    if (typeof name === "string" && /^[a-z][a-z0-9_]{0,40}$/.test(name)) telemetry.feature(name);
+});
+ipcMain.on("telemetry:renderer_error", (_, err) => telemetry.rendererError(err));
+ipcMain.handle("community:config", () => telemetry.config());
+ipcMain.handle("feedback:send", (_, data) => telemetry.sendFeedback(data || {}, () => {
+    const file = logger.getPath();
+    return fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : "";
+}));
 
 // ============================================================
 // Projects
@@ -1069,11 +1105,16 @@ app.on("before-quit", () => {
 });
 
 ipcMain.handle("compile_full", async (_, source) => {
+    // Only explicit Check / Build call this (live checking uses check_code).
+    let result;
     try {
-        return await workerCall("compile_full", { source, filename: "main.volt", project: openProjectDir || "" });
+        result = await workerCall("compile_full", { source, filename: "main.volt", project: openProjectDir || "" });
     } catch (e) {
-        return compileErrorResult(e.message);
+        result = compileErrorResult(e.message);
     }
+    const errors = (result.diagnostics || []).filter(d => d.severity === "error");
+    telemetry.track("check", { ok: errors.length === 0, errors: errors.length, error: telemetry.errorKey(errors[0]?.message) });
+    return result;
 });
 
 ipcMain.handle("check_code", async (_, source) => {
@@ -1386,13 +1427,16 @@ async function voltBuild(cmd, voltFile, chip, extra = []) {
     const args = [cmd, voltFile, "--json", "--chip", chip.toLowerCase(), "--devices", devicesDir(), ...extra];
     if (settings.get("build.verboseBuild")) args.push("-v");
 
-    let result = null, failed = false, reachedDone;
+    let result = null, failed = false, reachedDone, firstError = "";
+    const started = Date.now();
+    const report = (ok, error) => telemetry.track(cmd === "run" ? "flash" : "build",
+        { ok, chip: chip.toLowerCase(), ms: Date.now() - started, error: ok ? "" : telemetry.errorKey(error) });
     const doneEvent = new Promise((resolve) => { reachedDone = resolve; });
     const proc = volt.run(args, {
         cwd: path.dirname(voltFile),
         onJSON: (o) => {
             if (o.stage) {
-                if (o.stage === "error") failed = true;
+                if (o.stage === "error") { failed = true; firstError ||= o.message || ""; }
                 send("build:progress", o);
                 if (o.stage === "done") {
                     result = o.artifact || "";
@@ -1408,12 +1452,15 @@ async function voltBuild(cmd, voltFile, chip, extra = []) {
     buildProc = proc;
     await Promise.race([proc.done, doneEvent]);
     if (buildProc === proc) buildProc = null;
-    if (result !== null) return result;
+    if (result !== null) { report(true); return result; }
     const { code, stderr } = await proc.done;
     if (!failed) {
         const why = stderr.join("\n").trim() || `volt ${cmd} exited with code ${code}`;
         send("build:progress", { stage: "error", message: why, percent: 0 });
+        firstError ||= why;
     }
+    // A build replaced by a newer one isn't a failure.
+    if (code !== null || failed) report(false, firstError);
     return null;
 }
 
