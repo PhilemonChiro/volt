@@ -5423,6 +5423,7 @@ body.lvd-open .vlib2-dock, body.lvd-open .overlay { z-index: 9100 !important; }
 .as-approve-head .as-ico { color: var(--warn); }
 .as-approve-head b { font-weight: 600; }
 .as-target { font-family: var(--mono); font-size: var(--fs-11); color: var(--t2); background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--r-2); padding: 4px var(--s-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.as-reason { font-size: var(--fs-11); color: var(--t3); margin-top: 4px; overflow-wrap: anywhere; }
 .as-approve pre.as-content { background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--r-2); max-height: 240px; overflow: auto; font-size: var(--fs-11); }
 .as-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
 .as-actions button, .as-retry { font: inherit; font-size: var(--fs-12); font-weight: 500; border-radius: var(--r-2); padding: 5px var(--s-3); cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg-3); color: var(--t1); transition: background var(--dur-fast), filter var(--dur-fast); }

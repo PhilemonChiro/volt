@@ -881,6 +881,7 @@ function card(log, entry) {
     const c = html("div", "as-approve",
         `<div class="as-approve-head"><span class="as-ico">${ICON.shield}</span><span>${AG()} wants to <b>${esc(actionText(entry))}</b></span></div>
          ${d ? `<div class="as-target" title="${esc(d)}"><bdi>${esc(d)}</bdi></div>` : ""}
+         ${entry.reason ? `<div class="as-reason">${esc(entry.reason)}</div>` : ""}
          ${content}
          <div class="as-actions"><button class="as-deny">Deny</button><button class="as-allow">Allow once</button></div>`);
     c.dataset.id = entry.id;

@@ -387,7 +387,7 @@ function askApproval(p, requestId, r) {
     const rule = policy.forCall(tool, input, p.project, getSetting);
     if (rule.level === "allow") return answer(p, requestId, { behavior: "allow", updatedInput: input });
     if (rule.level === "never") return answer(p, requestId, { behavior: "deny", message: policy.refusal(rule.key) });
-    const reason = outside ? `Outside this project: ${file}` : rule.key ? policy.label(rule.key)
+    const reason = outside ? "This file is outside the open project." : rule.key ? policy.label(rule.key)
         : r.decision_reason || r.blocked_path || undefined;
     const entry = { t: "approval", id: requestId, tool, input, reason };
     p.approvals.set(requestId, { entry, input });
@@ -469,7 +469,8 @@ function decide(project, requestId, allow) {
     if (!a) return false;
     p.approvals.delete(requestId);
     answer(p, requestId, allow ? { behavior: "allow", updatedInput: a.input }
-        : { behavior: "deny", message: "The user declined this." });
+        // A misclick on Deny shouldn't sink the whole task: keep going, then say plainly what was skipped.
+        : { behavior: "deny", message: "The user declined this one step. Don't retry it or work around it, and don't abandon the task: finish everything you can without it, then tell the user in one line what you skipped because of this and that they can ask again and allow it." });
     emit(project, { t: "decision", id: requestId, allow: !!allow });
     return true;
 }
