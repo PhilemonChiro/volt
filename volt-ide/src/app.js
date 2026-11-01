@@ -869,7 +869,7 @@ function checkChipMismatch() {
     }
 }
 
-// Deep link from the Spark studio (volt://install/<prefix>/<version>) — open
+// Deep link from the Spark studio (voltembedded://install/<prefix>/<version>) — open
 // the signed-import consent sheet for the requested library.
 window.volt.onDeepLinkInstall(({ prefix, version }) => library.installFromGrid(prefix, version));
 

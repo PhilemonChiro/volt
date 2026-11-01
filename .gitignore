@@ -85,3 +85,6 @@ package-lock.json
 # Hardcoded paths in CLI/extension (machine-specific)
 # Users will configure their own paths after cloning
 !volt-ide/build/
+
+# Maintainer tool for signing registry entries; kept out of the public repo
+registry-signer/

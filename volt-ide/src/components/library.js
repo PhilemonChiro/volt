@@ -421,7 +421,7 @@ export async function renderInto(container) {
     paint("");
 }
 
-// Install a Grid library from a deep link (volt://install/<prefix>/<version>).
+// Install a Grid library from a deep link (voltembedded://install/<prefix>/<version>).
 // Standalone — fires whether or not the Library panel is open. Fetches +
 // verifies via the Grid, then shows the same signed-import consent sheet as a
 // file import; the user still confirms before anything is written.

@@ -21,19 +21,20 @@ function projectsDir() {
 }
 let win = null;
 
-// ---- Deep links: volt://install/<prefix>/<version> --------------------------
+// ---- Deep links: voltembedded://install/<prefix>/<version> -----------------
 // The Spark studio's "Install to Volt IDE" button opens this URL. We register
-// "volt" as our protocol, then route the URL into the SAME grid fetch → verify
-// → consent → install flow the renderer already uses for the registry browser.
+// "voltembedded" (not "volt": a common word another app could claim), then
+// route the URL into the SAME grid fetch → verify → consent → install flow
+// the renderer already uses for the registry browser.
 // Nothing is installed without the user confirming the signed-import sheet.
 if (process.defaultApp) {
     // Dev mode (electron main.js …): the protocol has to carry the script path
     // so the relaunched instance knows what to run.
     if (process.argv.length >= 2) {
-        app.setAsDefaultProtocolClient("volt", process.execPath, [path.resolve(process.argv[1])]);
+        app.setAsDefaultProtocolClient("voltembedded", process.execPath, [path.resolve(process.argv[1])]);
     }
 } else {
-    app.setAsDefaultProtocolClient("volt");
+    app.setAsDefaultProtocolClient("voltembedded");
 }
 
 // A URL that arrives before the window is ready is parked here and replayed
@@ -41,16 +42,16 @@ if (process.defaultApp) {
 let _pendingDeepLink = null;
 
 function extractDeepLink(argv) {
-    return (argv || []).find((a) => typeof a === "string" && a.startsWith("volt://")) || null;
+    return (argv || []).find((a) => typeof a === "string" && a.startsWith("voltembedded://")) || null;
 }
 
-// Parse volt://install/<prefix>/<version> and hand it to the renderer.
+// Parse voltembedded://install/<prefix>/<version> and hand it to the renderer.
 function handleDeepLink(url) {
     if (!url) return;
     let prefix, version;
     try {
         const u = new URL(url);
-        if (u.protocol !== "volt:" || u.host !== "install") return;
+        if (u.protocol !== "voltembedded:" || u.host !== "install") return;
         const parts = u.pathname.split("/").filter(Boolean).map(decodeURIComponent);
         [prefix, version] = parts;
     } catch (_) { return; }
@@ -74,7 +75,7 @@ let _rendererReadyForOpen = false;   // set once app.js has wired onOpenPath
 
 function extractOpenPath(argv) {
     for (const a of (argv || []).slice(1)) {
-        if (typeof a !== "string" || a.startsWith("-") || a.startsWith("volt://")) continue;
+        if (typeof a !== "string" || a.startsWith("-") || a.startsWith("voltembedded://")) continue;
         const abs = path.resolve(a);
         // In dev (`electron .`) argv[1] is the app directory itself — skip it.
         if (abs === path.resolve(app.getAppPath())) continue;

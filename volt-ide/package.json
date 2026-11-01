@@ -34,14 +34,14 @@
     "sharp": "^0.34.5"
   },
   "build": {
-    "appId": "dev.volt.ide",
+    "appId": "com.voltembedded.ide",
     "productName": "Volt IDE",
     "copyright": "Copyright © 2026 Philemon Chiro",
     "protocols": [
       {
         "name": "Volt Library",
         "schemes": [
-          "volt"
+          "voltembedded"
         ]
       }
     ],

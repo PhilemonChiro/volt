@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="Volt" width="120">
 </p>
 
-<h1 align="center">Volt</h1>
+<h1 align="center">Volt Embedded</h1>
 
 <p align="center">
   <strong>Arduino is too simple. ESP-IDF is too complex. Volt is neither.</strong><br>
