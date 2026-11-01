@@ -44,11 +44,21 @@ Volt is a typed language that transpiles to C for embedded microcontrollers. You
 
 ## Quick Install
 
+**Volt IDE** (editor, wiring view, build, flash, serial monitor): download it from
+[voltembedded.com](https://voltembedded.com).
+
+**Command line** (macOS, Linux):
+
 ```bash
-pip install volt-lang
-echo 'hardware { pin led = 2 }\nevery 500ms { led.toggle() }' > main.volt
-voltc main.volt          # should print C code, no errors
+curl -fsSL https://voltembedded.com/install.sh | sh
+volt new blink && cd blink
+volt check               # type-check and validate the hardware
+volt run                 # build, flash, then show the board's serial output
 ```
+
+On Windows, download [volt-windows-amd64.zip](https://dl.voltembedded.com/latest/volt-windows-amd64.zip)
+and put `volt.exe` on your `PATH`. Documentation: [docs.voltembedded.com](https://docs.voltembedded.com).
+Try it in the browser: [play.voltembedded.com](https://play.voltembedded.com).
 
 ## Examples
 
@@ -272,14 +282,16 @@ wifi.connect("a", "b")       // ERROR: wifi not safe in ISR context
 
 Errors include source context, color highlighting, and "did you mean?" suggestions — inspired by Elm and Rust.
 
-## VS Code Extension
+## Volt IDE
 
-Full development environment with:
+A desktop IDE in [`volt-ide/`](volt-ide/):
 
-- **Syntax highlighting** — 15+ semantic token categories
-- **LSP** — autocomplete (dot-triggered methods, pin modes, durations), hover (pin info with ASCII pin map), real-time diagnostics
-- **Sidebar panel** — build & flash buttons, serial monitor, device management, file browser
-- **Format on save**
+- **Editor** with live diagnostics, hover, completion and format on save
+- **Wiring view** of the board and every pin in the `hardware` block
+- **Diagrams** of state machines and task sequences, generated from the code
+- **Build, flash and serial monitor** in one click; toolchains install themselves
+- **Device library** with review and approval of every driver before it builds
+- **Assistant** panel that can read, check and edit the open program, with per-action permissions
 
 ## Architecture
 
@@ -288,7 +300,7 @@ Full development environment with:
        │
        ▼
 Volt Compiler (7-pass pipeline)
-  ┌─ Parse ─────── Lark LALR(1) grammar → AST
+  ┌─ Parse ─────── Recursive-descent parser → AST
   ├─ Resolve ───── Name resolution, forward refs, "did you mean?"
   ├─ Check ─────── Bidirectional type checking, ErrorType poison
   ├─ Validate ──── Hardware: pins, ADC2/WiFi, ISR safety, flash pins
@@ -333,12 +345,19 @@ ESP-IDF v5.4.1 → Target MCU
 
 ```
 volt/
-├── framework/              C runtime (ESP-IDF components)
+├── framework/              C runtime (GPL-3.0)
 │   ├── include/volt/       Public headers
-│   └── src/                Implementation
-├── examples/               6 example programs
-└── docs/                   Architecture documentation
+│   ├── esp32/              ESP32 (ESP-IDF) implementation
+│   └── rp2040/             RP2040 (Pico SDK) implementation
+├── devices/                Device drivers: sensors, displays, radios (GPL-3.0)
+├── examples/               Example programs, beginner to advanced
+├── volt-ide/               The desktop IDE (Electron)
+└── docs/                   Guides and architecture notes
 ```
+
+The compiler and the `volt` command line live in their own repositories:
+[volt-compiler](https://github.com/PhilemonChiro/volt-compiler) and
+[volt-cli](https://github.com/PhilemonChiro/volt-cli).
 
 ## Platform Layout
 
@@ -367,6 +386,7 @@ Works on Linux, macOS, and Windows.
 | ISR safety | None | None | None | N/A | **Compile-time** |
 | State machines | None | None | None | None | **Language feature** |
 | Memory per task | 1KB+ | 4KB+ | 1KB+ | 4KB+ | **Automatic — see below** |
+| Performance | Native | Native | Native | 10-100x slower | **Native** |
 
 #### Volt task memory
 
@@ -375,7 +395,6 @@ Works on Linux, macOS, and Windows.
 | Background | No blocking calls | 12 bytes |
 | Priority | Uses WiFi, MQTT, HTTP | 4KB |
 | Critical | Marked `strict` (real-time) | Hardware timer |
-| Performance | Native | Native | Native | 10-100x slower | **Native** |
 
 ## License
 
