@@ -180,7 +180,7 @@ async function refreshConfig() {
     } catch (_) {}
 }
 
-const DEFAULT_DISCORD = "https://discord.gg/nRMjUsdnT";
+const DEFAULT_DISCORD = "https://discord.gg/uhWs9umwqT";
 
 function config() {
     const c = cachedConfig();
