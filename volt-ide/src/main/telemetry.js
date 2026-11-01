@@ -22,7 +22,7 @@ const PULSE_URL = "https://pulse.voltembedded.com";
 // GlitchTip project DSN (public by design: it only allows sending events).
 // Remote config can supply one too, so a release made before GlitchTip was set
 // up still reports once it is.
-const SENTRY_DSN = "";
+const SENTRY_DSN = "https://f94879ccccc044c48047584e8d7470b6@glitchtip.voltembedded.com/1";
 
 const DIR = path.join(os.homedir(), ".volt");
 const ID_FILE = path.join(DIR, "install-id");
