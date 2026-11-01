@@ -8,7 +8,7 @@ import * as voltCommand from "./components/volt-command.js";
 import * as history from "./components/history.js";
 import "./components/publish-dialog.js"; // review-status notices
 import * as welcome from "./components/welcome.js";
-import * as wizard from "./components/wizard.js";
+import * as newProject from "./components/new-project.js";
 import * as editor from "./components/editor.js";
 import * as statusBar from "./components/status-bar.js";
 import * as diagnostics from "./components/diagnostics.js";
@@ -21,7 +21,6 @@ import * as dialog from "./components/dialog.js";
 import * as sidePanel from "./components/side-panel.js";
 import * as settingsDialog from "./components/settings.js";
 import * as settings from "./services/settings.js";
-import * as onboarding from "./components/onboarding.js";
 import * as library from "./components/library.js";
 import { startTour } from "./components/guided-tour.js";
 import { readFile, saveFile } from "./services/projects.js";
@@ -33,17 +32,16 @@ import * as assistantPanel from "./components/assistant-panel.js";
 settings.init().then(() => {
     applyBodyClassSettings();
     // First-run onboarding — only if onboarding not yet completed
-    if (onboarding.isFirstRun()) {
-        // Short delay so the welcome screen renders underneath as a gradient base
-        setTimeout(() => {
-            onboarding.show((projectPath, chip) => {
-                loadProject(projectPath);
-                // Start guided tour once the editor is open
-                setTimeout(() => startTour(() => {
-                    console.log("[volt] Guided tour complete");
-                }), 600);
-            });
-        }, 500);
+    // First run: the New Project sheet with a welcome; the tour follows a starter.
+    if (!settings.get("appearance.onboardingDone", false)) {
+        setTimeout(() => newProject.show({
+            welcome: true,
+            onClose: () => settings.set("appearance.onboardingDone", true),
+            onCreated: async (path, chip, ask) => {
+                await openNewProject(path, chip, ask);
+                if (!ask) setTimeout(() => startTour(() => {}), 600);
+            },
+        }), 500);
     }
 });
 
@@ -165,6 +163,13 @@ function setFileModified(modified) {
 }
 
 // ---- Actions ----
+// openNewProject — open a project the New Project sheet just made; a
+// description goes to the Assistant, which writes the program.
+async function openNewProject(path, chip, ask) {
+    await loadProject(path);
+    if (ask) import("./components/assistant-panel.js").then(m => m.ask(path, ask));
+}
+
 async function loadProject(projectPath, file) {
     currentProject = projectPath;
     sidePanel.refresh("assistant");
@@ -227,13 +232,9 @@ function showChipPicker(projectPath) {
                         <span class="chip-option-name">ESP32</span>
                         <span class="chip-option-desc">WiFi + BLE, 520KB RAM</span>
                     </button>
-                    <button class="chip-option" data-chip="esp8266">
-                        <span class="chip-option-name">ESP8266</span>
-                        <span class="chip-option-desc">WiFi, 80KB RAM</span>
-                    </button>
-                    <button class="chip-option" data-chip="rp2040">
+                    <button class="chip-option" data-chip="rp2040" disabled>
                         <span class="chip-option-name">RP2040</span>
-                        <span class="chip-option-desc">Dual-core ARM, 264KB RAM</span>
+                        <span class="chip-option-desc">Coming soon</span>
                     </button>
                 </div>
                 <div class="dialog-actions">
@@ -299,7 +300,7 @@ async function onSave({ quiet = false } = {}) {
 
 // ---- Wire toolbar ----
 toolbar.init({
-    onNew:      () => wizard.show((path) => loadProject(path)),
+    onNew:      () => newProject.show({ onCreated: openNewProject }),
     onOpen:     () => openProject(),
     onClose:    () => closeProject(),
     onRun:      () => onRun(),
@@ -325,7 +326,7 @@ function ctxProjectOpen() { return document.getElementById("editorArea")?.style.
 const menuActions = {
     installVolt: () => voltCommand.offer(true),
     checkUpdates: () => window.volt.updates.check(),
-    new:      () => wizard.show((path) => loadProject(path)),
+    new:      () => newProject.show({ onCreated: openNewProject }),
     open:     () => openProject(),
     openRecent: (path) => loadProject(path),
     save:     () => onSave(),
@@ -367,7 +368,7 @@ window.volt.onOpenFileChanged(({ path: changed, content }) => {
 
 // ---- Wire welcome ----
 welcome.init(document.getElementById("welcome"), {
-    onNew:        () => wizard.show((path) => loadProject(path)),
+    onNew:        () => newProject.show({ onCreated: openNewProject }),
     onOpen:       () => openProject(),
     onOpenRecent: (path) => loadProject(path),
 });
@@ -398,7 +399,7 @@ async function closeProject() {
     window.volt.setMenuState({ projectOpen: false });
     // Refresh recent projects list
     welcome.init(document.getElementById("welcome"), {
-        onNew:        () => wizard.show((path) => loadProject(path)),
+        onNew:        () => newProject.show({ onCreated: openNewProject }),
         onOpen:       () => openProject(),
         onOpenRecent: (path) => loadProject(path),
     });
@@ -697,7 +698,7 @@ function openProject() {
 
 // ---- Keyboard shortcuts ----
 document.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.key === "n") { e.preventDefault(); wizard.show((path) => loadProject(path)); }
+    if (e.ctrlKey && e.key === "n") { e.preventDefault(); newProject.show({ onCreated: openNewProject }); }
     if (e.ctrlKey && e.key === "o") { e.preventDefault(); openProject(); }
     if (e.ctrlKey && e.key === "b") { e.preventDefault(); onCheck(); }
     if (e.ctrlKey && e.key === "s") { e.preventDefault(); onSave(); }

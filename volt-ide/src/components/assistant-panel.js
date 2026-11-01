@@ -80,6 +80,18 @@ export function init(ctx) {
     });
 }
 
+// A request queued by ask() for the next time the panel is drawn for that project.
+let queued = null;
+
+/** ask(project, text) — open the Assistant and send text as the first message
+ *  (the New Project sheet's "Describe it"). */
+export function ask(project, text) {
+    queued = { project, text };
+    shownProject = null;
+    openPanel("assistant");
+    if (root && root.offsetParent) renderInto(root);
+}
+
 /** renderInto(body) — (re)draw the panel for the open project. */
 export async function renderInto(body) {
     root = body;
@@ -272,6 +284,8 @@ export async function renderInto(body) {
         }
         const dl = e.target.closest(".as-dl[data-line]");
         if (dl) { editor.gotoLine(+dl.dataset.line); return; }
+        const cmp = e.target.closest(".as-devcmp");
+        if (cmp) { openDevicePicker(cmp.closest(".as-choices")); return; }
         const ch = e.target.closest(".as-choice");
         if (ch && !ch.disabled) { pick(ch); return; }
         const s = e.target.closest(".as-suggest button");
@@ -299,6 +313,7 @@ export async function renderInto(body) {
     }
     pinned = true;
     scroll(true);
+    if (queued && queued.project === project && !h.busy) { const q = queued; queued = null; send(q.text); }
 }
 
 // ---- undo ----
@@ -722,6 +737,7 @@ function draw(entry, fresh) {
         endGroup();
         add(log, html("div", "as-msg as-claude", md(entry.text) +
             `<button type="button" class="as-mcopy" title="Copy reply" aria-label="Copy reply">${ICON.copy}${ICON.check}</button>`));
+        if (fresh) { const set = [...log.querySelectorAll(".as-choices.is-devices")].pop(); if (set && set.closest(".as-msg") === log.lastElementChild) openDevicePicker(set); }
         break;
     case "user": {
         endGroup();
@@ -984,6 +1000,7 @@ function md(text) {
             while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
             i++;
             if (fence[1] === "choices") { out.push(choices(buf)); continue; }
+            if (fence[1] === "devices") { out.push(choices(buf, true)); continue; }
             out.push(`<div class="as-codeblock"><div class="as-codehead"><span>${esc(fence[1] || "code")}</span><button type="button" class="as-copy">Copy</button></div><pre>${esc(buf.join("\n"))}</pre></div>`);
             continue;
         }
@@ -1010,20 +1027,113 @@ function md(text) {
 
 // ```choices block: one option per line, "Title :: detail". A title ending
 // in "..." asks the user to type their own answer.
-function choices(lines) {
+// A ```devices block is the same, one part per line: several parts that do
+// the job equally well. It also opens the part picker (openDevicePicker).
+function choices(lines, devices = false) {
+    let purpose = "";
+    if (devices) lines = lines.filter(l => { const m = l.match(/^\s*for\s*:\s*(.+)$/i); if (m) purpose = m[1].trim(); return !m; });
     const opts = lines.map(l => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).slice(0, 6);
-    return `<div class="as-choices" role="group" aria-label="Choose one">${opts.map((o, i) => {
+    const head = devices ? `<div class="as-devhead"><span>${purpose ? `Choose the part for ${inline(purpose)}` : "Choose a part"}</span><button type="button" class="as-devcmp">Compare</button></div>` : "";
+    return `<div class="as-choices${devices ? " is-devices" : ""}" role="group" aria-label="Choose one"${purpose ? ` data-purpose="${esc(purpose)}"` : ""}>${head}${opts.map((o, i) => {
         let [title, ...rest] = o.split("::");
         title = title.trim(); const detail = rest.join("::").trim();
         const rec = /\(recommended\)\s*$/i.test(title);
         title = title.replace(/\s*\(recommended\)\s*$/i, "");
         const free = /(\.\.\.|…)$/.test(title);
-        return `<button type="button" class="as-choice${rec ? " is-rec" : ""}${free ? " is-free" : ""}" data-title="${esc(title.replace(/(\.\.\.|…)$/, ""))}">
+        const answer = devices && !free ? `Use the ${title}.` : title.replace(/(\.\.\.|…)$/, "");
+        return `<button type="button" class="as-choice${rec ? " is-rec" : ""}${free ? " is-free" : ""}" data-title="${esc(answer)}" data-name="${esc(title)}" data-detail="${esc(detail)}">
             <span class="as-key">${i + 1}</span>
             <span class="as-choice-body"><span class="as-choice-title">${inline(title)}${rec ? `<span class="as-rec">Recommended</span>` : ""}</span>${detail ? `<span class="as-choice-detail">${inline(detail)}</span>` : ""}</span>
             <span class="as-choice-go">${free ? ICON.compose : ICON.chev}</span>
         </button>`;
     }).join("")}</div>`;
+}
+
+// The part picker: the agent found several parts that do the same job, and
+// the user decides which one they'll wire up. It says what the part is for
+// (the block's "for:" line), lists the parts as rows with the agent's reason,
+// how each connects and its datasheet, and starts on the recommended one.
+let deviceInfo = null;
+const CONNECTS = { i2c: "I²C", spi: "SPI", uart: "UART", gpio: "1 data pin", onewire: "1-Wire", analog: "Analog pin", pwm: "PWM pin" };
+async function openDevicePicker(set) {
+    if (!set || document.getElementById("asDevPick")) return;
+    const live = !set.classList.contains("is-done");
+    const opts = [...set.querySelectorAll(".as-choice:not(.is-free)")];
+    if (!opts.length) return;
+    if (!deviceInfo) {
+        const d = await window.volt.devicesList().catch(() => []);
+        deviceInfo = Array.isArray(d) ? d : (d && d.devices) || Object.values(d || {});
+    }
+    const info = (name) => deviceInfo.find(x => String(x.name).toLowerCase() === String(name).toLowerCase()) || {};
+    const kinds = new Set(opts.map(b => info(b.dataset.name).category).filter(Boolean));
+    const kind = kinds.size === 1 ? { sensor: "sensor", display: "display", actuator: "part", communication: "module" }[[...kinds][0]] || "part" : "part";
+    const purpose = set.dataset.purpose || "";
+    // No "for:" line from the agent: quote the request it is answering instead.
+    let asked = "";
+    if (!purpose) {
+        const users = [...document.querySelectorAll(".as-log .as-user")].filter(u => u.compareDocumentPosition(set) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const u = users.pop();
+        asked = u ? String(u._text || u.textContent || "").trim().replace(/\s+/g, " ").slice(0, 160) : "";
+    }
+    const recI = Math.max(0, opts.findIndex(b => b.classList.contains("is-rec")));
+    const pickedI = opts.findIndex(b => b.classList.contains("is-picked"));
+    let chosen = live ? recI : pickedI;
+    const ov = document.createElement("div");
+    ov.id = "asDevPick";
+    ov.className = "overlay";
+    ov.innerHTML = `<div class="as-dp" role="dialog" aria-modal="true" aria-labelledby="asDpTitle" aria-describedby="asDpWhy">
+        <header>
+          <h2 id="asDpTitle">Which ${kind} do you want to use?</h2>
+          <p id="asDpWhy">${purpose ? `For <b>${esc(purpose)}</b>, any` : asked ? `You asked: <b>“${esc(asked)}”</b><br>Any` : "Any"} of these ${opts.length} will work the same way, so it's your choice: pick the one you have, or the one you'd rather buy.</p>
+        </header>
+        <div class="as-dp-list" role="radiogroup" aria-labelledby="asDpTitle">${opts.map((b, i) => {
+            const d = info(b.dataset.name);
+            const rec = b.classList.contains("is-rec");
+            return `<div class="as-dp-row${i === chosen ? " is-on" : ""}" role="radio" tabindex="${i === chosen ? 0 : -1}" aria-checked="${i === chosen}" data-i="${i}"${live ? "" : ` aria-disabled="true"`} title="${esc(d.description || "")}">
+              <span class="as-dp-dot" aria-hidden="true"></span>
+              <span class="as-dp-main">
+                <span class="as-dp-name">${esc(b.dataset.name)}${rec ? `<span class="as-dp-rec">${esc(AG())}'s pick</span>` : ""}</span>
+                <span class="as-dp-why">${esc(b.dataset.detail || d.description || "")}</span>
+              </span>
+              <span class="as-dp-meta">${d.interface ? `<span class="as-dp-tag">${esc(CONNECTS[d.interface] || d.interface.toUpperCase())}</span>` : ""}${d.datasheet ? `<a class="as-dp-ds" href="${esc(d.datasheet)}" title="Open the datasheet">Datasheet</a>` : ""}</span>
+            </div>`; }).join("")}</div>
+        <footer>
+          <span class="as-dp-note">${live ? `${esc(AG())} writes the code once you choose.` : "Already answered."}</span>
+          <button type="button" class="as-dp-btn as-dp-later">${live ? "Decide later" : "Close"}</button>
+          ${live ? `<button type="button" class="as-dp-btn as-dp-use"></button>` : ""}
+        </footer>
+      </div>`;
+    document.body.appendChild(ov);
+    const rows = [...ov.querySelectorAll(".as-dp-row")];
+    const select = (i) => {
+        if (!live) return;
+        chosen = i;
+        rows.forEach((r, k) => { r.classList.toggle("is-on", k === i); r.setAttribute("aria-checked", k === i); r.tabIndex = k === i ? 0 : -1; });
+        const btn = ov.querySelector(".as-dp-use");
+        if (btn) btn.textContent = `Use ${opts[i].dataset.name}`;
+    };
+    const close = () => { document.removeEventListener("keydown", onKey, true); ov.remove(); };
+    const use = () => { if (live && chosen >= 0) { close(); opts[chosen].click(); } };
+    const onKey = (e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+        else if (e.key === "Enter") { e.preventDefault(); use(); }
+        else if (/^Arrow(Down|Up)$/.test(e.key) && live) {
+            e.preventDefault();
+            const i = (chosen + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length;
+            select(i); rows[i].focus();
+        }
+    };
+    document.addEventListener("keydown", onKey, true);
+    ov.addEventListener("click", (e) => {
+        if (e.target === ov || e.target.closest(".as-dp-later")) return close();
+        if (e.target.closest(".as-dp-use")) return use();
+        const link = e.target.closest("a[href]");
+        if (link) { e.preventDefault(); window.volt.openExternal(link.href); return; }
+        const r = e.target.closest(".as-dp-row");
+        if (r) { select(+r.dataset.i); if (e.detail === 2) use(); }
+    });
+    if (live) select(chosen);
+    (rows[chosen] || rows[0]).focus();
 }
 
 // Choices are live only on the latest reply; once the user answers, the

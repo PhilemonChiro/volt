@@ -282,7 +282,10 @@ ipcMain.handle("app_version", () => app.getVersion());
 // ============================================================
 // Projects
 // ============================================================
+const templates = require("./src/main/templates");
 ipcMain.handle("create_project", (_, name, chip, template) => createProject(name, chip, template));
+ipcMain.handle("project_templates", () => templates.list());
+ipcMain.handle("projects_dir", () => projectsDir());
 
 // createProject makes <projectsDir>/<name> with main.volt from a template (or
 // the given source) and volt.toml; returns its path. Used by the wizard and by
@@ -301,13 +304,7 @@ function createProject(name, chip, template, source) {
     fs.mkdirSync(dir, { recursive: true });
     fs.mkdirSync(path.join(dir, "build"), { recursive: true });
 
-    const led = chip === "rp2040" ? "GP25" : "2";
-    const mainVolt = template === "empty" ? `// ${name}\n\nhardware {\n    pin led = ${led}\n}\n`
-        : template === "iot-sensor" ? `hardware {\n    pin led = 2\n    pin sensor: Analog = 36\n}\n\nsetup {\n    wifi.connect("MyNetwork", "password") or retry(10)\n    mqtt.connect("mqtt://broker.local") or retry(5)\n}\n\nevery 500ms { led.toggle() }\n\nevery 5s when wifi.is_connected() {\n    mqtt.send_int("data/sensor", sensor.read())\n}\n`
-        : template === "door-lock" ? `hardware {\n    pin relay: Output = 4\n    pin card_ok: PullUpInput = 23\n    pin card_bad: PullUpInput = 19\n    pin buzzer: PWM = 18\n}\n\nvar request: bool = false\nvar failures: int = 0\n\n// the card reader pulls one line low for a card it accepts, the other for one it rejects\non card_ok.is_pressed() debounce 50ms {\n    request = true\n}\n\non card_bad.is_pressed() debounce 50ms {\n    failures += 1\n}\n\nmachine door {\n    initial state locked {\n        enter { relay.off() }\n        on request [failures < 3] -> unlocked { failures = 0 }\n        on failures >= 3 -> alarm\n    }\n\n    state unlocked {\n        enter { relay.on() }\n        exit { log("door", "relocking") }\n        after 10s -> locked\n    }\n\n    state alarm {\n        enter { buzzer.beep_alarm() }\n        after 30s -> locked { failures = 0 }\n    }\n}\n`
-        : `hardware {\n    pin led = ${led}\n}\n\nevery 500ms {\n    led.toggle()\n}\n`;  // blink (default)
-
-    fs.writeFileSync(path.join(dir, "main.volt"), typeof source === "string" && source.trim() ? source : mainVolt);
+    fs.writeFileSync(path.join(dir, "main.volt"), typeof source === "string" && source.trim() ? source : templates.source(template, name));
     fs.writeFileSync(path.join(dir, "volt.toml"),
         `[project]\nname = "${name}"\nchip = "${chip}"\n`);
     fs.writeFileSync(path.join(dir, ".gitignore"), "build/\n.volt/\n");
@@ -1168,6 +1165,15 @@ ipcMain.handle("assistant:chats", (_, project) => claudeHost.chats(project));
 ipcMain.handle("assistant:open", (_, project, id) => codexHost.openChat(project, id));
 ipcMain.handle("assistant:close", (_, project) => { codexHost.close(project); claudeHost.close(project); });
 app.on("will-quit", () => { claudeHost.closeAll(); codexHost.closeAll(); });
+// Install an agent or start its own sign-in, from Settings → AI agents.
+const agentSetup = require("./src/main/agent-setup");
+agentSetup.init({ send, locate: { claude: () => claudeHost.locate(), codex: () => codexHost.locate() } });
+const agentId = (a) => (a === "codex" ? "codex" : "claude");
+ipcMain.handle("assistant:setupPlan", (_, a) => agentSetup.plan(agentId(a)));
+ipcMain.handle("assistant:install", (_, a) => { agentSetup.install(agentId(a)); return true; });
+ipcMain.handle("assistant:login", (_, a) => { agentSetup.login(agentId(a)); return true; });
+ipcMain.handle("assistant:setupInput", (_, a, text) => agentSetup.write(agentId(a), text));
+ipcMain.handle("assistant:setupCancel", (_, a) => agentSetup.cancel(agentId(a)));
 
 // The serial port is held by at most one volt child: `volt monitor`, or the
 // monitor phase of `volt run`.

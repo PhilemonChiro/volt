@@ -211,8 +211,6 @@ export async function show(category) {
                     <div class="settings-row-control">
                         <select class="settings-select" id="toolchainHealthChip" style="max-width:140px">
                             <option value="esp32">ESP32</option>
-                            <option value="esp8266">ESP8266</option>
-                            <option value="rp2040">RP2040 / Pico</option>
                         </select>
                     </div>
                 </div>

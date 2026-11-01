@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld("volt", {
 
     // Projects
     createProject: (name, chip, template) => ipcRenderer.invoke("create_project", name, chip, template || ""),
+    projectTemplates: () => ipcRenderer.invoke("project_templates"),
+    projectsDir:   () => ipcRenderer.invoke("projects_dir"),
     listProjects: () => ipcRenderer.invoke("list_projects"),
     resolveExample: (name) => ipcRenderer.invoke("resolve_example", name),
     readFile: (path) => ipcRenderer.invoke("read_file", path),
@@ -168,6 +170,12 @@ contextBridge.exposeInMainWorld("volt", {
         status:  () => ipcRenderer.invoke("assistant:status"),
         models:  (which) => ipcRenderer.invoke("assistant:models", which),
         agents:  () => ipcRenderer.invoke("assistant:agents"),
+        setupPlan:   (agent) => ipcRenderer.invoke("assistant:setupPlan", agent),
+        install:     (agent) => ipcRenderer.invoke("assistant:install", agent),
+        login:       (agent) => ipcRenderer.invoke("assistant:login", agent),
+        setupInput:  (agent, text) => ipcRenderer.invoke("assistant:setupInput", agent, text),
+        setupCancel: (agent) => ipcRenderer.invoke("assistant:setupCancel", agent),
+        onSetup:     (callback) => ipcRenderer.on("assistant:setup", (_, data) => callback(data)),
         history: (project) => ipcRenderer.invoke("assistant:history", project),
         send:    (project, text, extra) => ipcRenderer.invoke("assistant:send", project, text, extra),
         decide:  (project, id, allow) => ipcRenderer.invoke("assistant:decide", project, id, allow),

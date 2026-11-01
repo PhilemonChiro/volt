@@ -45,7 +45,7 @@ let found = null;
 function candidates() {
     const home = os.homedir();
     const exe = process.platform === "win32" ? "codex.cmd" : "codex";
-    const dirs = ["/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".local", "bin"), path.join(home, ".npm-global", "bin"),
+    const dirs = [path.join(home, ".volt", "agents", "codex", "bin"), "/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".local", "bin"), path.join(home, ".npm-global", "bin"),
         "/usr/bin", ...(process.env.PATH || "").split(path.delimiter)];
     if (process.platform === "win32") dirs.push(path.join(home, "AppData", "Roaming", "npm"));
     return dirs.filter(Boolean).map(d => path.join(d, exe));
@@ -415,4 +415,4 @@ function newChat(project) { close(project); return claudeHost.newChat(project); 
 function openChat(project, id) { close(project); return claudeHost.openChat(project, id); }
 const { chats, saveAfter } = claudeHost;
 
-module.exports = { init, status, models, history, send, decide, stop, newChat, chats, openChat, saveAfter, close, closeAll };
+module.exports = { init, locate, status, models, history, send, decide, stop, newChat, chats, openChat, saveAfter, close, closeAll };

@@ -66,8 +66,6 @@ const SCHEMA = {
             defaultChip:    { type: "enum",   default: "esp32",
                               options: [
                                   {value: "esp32",     label: "ESP32"},
-                                  {value: "esp8266",   label: "ESP8266"},
-                                  {value: "rp2040",    label: "RP2040 / Pico"},
                               ],
                               label: "Default chip for new projects" },
             verboseBuild:   { type: "bool",   default: false,

@@ -6,7 +6,7 @@ const STEPS = [
     {
         target: "#editorContainer",
         title: "Write your code",
-        body: "This is the editor. Write Volt here — a typed, hardware-aware language that compiles to C for ESP32, RP2040, and ESP8266.",
+        body: "This is the editor. Write Volt here — a typed, hardware-aware language that compiles to C for the ESP32.",
         placement: "right",
         highlightPadding: 8,
     },
@@ -27,7 +27,7 @@ const STEPS = [
     {
         target: "#deviceSelector",
         title: "Select your board",
-        body: "Pick your connected device here. Volt supports ESP32, RP2040, ESP8266, and more.",
+        body: "Pick your connected device here. Volt supports the ESP32 today; more boards are coming.",
         placement: "bottom",
         highlightPadding: 6,
     },

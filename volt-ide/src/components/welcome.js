@@ -138,7 +138,6 @@ async function loadExamples(onOpenExample) {
             { name: "Multi State", chip: "esp32", desc: "Multiple state machines + tasks", dir: "04-multi-state" },
             { name: "Door Lock", chip: "esp32", desc: "State machine + MQTT + storage", dir: "door-lock" },
             { name: "Safe Boot", chip: "esp32", desc: "Try blocks, error recovery", dir: "07-safe-boot" },
-            { name: "Smart LED", chip: "rp2040", desc: "PWM + channels + shared vars", dir: "smart-led" },
             { name: "Weather Station", chip: "esp32", desc: "ADC + storage + deep sleep", dir: "weather-station" },
         ];
 

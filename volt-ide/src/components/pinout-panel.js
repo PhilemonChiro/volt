@@ -285,6 +285,9 @@ export function extractHardware(source) {
     for (const d of devices)
         for (const [role, gpio] of Object.entries(d.roles))
             claim(gpio, { name: d.name, kind: "device", role, deviceType: d.type, line: d.line });
+    // A bus pin is labelled by the devices on it ("lcd · SCL"), not the bus.
+    for (const e of Object.values(pinByGpio))
+        if (e.kind === "bus") e.devices = devices.filter(d => d.bus === e.name || d.name === e.name).map(d => d.name);
 
     // Legacy GPIO devices anchored with `on <pin> at N`: show them at N.
     const busNames = new Set(buses.map(b => b.name)), pinNames = new Set(pins.map(p => p.name));
@@ -498,7 +501,10 @@ export function roleOf(a) {
 
 // "heater · PWM", "estop · PullUpInput", "i2c0 · SDA", "bin_level · trig"
 export function labelFor(a) {
-    if (a.kind === "bus") return `${a.name} · ${(a.role || "?").toUpperCase()}`;
+    if (a.kind === "bus") {
+        const on = a.devices && a.devices.length ? (a.devices.length > 2 ? `${a.devices[0]} +${a.devices.length - 1}` : a.devices.join(", ")) : a.name;
+        return `${on} · ${(a.role || "?").toUpperCase()}`;
+    }
     if (a.kind === "device") return a.role ? `${a.name} · ${a.role}` : a.name;
     return `${a.name} · ${a.mode || "Output"}`;
 }
