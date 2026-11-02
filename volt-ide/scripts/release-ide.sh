@@ -4,7 +4,7 @@
 #   scripts/release-ide.sh 0.2.0          build, upload, then move latest*.yml
 #   scripts/release-ide.sh 0.2.0 --dry    build only
 #   WINDOWS=ci scripts/release-ide.sh 0.2.0   Windows built and signed in GitHub
-#                                            Actions (SignPath), see .github/workflows/windows.yml
+#                                            Actions (signed via SignPath once configured), see .github/workflows/windows.yml
 # The commit being released must be pushed to GitHub before WINDOWS=ci.
 # Run on macOS (the mac builds and the bundled darwin volt need it). macOS
 # auto-update only works for a signed app: set CSC_LINK / CSC_KEY_PASSWORD

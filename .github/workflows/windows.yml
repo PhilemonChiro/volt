@@ -1,5 +1,5 @@
-# Windows build of Volt IDE, signed through SignPath (free code signing for
-# open-source projects, certificate by SignPath Foundation).
+# Windows build of Volt IDE. Signs through SignPath once the repository
+# variable SIGNPATH_PROJECT_SLUG is set; until then it builds unsigned.
 #
 # Two signing passes, because the installer embeds the app:
 #   1. build the unpacked app → SignPath signs Volt IDE.exe and the bundled volt.exe
@@ -36,6 +36,7 @@ jobs:
     env:
       SIGNPATH_ORG: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
       SIGNPATH_PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+      SIGN: ${{ vars.SIGNPATH_PROJECT_SLUG != '' }}
     steps:
       # Same layout as the workspace: volt/ and cli/ side by side
       # (scripts/build-volt.js builds ../../cli).
@@ -76,6 +77,7 @@ jobs:
         run: npx electron-builder --win dir --publish never --config.win.signAndEditExecutable=true
 
       - name: Upload app for signing
+        if: env.SIGN == 'true'
         id: app
         uses: actions/upload-artifact@v4
         with:
@@ -84,6 +86,7 @@ jobs:
           if-no-files-found: error
 
       - name: Sign the app
+        if: env.SIGN == 'true'
         uses: signpath/github-action-submit-signing-request@v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -96,6 +99,7 @@ jobs:
           output-artifact-directory: signed-app
 
       - name: Build the installer from the signed app
+        if: env.SIGN == 'true'
         working-directory: volt/volt-ide
         run: |
           rm -rf dist/win-unpacked
@@ -103,6 +107,7 @@ jobs:
           npx electron-builder --win nsis --prepackaged dist/win-unpacked --publish never
 
       - name: Upload installer for signing
+        if: env.SIGN == 'true'
         id: installer
         uses: actions/upload-artifact@v4
         with:
@@ -111,6 +116,7 @@ jobs:
           if-no-files-found: error
 
       - name: Sign the installer
+        if: env.SIGN == 'true'
         uses: signpath/github-action-submit-signing-request@v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -123,11 +129,20 @@ jobs:
           output-artifact-directory: signed-installer
 
       - name: Point the update feed at the signed installer
+        if: env.SIGN == 'true'
         working-directory: volt/volt-ide
         run: |
           mkdir -p release
           cp ../../signed-installer/*.exe release/
           node scripts/update-feed-hash.js dist/latest.yml release/*.exe > release/latest.yml
+
+      - name: Build the installer (unsigned)
+        if: env.SIGN != 'true'
+        working-directory: volt/volt-ide
+        run: |
+          npx electron-builder --win nsis --prepackaged dist/win-unpacked --publish never
+          mkdir -p release
+          cp dist/*.exe dist/latest.yml release/
 
       - uses: actions/upload-artifact@v4
         with:
