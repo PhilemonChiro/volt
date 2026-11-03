@@ -11,7 +11,7 @@ A step-by-step guide from zero to blinking an LED on real hardware.
 - **USB cable** — data, not charge-only
 - **ESP-IDF v5.4.1** — required for building/flashing (skip if you just want to try the compiler)
 
-For RP2040 (Raspberry Pi Pico) support, see [Multi-Chip](architecture/09-multi-chip-support.md).
+Volt supports ESP32 boards today. RP2040 and STM32 are on the roadmap ([Multi-Chip](architecture/09-multi-chip-support.md) has the design).
 
 ---
 

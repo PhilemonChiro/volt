@@ -32,6 +32,8 @@ Volt is a typed language that transpiles to C for embedded microcontrollers. You
 - **Bidirectional type checking** — full type inference with hardware-aware types
 - **Zero overhead** — compiles to clean C, runs at native speed
 
+**Supported hardware:** ESP32 boards today. RP2040 and STM32 are on the roadmap.
+
 ## Onboarding Path
 
 | Step | What you'll learn | Time |
@@ -348,7 +350,7 @@ volt/
 ├── framework/              C runtime (GPL-3.0)
 │   ├── include/volt/       Public headers
 │   ├── esp32/              ESP32 (ESP-IDF) implementation
-│   └── rp2040/             RP2040 (Pico SDK) implementation
+│   └── rp2040/             RP2040 (Pico SDK), in progress, not supported yet
 ├── devices/                Device drivers: sensors, displays, radios (GPL-3.0)
 ├── examples/               Example programs, beginner to advanced
 ├── volt-ide/               The desktop IDE (Electron)
