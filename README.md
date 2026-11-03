@@ -46,7 +46,12 @@ Volt is a typed language that transpiles to C for embedded microcontrollers. You
 
 ## Quick Install
 
-**Volt IDE** (editor, wiring view, build, flash, serial monitor): download it from
+**Volt IDE** (editor, wiring view, build, flash, serial monitor), latest version:
+[macOS Apple silicon](https://voltembedded.com/download/mac-arm64) ·
+[macOS Intel](https://voltembedded.com/download/mac-x64) ·
+[Windows](https://voltembedded.com/download/windows) ·
+[Linux AppImage](https://voltembedded.com/download/linux-appimage) ·
+[Debian/Ubuntu](https://voltembedded.com/download/linux-deb), or from
 [voltembedded.com](https://voltembedded.com).
 
 **Command line** (macOS, Linux):

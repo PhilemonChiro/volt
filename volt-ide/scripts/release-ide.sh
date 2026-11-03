@@ -46,7 +46,26 @@ if [ "$WINDOWS" = ci ]; then
 	gh run download "$RUN" -R "$REPO" -n windows-release -D dist
 else
 	npm run build:volt -- darwin-arm64 darwin-x64 linux-x64 win32-x64
-	npx electron-builder --mac --linux --win --publish never
+	# Linux and Windows build while the Mac apps wait on Apple's notarization.
+	# Their own output folder keeps the two builds from writing the same file;
+	# the runtime dependencies have no native code, so node_modules is shared safely.
+	mkdir -p dist
+	npx electron-builder --linux --win --publish never \
+		--config.directories.output=dist/linux-win >dist/linux-win.log 2>&1 &
+	OTHER=$!
+	trap 'kill $OTHER 2>/dev/null' EXIT
+	npx electron-builder --mac --publish never
+	if ! wait $OTHER; then
+		cat dist/linux-win.log >&2
+		echo "error: the Linux/Windows build failed" >&2
+		exit 1
+	fi
+	trap - EXIT
+	# Up into dist/, where the upload below looks.
+	for f in dist/linux-win/*.exe dist/linux-win/*.AppImage dist/linux-win/*.deb \
+		dist/linux-win/*.blockmap dist/linux-win/latest*.yml; do
+		if [ -f "$f" ]; then mv "$f" dist/; fi
+	done
 fi
 
 [ "$DRY" = --dry ] && { echo "dry run: $IDE/dist"; exit 0; }
@@ -73,4 +92,7 @@ done
 for f in "$IDE"/dist/latest*.yml; do
 	put "$f" --content-type text/yaml --cache-control "max-age=60"
 done
+# The homepage reads the feeds when it is built; redeploy it so its download
+# buttons name this version (the /download/<platform> links follow the feeds on their own).
+npm run deploy
 echo "published Volt IDE $VERSION"
