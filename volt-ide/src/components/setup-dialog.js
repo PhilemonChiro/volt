@@ -365,7 +365,9 @@ function updateOverall(overlay, state) {
 }
 
 function updateStage(overlay, s) {
-    const row = overlay.querySelector(`#stage-${s.id}`);
+    // SDK stage ids look like "sdks/volt-sdk-esp32-idf5.4-…": the "/" and "."
+    // break a raw #id selector, so the row was never found and stayed blank.
+    const row = overlay.querySelector(`#${CSS.escape(`stage-${s.id}`)}`);
     if (!row) return;
     if (row.className !== `setup-stage is-${s.status}`) {
         row.className = `setup-stage is-${s.status}`;
